@@ -1,5 +1,9 @@
 #include "stage2.h"
 
+#if 0
+#define CHECK
+#endif
+
 /*----------------------------------------------------------------------*/
 void
 assess_init(assess_t *a)
@@ -18,113 +22,114 @@ assess_free(assess_t *a)
 }
 
 /*-------------------------------------------------------------------------*/
-static int
-pol_expand(curr_poly_t *c, mpz_t gmp_N, double a3_bound)
-{
-	/* compute coefficients */
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help4);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_a[5]);
-	mpz_sub(c->gmp_help3, gmp_N, c->gmp_help4);
-	mpz_fdiv_qr(c->gmp_help3, c->gmp_help1, c->gmp_help3, c->gmp_p);
-	if (mpz_sgn(c->gmp_help1))
+#ifdef CHECK
+static uint32
+check_poly(curr_poly_t *c, mpz_t *coeffs, mpz_t lin0, 
+		mpz_t gmp_N, uint32 degree) {
+
+	uint32 i;
+
+	mpz_set(c->gmp_help1, coeffs[degree]);
+	mpz_set(c->gmp_help2, c->gmp_p);
+	for (i = degree; i; i--) {
+		mpz_mul(c->gmp_help1, c->gmp_help1, lin0);
+		mpz_neg(c->gmp_help1, c->gmp_help1);
+		mpz_addmul(c->gmp_help1, coeffs[i-1], c->gmp_help2);
+		mpz_mul(c->gmp_help2, c->gmp_help2, c->gmp_p);
+	}
+	mpz_tdiv_r(c->gmp_help1, c->gmp_help1, gmp_N);
+	if (mpz_cmp_ui(c->gmp_help1, (mp_limb_t)0) != 0) {
+		printf("error: corrupt polynomial expand\n");
 		return 0;
+	}
+	return 1;
+}
+#endif
+/*-------------------------------------------------------------------------*/
+static int
+pol_expand(curr_poly_t *c, mpz_t gmp_N, mpz_t high_coeff,
+		mpz_t gmp_p, mpz_t gmp_d, 
+		double coeff_bound, uint32 degree)
+{
+	uint32 i;
+
+	mpz_set(c->gmp_p, gmp_p);
+	mpz_set(c->gmp_d, gmp_d);
+	mpz_set(c->gmp_lina[1], gmp_p);
+	mpz_neg(c->gmp_lina[0], gmp_d);
 
 	if (mpz_cmp_ui(c->gmp_p, (mp_limb_t)1) == 0)
-		mpz_set_ui(c->gmp_help2, (mp_limb_t)1);
+		mpz_set_ui(c->gmp_help1, (mp_limb_t)1);
 	else {
-		if (!mpz_invert(c->gmp_help2, c->gmp_d, c->gmp_p))
+		if (!mpz_invert(c->gmp_help1, gmp_d, gmp_p))
 			return 0;
 	}
-	mpz_mul(c->gmp_help4, c->gmp_help2, c->gmp_help2);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help4);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help3);
-	mpz_fdiv_r(c->gmp_a[4], c->gmp_help4, c->gmp_p);
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help4);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_a[4]);
-	mpz_sub(c->gmp_help3, c->gmp_help3, c->gmp_help4);
-	mpz_fdiv_qr(c->gmp_help3, c->gmp_help1, c->gmp_help3, c->gmp_p);
-	if (mpz_sgn(c->gmp_help1))
-		return 0;
 
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_d);
-	mpz_fdiv_q(c->gmp_a[3], c->gmp_help3, c->gmp_help4);
-	mpz_fdiv_q(c->gmp_a[3], c->gmp_a[3], c->gmp_p);
-	mpz_mul(c->gmp_a[3], c->gmp_a[3], c->gmp_p);
-	mpz_mul(c->gmp_help4, c->gmp_help2, c->gmp_help2);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help2);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help3);
-	mpz_fdiv_r(c->gmp_help1, c->gmp_help4, c->gmp_p);
-	mpz_add(c->gmp_a[3], c->gmp_a[3], c->gmp_help1);
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_a[3]);
-	mpz_sub(c->gmp_help3, c->gmp_help3, c->gmp_help4);
-	mpz_fdiv_qr(c->gmp_help3, c->gmp_help1, c->gmp_help3, c->gmp_p);
-	if (mpz_sgn(c->gmp_help1))
-		return 0;
+	mpz_set(c->gmp_b[1], c->gmp_help1);
+	for (i = 2; i < degree; i++)
+		mpz_mul(c->gmp_b[i], c->gmp_b[i-1], c->gmp_help1);
 
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_d);
-	mpz_fdiv_q(c->gmp_a[2], c->gmp_help3, c->gmp_help4);
-	mpz_fdiv_q(c->gmp_a[2], c->gmp_a[2], c->gmp_p);
-	mpz_mul(c->gmp_a[2], c->gmp_a[2], c->gmp_p);
-	mpz_mul(c->gmp_help4, c->gmp_help2, c->gmp_help2);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_help3);
-	mpz_fdiv_r(c->gmp_help1, c->gmp_help4, c->gmp_p);
-	mpz_add(c->gmp_a[2], c->gmp_a[2], c->gmp_help1);
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_d);
-	mpz_mul(c->gmp_help4, c->gmp_help4, c->gmp_a[2]);
-	mpz_sub(c->gmp_help3, c->gmp_help3, c->gmp_help4);
-	mpz_fdiv_qr(c->gmp_help3, c->gmp_help1, c->gmp_help3, c->gmp_p);
-	if (mpz_sgn(c->gmp_help1))
-		return 0;
+	mpz_set(c->gmp_c[1], gmp_d);
+	for (i = 2; i <= degree; i++)
+		mpz_mul(c->gmp_c[i], c->gmp_c[i-1], gmp_d);
 
-	mpz_fdiv_q(c->gmp_a[1], c->gmp_help3, c->gmp_d);
-	mpz_fdiv_q(c->gmp_a[1], c->gmp_a[1], c->gmp_p);
-	mpz_mul(c->gmp_a[1], c->gmp_a[1], c->gmp_p);
-	mpz_mul(c->gmp_help4, c->gmp_help3, c->gmp_help2);
-	mpz_fdiv_r(c->gmp_help1, c->gmp_help4, c->gmp_p);
-	mpz_add(c->gmp_a[1], c->gmp_a[1], c->gmp_help1);
-	mpz_mul(c->gmp_help4, c->gmp_d, c->gmp_a[1]);
-	mpz_sub(c->gmp_help3, c->gmp_help3, c->gmp_help4);
-	mpz_fdiv_qr(c->gmp_help3, c->gmp_help1, c->gmp_help3, c->gmp_p);
-	if (mpz_sgn(c->gmp_help1))
-		return 0;
+	mpz_set(c->gmp_a[degree], high_coeff);
+	mpz_set(c->gmp_help2, gmp_N);
 
-	mpz_set(c->gmp_a[0], c->gmp_help3);
+	for (i = degree - 1; (int32)i >= 0; i--) {
 
-	mpz_fdiv_qr(c->gmp_help1, c->gmp_a[3], c->gmp_a[3], c->gmp_d);
-	mpz_add(c->gmp_help2, c->gmp_a[3], c->gmp_a[3]);
-	if (mpz_cmp(c->gmp_d, c->gmp_help2) < 0) {
-		mpz_sub(c->gmp_a[3], c->gmp_a[3], c->gmp_d);
-		mpz_add_ui(c->gmp_help1, c->gmp_help1, (mp_limb_t)1);
+		mpz_mul(c->gmp_help3, c->gmp_a[i+1], c->gmp_c[i+1]);
+		mpz_sub(c->gmp_help3, c->gmp_help2, c->gmp_help3);
+		mpz_tdiv_q(c->gmp_help2, c->gmp_help3, gmp_p);
+
+		if (i > 0) {
+			mpz_tdiv_q(c->gmp_a[i], c->gmp_help2, c->gmp_c[i]);
+			mpz_mul(c->gmp_help3, c->gmp_help2, c->gmp_b[i]);
+			mpz_sub(c->gmp_help3, c->gmp_help3, c->gmp_a[i]);
+			mpz_tdiv_r(c->gmp_help4, c->gmp_help3, gmp_p);
+
+			if (mpz_sgn(c->gmp_help4) < 0)
+				mpz_add(c->gmp_help4, c->gmp_help4, gmp_p);
+
+			mpz_add(c->gmp_a[i], c->gmp_a[i], c->gmp_help4);
+		}
 	}
-	mpz_mul(c->gmp_help1, c->gmp_help1, c->gmp_p);
-	mpz_add(c->gmp_a[4], c->gmp_a[4], c->gmp_help1);
+	mpz_set(c->gmp_a[0], c->gmp_help2);
 
-	mpz_fdiv_qr(c->gmp_help1, c->gmp_a[2], c->gmp_a[2], c->gmp_d);
-	mpz_add(c->gmp_help2, c->gmp_a[2], c->gmp_a[2]);
-	if (mpz_cmp(c->gmp_d, c->gmp_help2) < 0) {
-		mpz_sub(c->gmp_a[2], c->gmp_a[2], c->gmp_d);
-		mpz_add_ui(c->gmp_help1, c->gmp_help1, (mp_limb_t)1);
+	mpz_tdiv_q_2exp(c->gmp_help1, gmp_d, (mp_limb_t)1);
+	for (i = 0; i < degree; i++) {
+		while (mpz_cmpabs(c->gmp_a[i], c->gmp_help1) > 0) {
+			if (mpz_sgn(c->gmp_a[i]) < 0) {
+				mpz_add(c->gmp_a[i], c->gmp_a[i], gmp_d);
+				mpz_sub(c->gmp_a[i+1], c->gmp_a[i+1], gmp_p);
+			}
+			else {
+				mpz_sub(c->gmp_a[i], c->gmp_a[i], gmp_d);
+				mpz_add(c->gmp_a[i+1], c->gmp_a[i+1], gmp_p);
+			}
+		}
 	}
-	mpz_mul(c->gmp_help1, c->gmp_help1, c->gmp_p);
-	mpz_add(c->gmp_a[3], c->gmp_a[3], c->gmp_help1);
 
-	mpz_set(c->gmp_lina[1], c->gmp_p);
-	mpz_neg(c->gmp_lina[0], c->gmp_d);
 #if 0
-	uint32 i;
 	gmp_printf("%+Zd\n", c->gmp_lina[0]);
 	gmp_printf("%+Zd\n", c->gmp_lina[1]);
-	for (i = 0; i <= 5; i++)
+	for (i = 0; i <= degree; i++)
 		gmp_printf("%+Zd\n", c->gmp_a[i]);
+
+	printf("coeff ratio = %.5lf\n",
+		fabs(mpz_get_d(c->gmp_a[degree-2])) / coeff_bound);
 #endif
-	if (mpz_cmpabs_d(c->gmp_a[3], a3_bound) > 0)
+
+#ifdef CHECK
+	if (check_poly(c, c->gmp_a, 
+			c->gmp_lina[0], gmp_N, degree) != 1) {
+		return 0;
+	}
+#endif
+
+	if (mpz_cmpabs_d(c->gmp_a[degree - 2], coeff_bound) > 0) {
 		return 1;
+	}
 	return 2;
 }
 
@@ -136,14 +141,15 @@ curr_poly_init(curr_poly_t *c)
 
 	mpz_init(c->gmp_p);
 	mpz_init(c->gmp_d);
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++) {
 		mpz_init(c->gmp_lina[i]);
-	for (i = 0; i < 2; i++)
 		mpz_init(c->gmp_linb[i]);
-	for (i = 0; i < 6; i++)
+	}
+	for (i = 0; i < MAX_POLY_DEGREE + 1; i++) {
 		mpz_init(c->gmp_a[i]);
-	for (i = 0; i < 6; i++)
 		mpz_init(c->gmp_b[i]);
+		mpz_init(c->gmp_c[i]);
+	}
 	mpz_init(c->gmp_help1);
 	mpz_init(c->gmp_help2);
 	mpz_init(c->gmp_help3);
@@ -158,14 +164,15 @@ curr_poly_free(curr_poly_t *c)
 
 	mpz_clear(c->gmp_p);
 	mpz_clear(c->gmp_d);
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++) {
 		mpz_clear(c->gmp_lina[i]);
-	for (i = 0; i < 2; i++)
 		mpz_clear(c->gmp_linb[i]);
-	for (i = 0; i < 6; i++)
+	}
+	for (i = 0; i < MAX_POLY_DEGREE + 1; i++) {
 		mpz_clear(c->gmp_a[i]);
-	for (i = 0; i < 6; i++)
 		mpz_clear(c->gmp_b[i]);
+		mpz_clear(c->gmp_c[i]);
+	}
 	mpz_clear(c->gmp_help1);
 	mpz_clear(c->gmp_help2);
 	mpz_clear(c->gmp_help3);
@@ -204,14 +211,15 @@ poly_stage2_free(poly_stage2_t *data)
 
 /*-------------------------------------------------------------------------*/
 void
-poly_stage2_run(poly_stage2_t *data, mpz_t a5, mpz_t p, 
-			mpz_t d, double a3_bound)
+poly_stage2_run(poly_stage2_t *data, mpz_t high_coeff, mpz_t p, 
+			mpz_t d, double coeff_bound)
 {
 	double pol_norm;
 	double alpha_proj;
 	int status;
 	stage2_curr_data_t *s;
 	curr_poly_t *c;
+	uint32 degree;
 
 	dd_precision_t precision = 0;
 	uint32 precision_changed = 0;
@@ -221,23 +229,19 @@ poly_stage2_run(poly_stage2_t *data, mpz_t a5, mpz_t p,
 		precision = dd_set_precision_ieee();
 	}
 
+	degree = data->degree;
 	s = (stage2_curr_data_t *)(data->internal);
 	if (s == NULL) {
 		s = (stage2_curr_data_t *)xmalloc(sizeof(stage2_curr_data_t));
 		curr_poly_init(&s->curr_poly);
 		root_sieve_init(&s->root_sieve);
 		assess_init(&s->assess);
-
-		s->size_cutoff = data->min_e_bernstein / 
-					pow(exp(-7.0), -2./6);
 		data->internal = (void *)s;
 	}
 
 	c = &s->curr_poly;
-	mpz_set(c->gmp_a[5], a5);
-	mpz_set(c->gmp_p, p);
-	mpz_set(c->gmp_d, d);
-	status = pol_expand(c, data->gmp_N, a3_bound);
+	status = pol_expand(c, data->gmp_N, high_coeff,
+				p, d, coeff_bound, degree);
        	if (status != 2) {
 		if (status == 0)
 			fprintf(stderr, "expand failed\n");
@@ -246,10 +250,17 @@ poly_stage2_run(poly_stage2_t *data, mpz_t a5, mpz_t p,
 
 	optimize_initial(data, &pol_norm);
 
-	if (pol_norm <= s->size_cutoff)
+#ifdef CHECK
+	if (check_poly(c, c->gmp_a, c->gmp_lina[0],
+			data->gmp_N, degree) != 1)
 		goto finished;
 
-	stage2_root_score(5, c->gmp_a, 100, &alpha_proj, 1);
+	printf("%le %le\n", pol_norm, data->max_norm);
+#endif
+	if (pol_norm > data->max_norm)
+		goto finished;
+
+	stage2_root_score(degree, c->gmp_a, 100, &alpha_proj, 1);
 	root_sieve_run(data, alpha_proj);
 
 finished:

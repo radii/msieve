@@ -9,9 +9,15 @@
 #define DEFAULT_BLOCK_SIZE  8192
 #define ROOT_SCORE_COARSE_MIN (-4.0)
 
+static const double good_alpha[3][3] = {
+	{-4.4, -4.8, -5.2},
+	{-4.8, -5.6, -6.3},
+	{-5.6, -6.2, -7.0},
+};
+
 /*-------------------------------------------------------------------------*/
 static double
-init_sieve_core(curr_poly_t *c, sieve_power_t *sp, uint32 p)
+init_sieve_core(curr_poly_t *c, sieve_power_t *sp, uint32 deg, uint32 p)
 {
 	uint32 i, j;
 	uint32 fi, mi, md, mp, step;
@@ -20,7 +26,7 @@ init_sieve_core(curr_poly_t *c, sieve_power_t *sp, uint32 p)
 	uint32 num_roots = 0;
 	uint32 pk = sp->power;
 
-	for (i = 0; i <= 5; i++)
+	for (i = 0; i <= deg; i++)
 		co[i] = mpz_fdiv_ui(c->gmp_a[i], (mp_limb_t)pk);
 	md = mpz_fdiv_ui(c->gmp_d, (mp_limb_t)pk);
 	mp = mpz_fdiv_ui(c->gmp_p, (mp_limb_t)pk);
@@ -28,9 +34,9 @@ init_sieve_core(curr_poly_t *c, sieve_power_t *sp, uint32 p)
 	for (i = 0; i < pk; i++) {
 		mi = mp_modsub_1(md, mp_modmul_1(i, mp, pk), pk);
 
-		fi = co[5];
-		for (j = 1; j <= 5; j++)
-			fi = (fi * i + co[5 - j]) % pk;
+		fi = co[deg];
+		for (j = deg; j; j--)
+			fi = (fi * i + co[j - 1]) % pk;
 
 		if (mi != 0) {
 			step = pk;
@@ -59,7 +65,8 @@ init_sieve_core(curr_poly_t *c, sieve_power_t *sp, uint32 p)
 
 /*-------------------------------------------------------------------------*/
 static void
-init_sieve(curr_poly_t *c, root_sieve_t *rs, double sieve_bias)
+init_sieve(curr_poly_t *c, root_sieve_t *rs, 
+		uint32 deg, double sieve_bias)
 {
 	uint32 i, j;
 
@@ -68,11 +75,129 @@ init_sieve(curr_poly_t *c, root_sieve_t *rs, double sieve_bias)
 
 		for (j = 0; j < sp->num_powers; j++) {
 			sieve_bias += init_sieve_core(c, sp->powers + j,
-							sp->prime);
+							deg, sp->prime);
 		}
 	}
 
 	rs->sieve_bias = sieve_bias;
+}
+
+/*-------------------------------------------------------------------------*/
+static void
+compute_line_size(double max_norm, double *dbl_a, uint32 deg,
+		  double dbl_p, double dbl_d, 
+		  int64 last_xmin_in, int64 last_xmax_in,
+		  int64 *xmin, int64 *xmax)
+{
+	uint32 i;
+	double v0;
+	dpoly_t apoly;
+	double new_xlate, new_skewness;
+	double x0, x1, offset;
+	double last_xmin = (double)last_xmin_in;
+	double last_xmax = (double)last_xmax_in;
+
+	apoly.degree = deg;
+	for (i = 0; i <= deg; i++)
+		apoly.coeff[i] = dbl_a[i];
+
+	apoly.coeff[1] = dbl_a[1] + dbl_p * last_xmin;
+	apoly.coeff[0] = dbl_a[0] - dbl_d * last_xmin;
+	v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+	offset = 10000;
+	if (v0 > max_norm) {
+		x0 = last_xmin;
+		x1 = last_xmin + offset;
+		while (1) {
+			double new_x1 = last_xmin + offset;
+			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x1;
+			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x1;
+			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+			if (v0 <= max_norm || new_x1 >= last_xmax) {
+				x1 = new_x1;
+				break;
+			}
+			x0 = new_x1;
+			offset *= 2;
+		}
+	}
+	else {
+		x0 = last_xmin - offset;
+		x1 = last_xmin;
+		while (1) {
+			double new_x0 = last_xmin - offset;
+			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x0;
+			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x0;
+			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+			if (v0 > max_norm) {
+				x0 = new_x0;
+				break;
+			}
+			x1 = new_x0;
+			offset *= 2;
+		}
+	}
+
+	while (x1 - x0 > 500) {
+		double xx = (x0 + x1) / 2;
+		apoly.coeff[1] = dbl_a[1] + dbl_p * xx;
+		apoly.coeff[0] = dbl_a[0] - dbl_d * xx;
+		v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+		if (v0 > max_norm)
+			x0 = xx;
+		else
+			x1 = xx;
+	}
+	*xmin = (int64)x0;
+
+	apoly.coeff[1] = dbl_a[1] + dbl_p * last_xmax;
+	apoly.coeff[0] = dbl_a[0] - dbl_d * last_xmax;
+	v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+	offset = 10000;
+	if (v0 > max_norm) {
+		x0 = last_xmax - offset;
+		x1 = last_xmax;
+		while (1) {
+			double new_x0 = last_xmax - offset;
+			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x0;
+			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x0;
+			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+			if (v0 <= max_norm || new_x0 <= last_xmin) {
+				x0 = new_x0;
+				break;
+			}
+			x1 = new_x0;
+			offset *= 2;
+		}
+	}
+	else {
+		x0 = last_xmax;
+		x1 = last_xmax + offset;
+		while (1) {
+			double new_x1 = last_xmax + offset;
+			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x1;
+			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x1;
+			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+			if (v0 > max_norm) {
+				x1 = new_x1;
+				break;
+			}
+			x0 = new_x1;
+			offset *= 2;
+		}
+	}
+
+	while (x1 - x0 > 500) {
+		double xx = (x0 + x1) / 2;
+		apoly.coeff[1] = dbl_a[1] + dbl_p * xx;
+		apoly.coeff[0] = dbl_a[0] - dbl_d * xx;
+		v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
+		if (v0 > max_norm)
+			x1 = xx;
+		else
+			x0 = xx;
+	}
+	*xmax = (double)x1;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -453,7 +578,7 @@ prepare_sieve_lattice(sieve_prime_t *primes, uint32 num_primes,
 /*-------------------------------------------------------------------------*/
 static void
 do_sieving_lattice(sieve_prime_t *primes, uint32 num_primes,
-			int64 xmin, int64 xmax, int32 y, 
+			int64 xmin, int64 xmax, int32 y0,
 			uint32 lattice_size, root_heap_t *root_heap, 
 			root_heap_t *lattice_heap, uint16 *block)
 {
@@ -468,6 +593,7 @@ do_sieving_lattice(sieve_prime_t *primes, uint32 num_primes,
 	for (i = 0; i < lattice_heap->num_entries; i++) {
 
 		uint32 resclass = lattice_heap->entries[i].x;
+		int32 y = y0 + lattice_heap->entries[i].y;
 		uint32 bias = lattice_heap->entries[i].score;
 		int64 tmp_xmin = new_xmin;
 		int64 tmp_xmax = new_xmax;
@@ -542,8 +668,12 @@ find_lattice_size(int64 line_size)
 		return 2*2*2*2*2*2*2*3*3*3*3*5*5*7;
 	else if (line_size < (int64)200 * 1000000000)
 		return 2*2*2*2*2*2*2*3*3*3*3*5*5*7*7;
+	else if (line_size < (int64)1000 * 1000000000)
+		return 2*2*2*2*2*2*2*3*3*3*3*5*5*5*7*7;
+	else if (line_size < (int64)5000 * 1000000000)
+		return 2*2*2*2*2*2*2*3*3*3*3*5*5*5*7*7*7;
 
-	return 2*2*2*2*2*2*2*2*3*3*3*3*5*5*7*7;
+	return 2*2*2*2*2*2*2*2*3*3*3*3*5*5*5*7*7*7;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -629,7 +759,7 @@ find_lattices(root_sieve_t *rs, int32 y, uint32 lattice_size)
 				tmp_lattice_size, tmp_heap, block);
 
 	do_sieving_lattice(lattice_primes, num_lattice_primes,
-			   (int64)0, (int64)lattice_size, y,
+			   (int64)0, (int64)lattice_size, 0,
 			   tmp_lattice_size, lattice_heap, 
 			   tmp_heap, block);
 }
@@ -676,169 +806,72 @@ root_sieve_x(root_sieve_t *rs, int64 xmin, int64 xmax, int32 y)
 		find_lattices(rs, y, lattice_size);
 
 		do_sieving_lattice(rs->primes, rs->num_primes, 
-				xmin, xmax, y, lattice_size, 
+				xmin, xmax, 0, lattice_size, 
 				&rs->root_heap, &rs->lattice_heap, 
 				rs->sieve_block);
 	}
 }
 
 /*-------------------------------------------------------------------------*/
-static void
-compute_line_size(double max_norm, double *dbl_a, 
-		  double dbl_p, double dbl_d, 
-		  int64 last_xmin_in, int64 last_xmax_in,
-		  int64 *xmin, int64 *xmax)
-{
-	uint32 i;
-	double v0;
-	dpoly_t apoly;
-	double new_xlate, new_skewness;
-	double x0, x1, offset;
-	double last_xmin = (double)last_xmin_in;
-	double last_xmax = (double)last_xmax_in;
-
-	apoly.degree = 5;
-	for (i = 0; i <= 5; i++)
-		apoly.coeff[i] = dbl_a[i];
-
-	apoly.coeff[1] = dbl_a[1] + dbl_p * last_xmin;
-	apoly.coeff[0] = dbl_a[0] - dbl_d * last_xmin;
-	v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-	offset = 10000;
-	if (v0 > max_norm) {
-		x0 = last_xmin;
-		x1 = last_xmin + offset;
-		while (1) {
-			double new_x1 = last_xmin + offset;
-			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x1;
-			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x1;
-			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-			if (v0 <= max_norm || new_x1 >= last_xmax) {
-				x1 = new_x1;
-				break;
-			}
-			x0 = new_x1;
-			offset *= 2;
-		}
-	}
-	else {
-		x0 = last_xmin - offset;
-		x1 = last_xmin;
-		while (1) {
-			double new_x0 = last_xmin - offset;
-			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x0;
-			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x0;
-			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-			if (v0 > max_norm) {
-				x0 = new_x0;
-				break;
-			}
-			x1 = new_x0;
-			offset *= 2;
-		}
-	}
-
-	while (x1 - x0 > 500) {
-		double xx = (x0 + x1) / 2;
-		apoly.coeff[1] = dbl_a[1] + dbl_p * xx;
-		apoly.coeff[0] = dbl_a[0] - dbl_d * xx;
-		v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-		if (v0 > max_norm)
-			x0 = xx;
-		else
-			x1 = xx;
-	}
-	*xmin = (int64)x0;
-
-	apoly.coeff[1] = dbl_a[1] + dbl_p * last_xmax;
-	apoly.coeff[0] = dbl_a[0] - dbl_d * last_xmax;
-	v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-	offset = 10000;
-	if (v0 > max_norm) {
-		x0 = last_xmax - offset;
-		x1 = last_xmax;
-		while (1) {
-			double new_x0 = last_xmax - offset;
-			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x0;
-			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x0;
-			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-			if (v0 <= max_norm || new_x0 <= last_xmin) {
-				x0 = new_x0;
-				break;
-			}
-			x1 = new_x0;
-			offset *= 2;
-		}
-	}
-	else {
-		x0 = last_xmax;
-		x1 = last_xmax + offset;
-		while (1) {
-			double new_x1 = last_xmax + offset;
-			apoly.coeff[1] = dbl_a[1] + dbl_p * new_x1;
-			apoly.coeff[0] = dbl_a[0] - dbl_d * new_x1;
-			v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-			if (v0 > max_norm) {
-				x1 = new_x1;
-				break;
-			}
-			x0 = new_x1;
-			offset *= 2;
-		}
-	}
-
-	while (x1 - x0 > 500) {
-		double xx = (x0 + x1) / 2;
-		apoly.coeff[1] = dbl_a[1] + dbl_p * xx;
-		apoly.coeff[0] = dbl_a[0] - dbl_d * xx;
-		v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-		if (v0 > max_norm)
-			x1 = xx;
-		else
-			x0 = xx;
-	}
-	*xmax = (double)x1;
-}
-
-/*-------------------------------------------------------------------------*/
-static void
+static uint32
 root_sieve_xy(root_sieve_t *rs, double max_norm,
-		double *a, double p, double d,
+		double *a, uint32 deg, double p, double d,
 		int32 y0, int32 y_inc)
 {
 	double a1 = a[1];
         double a2 = a[2];
 	int64 xmin = -10000;
 	int64 xmax = 10000;
+	uint32 lines_done = 0;
 
 	while (1) {
 		a[1] = a1 - y0 * d;
 		a[2] = a2 + y0 * p;
-		compute_line_size(max_norm, a, p, d, 
-				  xmin, xmax,
-				  &xmin, &xmax);
+		compute_line_size(max_norm, a, deg, p, d, 
+				  xmin, xmax, &xmin, &xmax);
 
+//		printf("%d %.0lf %.0lf\n", y0, (double)xmin, (double)xmax);
 		if (xmax - xmin < 1000)
 			break;
 
 		root_sieve_x(rs, xmin, xmax, y0);
 		y0 += y_inc;
+		lines_done++;
 	}
 
 	a[1] = a1;
 	a[2] = a2;
+	return lines_done;
 }
 
 /*-------------------------------------------------------------------------*/
-void
-root_sieve_run(poly_stage2_t *data, 
-		double alpha_proj)
+static void process_rotations(poly_stage2_t *data, 
+			root_sieve_t *rs) {
+
+	uint32 i;
+
+	for (i = 0; i < rs->root_heap.num_entries; i++) {
+		rotation_t *r = rs->root_heap.entries + i;
+
+		if (rs->random_root_score - (rs->sieve_bias + 
+			(double)r->score / LOG_SCALE_FACTOR) <
+					ROOT_SCORE_COARSE_MIN) {
+			optimize_final(r->x, r->y, data);
+		}
+	}
+}
+
+/*-------------------------------------------------------------------------*/
+static uint32
+root_sieve_run_core(poly_stage2_t *data, double alpha_proj)
 {
 	uint32 i;
 	double dbl_p;
 	double dbl_d;
-	double dbl_sv[6];
+	double dbl_sv[MAX_POLY_DEGREE + 1];
 	double max_norm;
+	uint32 deg = data->degree;
+	uint32 lines_done = 0;
 
 	stage2_curr_data_t *s = (stage2_curr_data_t *)data->internal;
 	curr_poly_t *c = &s->curr_poly;
@@ -846,52 +879,75 @@ root_sieve_run(poly_stage2_t *data,
 
 	dbl_p = mpz_get_d(c->gmp_p);
 	dbl_d = mpz_get_d(c->gmp_d);
-	for (i = 0; i <= 5; i++)
+	for (i = 0; i <= deg; i++)
 		dbl_sv[i] = mpz_get_d(c->gmp_a[i]);
 
 	max_norm = data->max_norm * exp(-alpha_proj);
-	init_sieve(c, rs, -alpha_proj);
+	init_sieve(c, rs, deg, -alpha_proj);
 
 	rs->root_heap.cutoffs[0].y = 100;
 	rs->root_heap.cutoffs[0].score = LOG_SCALE_FACTOR * 
 					(rs->random_root_score - 
-					 rs->sieve_bias - (-4.8));
+					 rs->sieve_bias - good_alpha[deg-4][0]);
 	rs->root_heap.cutoffs[1].y = 1000;
 	rs->root_heap.cutoffs[1].score = LOG_SCALE_FACTOR * 
 					(rs->random_root_score - 
-					 rs->sieve_bias - (-5.6));
+					 rs->sieve_bias - good_alpha[deg-4][1]);
 	rs->root_heap.extra = data;
 	rs->root_heap.default_cutoff = LOG_SCALE_FACTOR * 
 					(rs->random_root_score - 
-					 rs->sieve_bias - (-6.3));
+					 rs->sieve_bias - good_alpha[deg-4][2]);
 
 	rs->root_heap.num_entries = 0;
-	root_sieve_xy(rs, max_norm, dbl_sv, dbl_p, dbl_d, 0, 1);
-
-	for (i = 0; i < rs->root_heap.num_entries; i++) {
-		rotation_t *r = rs->root_heap.entries + i;
-
-		if (rs->random_root_score - (rs->sieve_bias + 
-			(double)r->score / LOG_SCALE_FACTOR) >= 
-					ROOT_SCORE_COARSE_MIN)
-			continue;
-
-		optimize_final(r->x, r->y, data);
-	}
+	lines_done += root_sieve_xy(rs, max_norm, dbl_sv, 
+					deg, dbl_p, dbl_d, 0, 1);
+	process_rotations(data, rs);
 
 	rs->root_heap.num_entries = 0;
-	root_sieve_xy(rs, max_norm, dbl_sv, dbl_p, dbl_d, -1, -1);
+	lines_done += root_sieve_xy(rs, max_norm, dbl_sv, 
+					deg, dbl_p, dbl_d, -1, -1);
+	process_rotations(data, rs);
 
-	for (i = 0; i < rs->root_heap.num_entries; i++) {
-		rotation_t *r = rs->root_heap.entries + i;
+	return lines_done;
+}
 
-		if (rs->random_root_score - (rs->sieve_bias + 
-			(double)r->score / LOG_SCALE_FACTOR) >= 
-					ROOT_SCORE_COARSE_MIN)
-			continue;
+/*-------------------------------------------------------------------------*/
+void
+root_sieve_run(poly_stage2_t *data, double alpha_proj)
+{
+	stage2_curr_data_t *s = (stage2_curr_data_t *)data->internal;
+	curr_poly_t *c = &s->curr_poly;
+	uint32 deg = data->degree;
+	uint32 z;
 
-		optimize_final(r->x, r->y, data);
+	if (deg != 6) {
+		root_sieve_run_core(data, alpha_proj);
+		return;
 	}
+
+	z = 0;
+	while (1) {
+		if (root_sieve_run_core(data, alpha_proj) == 0)
+			break;
+
+		z++;
+		mpz_add(c->gmp_a[3], c->gmp_a[3], c->gmp_p);
+		mpz_sub(c->gmp_a[2], c->gmp_a[2], c->gmp_d);
+	}
+	mpz_submul_ui(c->gmp_a[3], c->gmp_p, (mp_limb_t)(z + 1));
+	mpz_addmul_ui(c->gmp_a[2], c->gmp_d, (mp_limb_t)(z + 1));
+
+	z = 1;
+	while (1) {
+		if (root_sieve_run_core(data, alpha_proj) == 0)
+			break;
+
+		z++;
+		mpz_sub(c->gmp_a[3], c->gmp_a[3], c->gmp_p);
+		mpz_add(c->gmp_a[2], c->gmp_a[2], c->gmp_d);
+	}
+	mpz_addmul_ui(c->gmp_a[3], c->gmp_p, (mp_limb_t)z);
+	mpz_submul_ui(c->gmp_a[2], c->gmp_d, (mp_limb_t)z);
 }
 
 /*-------------------------------------------------------------------------*/

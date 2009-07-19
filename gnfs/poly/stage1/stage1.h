@@ -7,35 +7,34 @@
 extern "C" {
 #endif
 
-#define MULTIPLIER            60	/* 2*2*3*5 */
+#define MULTIPLIER 60	/* 2*2*3*5 */
 
 /*-----------------------------------------------------------------------*/
 
 /* search bounds */
 
 typedef struct {
-	mpz_t gmp_a5_begin;
-	mpz_t gmp_a5_end;
+	mpz_t gmp_high_coeff_begin;
+	mpz_t gmp_high_coeff_end;
 	double norm_max; 
-	double skewness_min; 
-	double skewness_max;
-	double a3_max;
+	double coeff_max;
 	double p_size_max;
 } bounds_t;
 
 void stage1_bounds_init(bounds_t *bounds, poly_stage1_t *data);
 void stage1_bounds_free(bounds_t *bounds);
-void stage1_bounds_update(bounds_t *bounds, double N, double a5);
+void stage1_bounds_update(bounds_t *bounds, double N, 
+			double high_coeff, uint32 degree);
 
 /*-----------------------------------------------------------------------*/
 
 /* data for one polynomial */
 
 typedef struct {
-	mpz_t a5; 
+	mpz_t high_coeff; 
 	mpz_t trans_N;
 	mpz_t trans_m0;
-	double a3_max;
+	double coeff_max;
 	double p_size_max;
 
 	double sieve_size;
@@ -56,7 +55,9 @@ typedef struct {
 	mpz_t tmp2;
 	mpz_t tmp3;
 	mpz_t tmp4;
+	mpz_t tmp5;
 
+	uint32 degree;
 	stage1_callback_t callback;
 	void *callback_data;
 } poly_batch_t;

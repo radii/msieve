@@ -1,7 +1,8 @@
 #include "stage1.h"
 
-//#define CHECK
-
+#if 0
+#define CHECK
+#endif
 
 typedef struct {
 	p_batch_t p_array;
@@ -82,7 +83,7 @@ handle_collision(poly_batch_t *poly, uint32 which_poly,
 #ifdef CHECK
 	gmp_printf("poly %u p %u q %u coeff %Zd\n", which_poly, p, q, poly->p);
 
-	mpz_pow_ui(poly->tmp1, poly->m0, (mp_limb_t)5);
+	mpz_pow_ui(poly->tmp1, poly->m0, (mp_limb_t)poly->degree);
 	mpz_mul(poly->tmp2, poly->p, poly->p);
 	mpz_sub(poly->tmp1, curr->trans_N, poly->tmp1);
 	mpz_tdiv_r(poly->tmp3, poly->tmp1, poly->tmp2);
@@ -92,19 +93,24 @@ handle_collision(poly_batch_t *poly, uint32 which_poly,
 	}
 #endif
 
-	mpz_mul_ui(poly->tmp1, curr->a5, (mp_limb_t)5);
+	mpz_mul_ui(poly->tmp1, curr->high_coeff, (mp_limb_t)poly->degree);
 	mpz_tdiv_qr(poly->m0, poly->tmp2, poly->m0, poly->tmp1);
-	if (mpz_cmp_ui(m0_inc, (mp_limb_t)0) > 0 && 
-	    mpz_cmp_ui(poly->tmp2, (mp_limb_t)0) > 0) {
+	mpz_invert(poly->tmp3, poly->tmp1, poly->p);
+
+	mpz_sub(poly->tmp4, poly->tmp3, poly->p);
+	if (mpz_cmpabs(poly->tmp3, poly->tmp4) < 0)
+		mpz_set(poly->tmp4, poly->tmp3);
+
+	mpz_sub(poly->tmp5, poly->tmp2, poly->tmp1);
+	if (mpz_cmpabs(poly->tmp2, poly->tmp5) > 0)
 		mpz_add_ui(poly->m0, poly->m0, (mp_limb_t)1);
-		mpz_sub(poly->tmp2, poly->tmp2, poly->tmp1);
-	}
+	else
+		mpz_set(poly->tmp5, poly->tmp2);
 
-	mpz_gcdext(poly->tmp1, poly->tmp3, poly->tmp4, poly->tmp1, poly->p);
-	mpz_addmul(poly->m0, poly->tmp2, poly->tmp3);
+	mpz_addmul(poly->m0, poly->tmp4, poly->tmp5);
 
-	poly->callback(curr->a5, poly->p, poly->m0, 
-			curr->a3_max, poly->callback_data);
+	poly->callback(curr->high_coeff, poly->p, poly->m0, 
+			curr->coeff_max, poly->callback_data);
 }
 
 /*------------------------------------------------------------------------*/
@@ -361,7 +367,8 @@ sieve_lattice_core(msieve_obj *obj, lattice_fb_t *L,
 {
 	uint32 i;
 	uint32 min_small, min_large;
-	uint32 num_roots_min = (large_p_min > 3000000) ? 5 : 1;
+	uint32 min_roots_small, min_roots_large;
+	uint32 degree = L->poly->degree;
 
 	printf("p %u %u %u %u lattice %.0lf\n", 
 			small_p_min, small_p_max,
@@ -372,6 +379,23 @@ sieve_lattice_core(msieve_obj *obj, lattice_fb_t *L,
 	min_small = small_p_min;
 	sieve_fb_reset(sieve_small, (uint64)min_small);
 
+	if (small_p_min < 1000000)
+		min_roots_small = 1;
+	else if (small_p_min < 10000000)
+		min_roots_small = degree;
+	else
+		min_roots_small = degree * degree;
+
+	if (large_p_min < 1000000)
+		min_roots_large = 1;
+	else if (large_p_min < 3000000)
+		min_roots_large = degree;
+	else
+		min_roots_large = degree * degree;
+
+	if (degree == 4)
+		min_roots_large *= 2;
+
 	while (min_small < small_p_max) {
 
 		p_batch_reset(&L->p_array);
@@ -380,7 +404,7 @@ sieve_lattice_core(msieve_obj *obj, lattice_fb_t *L,
 			min_small = sieve_fb_next(sieve_small, L->poly,
 						&L->p_array, 
 						(uint64)small_p_max,
-						num_roots_min);
+						min_roots_small);
 		}
 		if (L->p_array.num_entries == 0)
 			return 0;
@@ -396,7 +420,7 @@ sieve_lattice_core(msieve_obj *obj, lattice_fb_t *L,
 			min_large = sieve_fb_next(sieve_large, L->poly,
 						&L->q_array, 
 						(uint64)large_p_max,
-						num_roots_min);
+						min_roots_large);
 			if (sieve_lattice_q(L) ||
 			    obj->flags & MSIEVE_FLAG_STOP_SIEVING)
 				return 1;
@@ -436,8 +460,8 @@ sieve_lattice(msieve_obj *obj, poly_batch_t *poly,
 	small_p_max = large_p_min - 1;
 
 	gmp_printf("coeff %Zd-%Zd %u %u %u %u lattice %.0lf\n", 
-			poly->batch[0].a5, 
-			poly->batch[poly->num_poly - 1].a5,
+			poly->batch[0].high_coeff, 
+			poly->batch[poly->num_poly - 1].high_coeff,
 			small_p_min, small_p_max,
 			large_p_min, large_p_max,
 			last_poly->sieve_size / 

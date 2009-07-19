@@ -117,7 +117,7 @@ void analyze_one_poly(msieve_obj *obj,
 		prec = dd_set_precision_ieee();
 	}
 
-	poly_config_init(obj, &config);
+	poly_config_init(&config);
 	memcpy(&s.rpoly, rpoly, sizeof(mp_poly_t));
 	memcpy(&s.apoly, apoly, sizeof(mp_poly_t));
 	s.skewness = skewness;
@@ -146,12 +146,11 @@ void analyze_one_poly(msieve_obj *obj,
 }
 
 /*------------------------------------------------------------------*/
-void poly_config_init(msieve_obj *obj, poly_config_t *config) {
+void poly_config_init(poly_config_t *config) {
 
 	/* one-time initialization for polynomial search */
 
 	uint32 i;
-	char buf[256];
 
 	config->heap_num_filled = 0;
 	for (i = 0; i < POLY_HEAP_SIZE; i++) {
@@ -162,13 +161,6 @@ void poly_config_init(msieve_obj *obj, poly_config_t *config) {
 	integrate_init(&config->integ_aux, SIZE_EPS,
 			double_exponential);
 
-	sprintf(buf, "%s.p", obj->savefile.name);
-	config->all_poly_file = fopen(buf, "a");
-	if (config->all_poly_file == NULL) {
-		printf("error: cannot open all-poly file\n");
-		exit(-1);
-	}
-
 	dickman_init(&config->dickman_aux);
 }
 
@@ -177,7 +169,6 @@ void poly_config_free(poly_config_t *config) {
 
 	uint32 i;
 
-	fclose(config->all_poly_file);
 	for (i = 0; i < POLY_HEAP_SIZE; i++)
 		free(config->heap[i]);
 	integrate_free(&config->integ_aux);

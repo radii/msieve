@@ -3,7 +3,9 @@
 #define SIEVE_SIZE 16384
 #define LOG_SCALE 3.5
 
-//#define CHECK
+#if 0
+#define CHECK
+#endif
 
 #if MAX_P_FACTORS > 6
 #error "too many factors"
@@ -11,14 +13,15 @@
 
 /*------------------------------------------------------------------------*/
 static uint32
-lift_root_32(uint32 n, uint32 r, uint32 old_power, uint32 p)
+lift_root_32(uint32 n, uint32 r, uint32 old_power, 
+		uint32 p, uint32 d)
 {
 	uint32 q;
 	uint32 p2 = old_power * p;
 	uint64 rsave = r;
 
-	q = mp_modsub_1(n % p2, mp_expo_1(r, 5, p2), p2) / old_power;
-	r = mp_modmul_1(5, mp_expo_1(r % p, 4, p), p);
+	q = mp_modsub_1(n % p2, mp_expo_1(r, d, p2), p2) / old_power;
+	r = mp_modmul_1(d, mp_expo_1(r % p, d - 1, p), p);
 	r = mp_modmul_1(q, mp_modinv_1(r, p), p);
 	return rsave + old_power * r;
 }
@@ -75,14 +78,15 @@ sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
 	prime_sieve_t prime_sieve;
 	uint32 num_squarefree;
 	uint32 max_roots;
+	uint32 degree = poly->degree;
 
 	memset(s, 0, sizeof(sieve_fb_t));
 
 	if (factor_max <= factor_min)
 		return;
 
-	for (i = 1, max_roots = 5; i < MAX_P_FACTORS; i++)
-		max_roots *= 5;
+	for (i = 1, max_roots = degree; i < MAX_P_FACTORS; i++)
+		max_roots *= degree;
 
 	s->max_roots = max_roots;
 	s->roots = (mpz_t *)xmalloc(max_roots * sizeof(mpz_t));
@@ -155,8 +159,8 @@ sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
 	}
 
 	memset(&tmp_poly, 0, sizeof(mp_poly_t));
-	tmp_poly.degree = 5;
-	tmp_poly.coeff[5].num.nwords = 1;
+	tmp_poly.degree = degree;
+	tmp_poly.coeff[degree].num.nwords = 1;
 
 	for (i = 0; i < num_squarefree; i++) {
 
@@ -164,7 +168,7 @@ sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
 		uint32 p = curr_p->p;
 
 		curr_p->max_roots = 0;
-		tmp_poly.coeff[5].num.val[0] = p - 1;
+		tmp_poly.coeff[degree].num.val[0] = p - 1;
 
 		for (j = 0; j < poly->num_poly; j++) {
 
@@ -174,7 +178,8 @@ sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
 			curr_poly_t *curr_poly = poly->batch + j;
 
 			if (mp_gcd_1(p, (uint32)mpz_tdiv_ui(
-					curr_poly->a5, (mp_limb_t)p)) == 1) {
+					curr_poly->high_coeff, 
+					(mp_limb_t)p)) == 1) {
 
 				mp_t *low_coeff = &tmp_poly.coeff[0].num;
 				low_coeff->val[0] = mpz_tdiv_ui(
@@ -297,7 +302,8 @@ sieve_fb_reset(sieve_fb_t *s, uint64 base)
 /*------------------------------------------------------------------------*/
 static uint32 
 lift_roots(sieve_fb_t *s, curr_poly_t *curr, 
-		uint64 p, uint32 num_roots)
+		uint64 p, uint32 num_roots,
+		uint32 degree)
 {
 	uint32 i;
 
@@ -308,14 +314,14 @@ lift_roots(sieve_fb_t *s, curr_poly_t *curr,
 
 	for (i = 0; i < num_roots; i++) {
 
-		mpz_powm_ui(s->tmp1, s->roots[i], (mp_limb_t)5, s->p2);
+		mpz_powm_ui(s->tmp1, s->roots[i], (mp_limb_t)degree, s->p2);
 		mpz_sub(s->tmp1, s->nmodp2, s->tmp1);
 		if (mpz_cmp_ui(s->tmp1, (mp_limb_t)0) < 0)
 			mpz_add(s->tmp1, s->tmp1, s->p2);
 		mpz_tdiv_q(s->tmp1, s->tmp1, s->p);
 
-		mpz_powm_ui(s->tmp2, s->roots[i], (mp_limb_t)4, s->p);
-		mpz_mul_ui(s->tmp2, s->tmp2, (mp_limb_t)5);
+		mpz_powm_ui(s->tmp2, s->roots[i], (mp_limb_t)(degree-1), s->p);
+		mpz_mul_ui(s->tmp2, s->tmp2, (mp_limb_t)degree);
 		mpz_invert(s->tmp2, s->tmp2, s->p);
 
 		mpz_mul(s->tmp1, s->tmp1, s->tmp2);
@@ -327,7 +333,7 @@ lift_roots(sieve_fb_t *s, curr_poly_t *curr,
 #ifdef CHECK
 		mpz_add(s->tmp1, curr->trans_m0, s->roots[i]);
 		mpz_tdiv_r(s->tmp1, s->tmp1, s->p2);
-		mpz_powm_ui(s->tmp1, s->tmp1, (mp_limb_t)5, s->p2);
+		mpz_powm_ui(s->tmp1, s->tmp1, (mp_limb_t)degree, s->p2);
 		if (mpz_cmp(s->tmp1, s->nmodp2) != 0) {
 			gmp_printf("error: %Zd n %Zd p %Zd p2 %Zd m0 %Zd r %Zd\n",
 					s->tmp1, s->nmodp2, s->p, s->p2, 
@@ -353,6 +359,7 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 	uint32 roots[MAX_P_FACTORS][MAX_POLY_DEGREE];
 	curr_poly_t *curr = poly->batch + which_poly;
 	sieve_prime_t *primes = s->good_primes.primes;
+	uint32 degree = poly->degree;
 
 	for (i = 0; i < num_factors; i++) {
 		sieve_prime_t *sp = primes + factors[i];
@@ -386,7 +393,8 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 
 			for (k = 0; k < num_roots[j]; k++) {
 				roots[j][k] = lift_root_32(nmodp, roots[j][k],
-							crt_p[j], sp->p);
+							crt_p[j], sp->p, 
+							degree);
 			}
 			crt_p[j] = new_power;
 			i++;
@@ -400,7 +408,7 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 		for (i = 0; i < num_roots[0]; i++)
 			mpz_set_ui(s->roots[i], (mp_limb_t)roots[0][i]);
 
-		return lift_roots(s, curr, p, num_roots[0]);
+		return lift_roots(s, curr, p, num_roots[0], degree);
 	}
 
 	for (i = 0; i < num_factors; i++) {
@@ -454,7 +462,7 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 		}}}}}}
 	}
 
-	return lift_roots(s, curr, p, i);
+	return lift_roots(s, curr, p, i, degree);
 }
 
 /*------------------------------------------------------------------------*/

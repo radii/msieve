@@ -24,7 +24,8 @@ typedef struct {
 } poly_deadline_t;
 
 static const poly_deadline_t time_limits[] = {
-	{MIN_NFS_BITS, 8 * 60},
+	{MIN_NFS_BITS, 4 * 60},
+	{304, 8 * 60},
 	{320, 15 * 60},
 	{348, 30 * 60},
 	{365, 1 * 3600},
@@ -190,7 +191,7 @@ int32 find_poly(msieve_obj *obj, mp_t *n) {
 	}
 
 
-	poly_config_init(obj, &config);
+	poly_config_init(&config);
 
 	/* figure out how long poly selection should take */
 

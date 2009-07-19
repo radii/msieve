@@ -49,8 +49,6 @@ uint32 find_poly_roots(dd_t *poly, uint32 degree, dd_complex_t *roots);
 /* main structure for poly selection */
 
 typedef struct {
-	FILE *all_poly_file;
-
 	poly_select_t *heap[POLY_HEAP_SIZE];
 	uint32 heap_num_filled;
 
@@ -58,7 +56,7 @@ typedef struct {
 	dickman_t dickman_aux;
 } poly_config_t;
 
-void poly_config_init(msieve_obj *obj, poly_config_t *config);
+void poly_config_init(poly_config_t *config);
 void poly_config_free(poly_config_t *config);
 
 #define SIZE_EPS 1e-6

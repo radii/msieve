@@ -11,8 +11,9 @@ extern "C" {
 /* data used in the current polynomial */
 
 typedef struct {
-	mpz_t gmp_a[6];
-	mpz_t gmp_b[6];
+	mpz_t gmp_a[MAX_POLY_DEGREE + 1];
+	mpz_t gmp_b[MAX_POLY_DEGREE + 1];
+	mpz_t gmp_c[MAX_POLY_DEGREE + 1];
 	mpz_t gmp_lina[2];
 	mpz_t gmp_linb[2];
 	mpz_t gmp_help1;
@@ -44,7 +45,7 @@ uint32 stage2_root_score(uint32 deg1, mpz_t *coeff1,
 
 void optimize_initial(poly_stage2_t *data, double *pol_norm);
 
-void optimize_final(int64 x, int y, poly_stage2_t *data);
+void optimize_final(int64 x, int32 y, poly_stage2_t *data);
 
 double optimize_basic(dpoly_t *apoly, double *best_skewness,
 				double *best_translation);
@@ -120,7 +121,6 @@ typedef struct {
 	assess_t assess;
 	double size_cutoff;
 } stage2_curr_data_t;
-
 
 #ifdef __cplusplus
 }

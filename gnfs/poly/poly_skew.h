@@ -23,13 +23,14 @@ extern "C" {
 
 /* external interface to skewed polynomial selector */
 
-typedef void (*stage1_callback_t)(mpz_t a5, mpz_t p, mpz_t m, 
-				   double a3_bound, void *extra);
+typedef void (*stage1_callback_t)(mpz_t high_coeff, mpz_t p, mpz_t m, 
+				   double coeff_bound, void *extra);
 
 typedef struct {
 	mpz_t gmp_N;
-	mpz_t gmp_a5_begin;
-	mpz_t gmp_a5_end;
+	mpz_t gmp_high_coeff_begin;
+	mpz_t gmp_high_coeff_end;
+	uint32 degree;
 	uint32 deadline;
 	double norm_max;
 	stage1_callback_t callback;
@@ -43,13 +44,14 @@ void poly_stage1_free(poly_stage1_t *data);
 uint32 poly_stage1_run(msieve_obj *obj, poly_stage1_t *data);
 
 
-typedef void (*stage2_callback_t)(void *extra, int deg,
+typedef void (*stage2_callback_t)(void *extra, uint32 deg,
 				mpz_t * coeff1, mpz_t * coeff2,
 				double skewness, double size_score,
 				double root_score, double combined_score);
 
 typedef struct {
 	mpz_t gmp_N;
+	uint32 degree;
 	uint32 murphy_p_bound;
 	double max_norm;
 	double min_e;
