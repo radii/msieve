@@ -225,6 +225,9 @@ static double minimize_line(double *base, double *search_dir,
 	fmin_dist = minimize_line_core(base, search_dir, a, b, c, 
 					fb, 1e-3, &min_dist, ndim,
 					status, callback, extra);
+	if (*status)
+		return 0;
+
 	for (i = 0; i < ndim; i++) {
 		search_dir[i] *= min_dist;
 		base[i] += search_dir[i];
@@ -241,6 +244,7 @@ double minimize(double p[MAX_VARS], uint32 ndim,
 	double best_f, curr_f;
 	double p_old[MAX_VARS], p_extrap[MAX_VARS], dir_extrap[MAX_VARS];
 	double directions[MAX_VARS][MAX_VARS];
+	int32 status = 0;
 
 	memset(directions, 0, sizeof(directions));
 	for (i = 0; i < ndim; i++) {
@@ -249,12 +253,19 @@ double minimize(double p[MAX_VARS], uint32 ndim,
 	}
 	best_f = callback(p, extra);
 
+	if (ndim == 1) {
+		curr_f = minimize_line(p, directions[0], ndim,
+					&status, callback, extra);
+		if (status)
+			return best_f;
+		return curr_f;
+	}
+
 	for (i = 0; i < max_iter; i++) {
 
 		int32 ibig = 0;
 		double del = 0.0;
 		double start_f = best_f;
-		int32 status = 0;
 
 		for (j = 0; j < ndim; j++) {
 			curr_f = minimize_line(p, directions[j], ndim,
