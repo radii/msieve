@@ -795,7 +795,7 @@ uint32 poly_get_zeros_and_mult(uint32 *zeros, uint32 *mult,
 
 	uint32 i;
 	uint32 num_roots;
-	poly_t f, g, r;
+	poly_t f;
 
 	num_roots = poly_get_zeros(zeros, _f, p, high_coeff, 0);
 	if (num_roots == 0)
@@ -809,6 +809,7 @@ uint32 poly_get_zeros_and_mult(uint32 *zeros, uint32 *mult,
 
 	for (i = 0; i < num_roots; i++) {
 
+		poly_t g, r;
 		uint32 root = zeros[i];
 
 		g->degree = 2;
