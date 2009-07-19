@@ -91,6 +91,8 @@ void print_usage(char *progname) {
 		 "             <name> (default worktodo.ini) instead of\n"
 		 "             from the command line\n"
 		 "   -m        manual mode: enter numbers via standard input\n"
+		 "   -mb <num> # of megabytes of memory for postprocessing \n"
+		 "             (set automatically if unspecified or zero)\n"
 	         "   -q        quiet: do not generate any log information,\n"
 		 "             only print any factors found\n"
 	         "   -d <min>  deadline: if still sieving after <min>\n"
@@ -101,11 +103,11 @@ void print_usage(char *progname) {
 		 "             as well as to logfile\n"
 	         "   -t <num>  use at most <num> threads\n\n"
 		 " elliptic curve options:\n"
-		 "   -e        perform 'deep' ECM, seek factors > 15 digits\n"
+		 "   -e        perform 'deep' ECM, seek factors > 15 digits\n\n"
 		 " quadratic sieve options:\n"
 		 "   -c        client: only perform sieving\n\n"
 		 " number field sieve options:\n"
-		 "   -n        use the number field sieve (97+ digits only;\n"
+		 "   -n        use the number field sieve (85+ digits only;\n"
 		 "             performs all NFS tasks in order)\n"
 	         "   -nf <name> read from / write to NFS factor base file\n"
 		 "             <name> instead of the default %s\n"
@@ -141,7 +143,8 @@ void factor_integer(char *buf, uint32 flags,
 		    enum cpu_type cpu,
 		    uint32 cache_size1,
 		    uint32 cache_size2,
-		    uint32 num_threads) {
+		    uint32 num_threads,
+		    uint32 mem_mb) {
 	
 	char *int_start, *last;
 	msieve_obj *obj;
@@ -168,7 +171,7 @@ void factor_integer(char *buf, uint32 flags,
 					*seed1, *seed2, max_relations,
 					nfs_lower, nfs_upper, cpu,
 					cache_size1, cache_size2,
-					num_threads);
+					num_threads, mem_mb);
 	if (g_curr_factorization == NULL) {
 		printf("factoring initialization failed\n");
 		return;
@@ -269,6 +272,7 @@ int main(int argc, char **argv) {
 	uint32 cache_size1; 
 	uint32 cache_size2; 
 	uint32 num_threads = 0;
+	uint32 mem_mb = 0;
 		
 	get_cache_sizes(&cache_size1, &cache_size2);
 	cpu = get_cpu_type();
@@ -314,8 +318,15 @@ int main(int argc, char **argv) {
 				break;
 					
 			case 'm':
-				manual_mode = 1;
-				i++;
+				if (argv[i][2] == 'b' &&
+				    i + 1 < argc && isdigit(argv[i+1][0])) {
+					mem_mb = atol(argv[i+1]);
+					i += 2;
+				}
+				else {
+					manual_mode = 1;
+					i++;
+				}
 				break;
 
 			case 'e':
@@ -464,7 +475,7 @@ int main(int argc, char **argv) {
 				max_relations, 
 				nfs_lower, nfs_upper, cpu,
 				cache_size1, cache_size2,
-				num_threads);
+				num_threads, mem_mb);
 	}
 	else if (manual_mode) {
 		while (1) {
@@ -478,7 +489,7 @@ int main(int argc, char **argv) {
 					max_relations, 
 					nfs_lower, nfs_upper, cpu,
 					cache_size1, cache_size2,
-					num_threads);
+					num_threads, mem_mb);
 			if (feof(stdin))
 				break;
 		}
@@ -499,7 +510,7 @@ int main(int argc, char **argv) {
 					max_relations, 
 					nfs_lower, nfs_upper, cpu,
 					cache_size1, cache_size2,
-					num_threads);
+					num_threads, mem_mb);
 			if (feof(infile))
 				break;
 		}

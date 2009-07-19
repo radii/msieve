@@ -26,7 +26,7 @@ extern "C" {
 /* version info */
 
 #define MSIEVE_MAJOR_VERSION 1
-#define MSIEVE_MINOR_VERSION 41
+#define MSIEVE_MINOR_VERSION 42
 
 /* The final output from the factorization is a linked
    list of msieve_factor structures, one for each factor
@@ -124,6 +124,8 @@ typedef struct {
 	enum cpu_type cpu;
 	uint32 num_threads;
 
+	uint32 mem_mb;            /* megabytes usable for NFS filtering */
+
 	char mp_sprintf_buf[32 * MAX_MP_WORDS+1]; /* scratch space for 
 						printing big integers */
 } msieve_obj;
@@ -141,7 +143,8 @@ msieve_obj * msieve_obj_new(char *input_integer,
 			    enum cpu_type cpu,
 			    uint32 cache_size1,
 			    uint32 cache_size2,
-			    uint32 num_threads);
+			    uint32 num_threads,
+			    uint32 mem_mb);
 
 msieve_obj * msieve_obj_free(msieve_obj *obj);
 
