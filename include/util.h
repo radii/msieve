@@ -149,6 +149,8 @@ void aligned_free(void *newptr);
 uint64 read_clock(void);
 double get_cpu_time(void);
 void set_idle_priority(void);
+uint64 get_file_size(char *name);
+uint64 get_ram_size(void);
 
 #ifndef M_LN2
 #define M_LN2 0.69314718055994530942

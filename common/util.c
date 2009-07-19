@@ -38,7 +38,7 @@ aligned_malloc(size_t len, uint32 align) {
 
 	addr = (unsigned long)ptr;				
 	addr = align - (addr & (align-1));
-	aligned_ptr = (void *)((char *)ptr + addr);
+	aligned_ptr = (void *)((uint8 *)ptr + addr);
 
 	*( (void **)aligned_ptr - 1 ) = ptr;
 	return aligned_ptr;
@@ -389,4 +389,59 @@ enum cpu_type get_cpu_type(void) {
 #endif
 
 	return cpu;
+}
+
+/*--------------------------------------------------------------------*/
+uint64 get_file_size(char *name) {
+
+#if defined(WIN32) || defined(_WIN64)
+	WIN32_FILE_ATTRIBUTE_DATA tmp;
+
+	if (GetFileAttributesEx((LPCTSTR)name, 
+			GetFileExInfoStandard, &tmp) == 0)
+		return 0;
+
+	return (uint64)tmp.nFileSizeHigh << 32 | tmp.nFileSizeLow;
+
+#else
+	struct stat tmp;
+
+	if (stat(name, &tmp) != 0)
+		return 0;
+
+	return tmp.st_size;
+#endif
+}
+
+/*--------------------------------------------------------------------*/
+uint64 get_ram_size(void) {
+
+#if defined(WIN32)
+	MEMORYSTATUS tmp;
+
+	tmp.dwLength = sizeof(MEMORYSTATUS);
+	GlobalMemoryStatus(&tmp);
+
+	return tmp.dwTotalPhys;
+
+#elif defined(_WIN64)
+	MEMORYSTATUSEX tmp;
+
+	tmp.dwLength = sizeof(MEMORYSTATUSEX);
+	if (GlobalMemoryStatusEx(&tmp) == FALSE)
+		return 0;
+
+	return tmp.ullTotalPhys;
+
+#elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
+	int page_size = sysconf(_SC_PAGESIZE);
+	int num_pages = sysconf(_SC_PHYS_PAGES);
+
+	if (page_size < 0 || num_pages < 0)
+		return 0;
+	return (uint64)page_size * (uint64)num_pages;
+#else
+
+	return 0;
+#endif
 }
