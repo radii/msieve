@@ -196,15 +196,11 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 
 	uint32 i, j, max_digits;
 	uint32 bits;
-	gmp_randstate_t randstate;
 	mpz_t gmp_n, gmp_factor;
 	pm1_pp1_t non_ecm_vals[NUM_NON_ECM];
-	mpz_t ecm_start;
-	mpz_t ecm_seed;
-	mpz_t group_order;
-	mpz_t default_stage_2;
 	uint32 factor_found = 0;
 	uint32 num_trivial = 0;
+	ecm_params params;
 
 	/* factorization will continue until any remaining
 	   composite cofactors are smaller than the cutoff for
@@ -216,16 +212,11 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 	mpz_init(gmp_factor);
 	for (i = 0; i < NUM_NON_ECM; i++) {
 		pm1_pp1_t *tmp = non_ecm_vals + i;
-		tmp->stage_1_done = 1;
+		tmp->stage_1_done = 1.0;
 		mpz_init_set_ui(tmp->start_val, (unsigned long)0);
 	}
-	mpz_init(ecm_start);
-	mpz_init(ecm_seed);
-	mpz_init_set_ui(group_order, (unsigned long)1);
-	mpz_init_set_si(default_stage_2, (long)(-1));
-	gmp_randinit_default(randstate);
-	gmp_randseed_ui(randstate, (unsigned long)get_rand(
-					&obj->seed1, &obj->seed2));
+	ecm_init(params);
+	gmp_randseed_ui(params->rng, get_rand(&obj->seed1, &obj->seed2));
 	mp2gmp(n, gmp_n);
 	max_digits = choose_max_digits(obj, mp_bits(n));
 
@@ -251,14 +242,16 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 
 		for (j = 0; j < NUM_PM1_TRIALS; j++) {
 			pm1_pp1_t *tmp = non_ecm_vals + j;
-			status = pm1(gmp_factor, tmp->start_val, 
-					gmp_n, group_order,
-					&tmp->stage_1_done, 
-					10 * curr_work->stage_1_bound,
-					default_stage_2, default_stage_2,
-					1.0, (unsigned long)0, 0, 0, 
-					0, 1, stdout, stderr, NULL, NULL, 0.0, 
-					randstate, NULL);
+
+			params->method = ECM_PM1;
+			params->B1done = tmp->stage_1_done;
+			mpz_set(params->x, tmp->start_val);
+
+			status = ecm_factor(gmp_factor, gmp_n,
+					10 * curr_work->stage_1_bound, params);
+
+			tmp->stage_1_done = params->B1done;
+			mpz_set(tmp->start_val, params->x);
 			HANDLE_FACTOR_FOUND("P-1");
 		}
 
@@ -271,14 +264,16 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 
 		for (j = 0; j < NUM_PP1_TRIALS; j++) {
 			pm1_pp1_t *tmp = non_ecm_vals + NUM_PM1_TRIALS + j;
-			status = pp1(gmp_factor, tmp->start_val, 
-					gmp_n, group_order,
-					&tmp->stage_1_done, 
-					5 * curr_work->stage_1_bound,
-					default_stage_2, default_stage_2,
-					1.0, (unsigned long)0, 0, 0, 0, 1, 
-					stdout, stderr, NULL, NULL, 0.0, 
-					randstate, NULL);
+
+			params->method = ECM_PP1;
+			params->B1done = tmp->stage_1_done;
+			mpz_set(params->x, tmp->start_val);
+
+			status = ecm_factor(gmp_factor, gmp_n,
+					5 * curr_work->stage_1_bound, params);
+
+			tmp->stage_1_done = params->B1done;
+			mpz_set(tmp->start_val, params->x);
 			HANDLE_FACTOR_FOUND("P+1");
 		}
 
@@ -299,17 +294,14 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 
 		next_log = log_rate;
 		for (j = 0; j < curr_work->num_ecm_trials; j++) {
-			double stage_1_done = 1;
-			mpz_set_ui(ecm_start, (unsigned long)0);
-			mpz_set_ui(ecm_seed, (unsigned long)0);
-			status = ecm(gmp_factor, ecm_start, ecm_seed,
-					gmp_n, group_order,
-					&stage_1_done, 
-					curr_work->stage_1_bound,
-					default_stage_2, default_stage_2,
-					1.0, (unsigned long)0, 0, 0, 0, 
-					1, 0, stdout, stderr, NULL, NULL, 0.0, 
-					0.0, randstate, NULL);
+
+			params->method = ECM_ECM;
+			params->B1done = 1.0;
+			mpz_set_ui(params->x, (unsigned long)0);
+			mpz_set_ui(params->sigma, (unsigned long)0);
+
+			status = ecm_factor(gmp_factor, gmp_n,
+					curr_work->stage_1_bound, params);
 			HANDLE_FACTOR_FOUND("ECM");
 
 			if (log_rate && j == next_log) {
@@ -325,17 +317,12 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 	}
 
 clean_up:
+	ecm_clear(params);
 	gmp2mp(gmp_n, reduced_n);
-	gmp_randclear(randstate);
 	mpz_clear(gmp_n);
 	mpz_clear(gmp_factor);
-	mpz_clear(group_order);
-	mpz_clear(default_stage_2);
-	mpz_clear(ecm_start);
-	mpz_clear(ecm_seed);
-	for (i = 0; i < NUM_NON_ECM; i++) {
+	for (i = 0; i < NUM_NON_ECM; i++)
 		mpz_clear(non_ecm_vals[i].start_val);
-	}
 	return factor_found;
 }
 
