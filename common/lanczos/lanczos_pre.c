@@ -403,20 +403,14 @@ void reduce_matrix(msieve_obj *obj, uint32 *nrows,
 		}
 	}
 
-	/* make heavy columns alternate with light columns; this
-	   smooths out the distribution of nonzero entries of the
-	   matrix. If we wanted to solve the matrix in parallel,
-	   the best approach to achieve load balancing across
-	   multiple CPUs is to use some sort of graph partitioning
-	   scheme, but these consume huge amounts of memory */
+	/* make heavy columns alternate with light columns, to
+	   balance the distribution of nonzeros */
 
 	for (i = 1, j = reduced_cols - 2; i < j; i += 2, j -= 2) {
 		la_col_t tmp = cols[i];
 		cols[i] = cols[j];
 		cols[j] = tmp;
 	}
-
-	/* record the final matrix size */
 
 	free(counts);
 	*nrows = reduced_rows;
