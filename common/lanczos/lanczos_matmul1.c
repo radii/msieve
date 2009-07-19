@@ -120,7 +120,7 @@ static void mul_one_med_block(packed_block_t *curr_block,
 		"xorq %%rsi, %0			\n\t"
 		"1:				\n\t"
 
-		:"=r"(accum), "+r"(i)
+		:"=&r"(accum), "+r"(i)
 		:"r"(curr_col), "r"(entries), 
 		 "g"(count & (uint64)(~15))
 		:"%rax", "%rcx", "%rdx", "%rsi", "memory", "cc");
