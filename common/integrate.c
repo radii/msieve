@@ -251,6 +251,7 @@ static void de_free(integrate_t *aux) {
 
 	de_t *i = (de_t *)(aux->internal);
 	free(i->initial_rule);
+	free(i->heap);
 	free(i);
 	aux->internal = NULL;
 }
