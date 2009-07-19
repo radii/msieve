@@ -80,7 +80,7 @@ uint32 ap_bits(ap_t *a) {
 
 #if defined(GCC_ASM32X) || defined(GCC_ASM64X)
 
-	ASM_G("bsrl %1, %0": "=r"(mask) : "g"(top_word) : "cc");
+	ASM_G("bsrl %1, %0": "=r"(mask) : "rm"(top_word) : "cc");
 	bits -= 31 - mask;
 #else
 	mask = 0x80000000;
@@ -347,7 +347,7 @@ static void ap_addmul_1(uint32 *a, uint32 awords, uint32 b, uint32 *x) {
 	    "addl %%eax, (%3,%0,4)	\n\t"
 	    "movl %%edx, %1		\n\t"
 	    "adcl $0, %1		\n\t"
-	    "incl %0			\n\t"
+	    "addl $1, %0		\n\t"
 	    "jnz 0b			\n\t"
 	    "1:				\n\t"
 	    : "+r"(tmp), "+r"(carry)
@@ -374,7 +374,7 @@ static void ap_addmul_1(uint32 *a, uint32 awords, uint32 b, uint32 *x) {
 		add	[edi+ecx*4],eax
 		mov	ebx,edx
 		adc	ebx,0
-		inc	ecx
+		add	ecx,1
 		jnz	L0
 		mov	carry,ebx
 	L1:	pop	ebx
@@ -402,7 +402,7 @@ static void ap_addmul_1(uint32 *a, uint32 awords, uint32 b, uint32 *x) {
 		add	[r11+rcx*4],eax
 		mov	r9d,edx
 		adc	r9d,0
-		inc	ecx
+		add	ecx,1
 		jnz	L0
 		mov	carry,r9d
 	L1:	

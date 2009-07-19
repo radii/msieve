@@ -103,17 +103,17 @@ void signed_mp_sub(signed_mp_t *a, signed_mp_t *b, signed_mp_t *diff);
 
 static INLINE int32 mp_cmp(const mp_t *a, const mp_t *b) {
 
-	int32 i;
+	uint32 i;
 
 	if (a->nwords > b->nwords)
 		return 1;
 	if (a->nwords < b->nwords)
 		return -1;
 
-	for (i = a->nwords - 1; i >= 0; i--) {
-		if (a->val[i] > b->val[i])
+	for (i = a->nwords; i ; i--) {
+		if (a->val[i-1] > b->val[i-1])
 			return 1;
-		if (a->val[i] < b->val[i])
+		if (a->val[i-1] < b->val[i-1])
 			return -1;
 	}
 
@@ -159,7 +159,7 @@ static INLINE uint32 mp_mod64(uint64 a, uint32 n) {
 
 	ASM_G("divl %2"
 	     : "+d"(hi), "+a"(lo)
-	     : "g"(n) : "cc");
+	     : "rm"(n) : "cc");
 	return hi;
 
 #elif defined(MSC_ASM32A) 
@@ -213,18 +213,20 @@ uint32 mp_divrem_1(mp_t *num, uint32 denom, mp_t *quot);
 static INLINE uint32 mp_mod_1_core(uint32 *num, 
 				uint32 nwords, uint32 denom) {
 
-	int32 i = nwords - 1;
+	uint32 i = nwords;
 	uint32 rem = 0;
 
-	if (num[i] < denom)
-		rem = num[i--];
+	if (i && num[i-1] < denom) {
+		rem = num[i-1];
+		i--;
+	}
 
 #if defined(GCC_ASM32A) || defined(GCC_ASM64X)
-	while (i >= 0) {
-		uint32 lo = num[i];
+	while (i) {
+		uint32 lo = num[i-1];
 		ASM_G("divl %2"
 			: "+d"(rem), "+a"(lo)
-			: "g"(denom) : "cc" );
+			: "rm"(denom) : "cc" );
 		i--;
 	}
 
@@ -234,23 +236,23 @@ static INLINE uint32 mp_mod_1_core(uint32 *num,
 		push	ebx
 		push	esi
 		mov	ecx,i
-		or	ecx,ecx
-		jl	L1
+		cmp	ecx,0
+		je	L1
 		mov	ebx,denom
 		mov	esi,num
 		mov	edx,rem
-	L0:	mov	eax,[esi+4*ecx]
+	L0:	mov	eax,[esi+4*ecx-4]
 		div	ebx
 		dec	ecx
-		jge	L0
+		jne	L0
 		mov	rem,edx
 	L1:	pop	esi
 		pop	ebx
 	}
 #else
 
-	while (i >= 0) {
-		uint64 acc = (uint64)rem << 32 | (uint64)num[i];
+	while (i) {
+		uint64 acc = (uint64)rem << 32 | (uint64)num[i-1];
 		rem = (uint32)(acc % denom);
 		i--;
 	}
@@ -478,33 +480,34 @@ uint32 mp_next_prime(mp_t *p, mp_t *res, uint32 *seed1, uint32 *seed2);
 static INLINE uint32 mp_modsub_1(uint32 a, uint32 b, uint32 p) {
 
 #if defined(GCC_ASM32A) && defined(HAS_CMOV) 
-	uint32 t = 0, tr = a;
-	ASM_G("subl %2, %0	\n\t"
-	      "cmovc %3, %1	\n\t"
-	      : "+&r"(tr), "+r"(t)
-	      : "g"(b), "g"(p) : "cc");
+	uint32 tr, t = a;
+	ASM_G("subl %2, %1\n\t"        /* t -= b */
+	      "leal (%1,%3,1), %0\n\t" /* tr = t + m */
+	      "cmovnc %1, %0\n\t"      /* if (a >= b) tr = t */
+	      : "=&r"(tr), "+&r"(t)
+	      : "g"(b), "r"(p) : "cc");
 
-	return tr + t;
+	return tr;
 
 #elif defined(MSC_ASM32A) && defined(HAS_CMOV)
 	uint32 ans;
 	ASM_M
 	{
-		mov	eax,a
-		mov	ecx,b
-		xor	edx,edx
-		sub	eax,ecx
-		cmovb	edx,p
-		add	eax,edx
-		mov	ans,eax
+		mov	eax,a           /* t = a */
+		mov	edx,p           /* Need p in reg for lea */
+		sub	eax,b           /* t -= b */
+		lea	edx, [eax+edx] /* tr = t + p */
+		cmovnc	edx,eax         /* if (a >= b) tr = t */
+		mov	ans,edx
 	}
 	return ans;
 
 #else
-	if (a >= b)
-		return a - b;
-	else
-		return a - b + p;
+	uint32 t = 0, tr;
+	tr = a - b;
+	if (tr > a)
+		t = p;
+	return tr + t;
 #endif
 }
 
@@ -527,18 +530,20 @@ static INLINE uint32 mp_modadd_1(uint32 a, uint32 b, uint32 p) {
 static INLINE uint64 mp_modsub_2(uint64 a, uint64 b, uint64 p) {
 
 #if defined(GCC_ASM64X) && defined(HAS_CMOV) 
-	uint64 t = 0, tr = a;
-	ASM_G("subq %2, %0	\n\t"
-	      "cmovc %3, %1	\n\t"
-	    : "+&r"(tr), "+r"(t)
-	    : "g"(b), "g"(p) : "cc");
+	uint64 tr, t = a;
+	ASM_G("subq %2, %1\n\t"        /* t -= b */
+	      "leaq (%1,%3,1), %0\n\t" /* tr = t + m */
+	      "cmovnc %1, %0\n\t"      /* if (a >= b) tr = t */
+	      : "=&r"(tr), "+&r"(t)
+	      : "g"(b), "r"(p) : "cc");
 
-	return tr + t;
+	return tr;
 #else
-	if (a >= b)
-		return a - b;
-	else
-		return a - b + p;
+	uint64 t = 0, tr;
+	tr = a - b;
+	if (tr > a)
+		t = p;
+	return tr + t;
 #endif
 }
 
@@ -638,11 +643,11 @@ static INLINE void mp_d2mp(double *d, mp_t *x) {
 	}
 
 	if (x->val[i+2] != 0)
-		x->nwords = i+3;
+		x->nwords = (uint32)(i+3);
 	else if (x->val[i+1] != 0)
-		x->nwords = i+2;
+		x->nwords = (uint32)(i+2);
 	else
-		x->nwords = i+1;
+		x->nwords = (uint32)(i+1);
 }
 
 #ifdef __cplusplus

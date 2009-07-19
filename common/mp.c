@@ -33,7 +33,7 @@ uint32 mp_bits(mp_t *a) {
 	top_word = a->val[i - 1];
 
 #if defined(GCC_ASM32X) || defined(GCC_ASM64X) 
-	ASM_G("bsrl %1, %0": "=r"(mask) : "g"(top_word) : "cc");
+	ASM_G("bsrl %1, %0": "=r"(mask) : "rm"(top_word) : "cc");
 	bits -= 31 - mask;
 #else
 	mask = 0x80000000;
@@ -361,7 +361,7 @@ static void mp_addmul_1(mp_t *a, uint32 b, uint32 *x) {
 	    "addl %%eax, (%3,%0,4)	\n\t"
 	    "movl %%edx, %1		\n\t"
 	    "adcl $0, %1		\n\t"
-	    "incl %0			\n\t"
+	    "addl $1, %0		\n\t"
 	    "jnz 0b			\n\t"
 	    "1:				\n\t"
 	    : "+r"(words), "+r"(carry)
@@ -389,7 +389,7 @@ static void mp_addmul_1(mp_t *a, uint32 b, uint32 *x) {
 		add	[edi+ecx*4],eax
 		mov	ebx,edx
 		adc	ebx,0
-		inc	ecx
+		add	ecx, 1
 		jnz	L0
 		mov	carry,ebx
 	L1:	pop	ebx
@@ -438,7 +438,7 @@ static uint32 mp_submul_1(uint32 *a, uint32 b,
 	    "subl %%eax, (%3,%5,4)	\n\t"
 	    "movl %%edx, %1		\n\t"
 	    "adcl $0, %1		\n\t"
-	    "incl %0			\n\t"
+	    "addl $1, %0		\n\t"
 	    "jnz 0b			\n\t"
 	    "1:				\n\t"
 	    : "+r"(words), "+r"(carry)
@@ -464,7 +464,7 @@ static uint32 mp_submul_1(uint32 *a, uint32 b,
 		sub	[edi+ecx*4],eax
 		mov	ebx,edx
 		adc	ebx,0
-		inc	ecx
+		add	ecx,1
 		jnz	L0
 		mov	carry,ebx
 	L1:	pop	ebx
@@ -508,7 +508,7 @@ void mp_mul_1(mp_t *a, uint32 b, mp_t *x) {
 	    "adcl $0, %%edx		\n\t"
 	    "movl %%eax, (%3,%5,4)	\n\t"
 	    "movl %%edx, %1		\n\t"
-	    "incl %5			\n\t"
+	    "addl $1, %5		\n\t"
 	    "jnz 0b			\n\t"
 	    "1:				\n\t"
 	    : "+r"(words), "+r"(carry)
@@ -535,7 +535,7 @@ void mp_mul_1(mp_t *a, uint32 b, mp_t *x) {
 		adc	edx,0
 		mov	[edi+ecx*4],eax
 		mov	ebx,edx
-		inc	ecx
+		add	ecx,1
 		jnz	L0
 		mov	carry,ebx
 	L1:	pop	ebx
@@ -639,7 +639,7 @@ uint32 mp_rjustify(mp_t *a, mp_t *res) {
 	shift = 32 * i;
 
 #if defined(GCC_ASM32X) || defined(GCC_ASM64X) 
-	ASM_G("bsfl %1, %0": "=r"(i) : "g"(mask));
+	ASM_G("bsfl %1, %0": "=r"(i) : "rm"(mask));
 #else
 	for (i = 0; i < 32; i++) {
 		if (mask & (1 << i))
@@ -682,7 +682,7 @@ void mp_divrem_core(big_mp_t *num, mp_t *denom,
 	high_denom = denom->val[j-1];
 
 #if defined(GCC_ASM32X) || defined(GCC_ASM64X) 
-	ASM_G("bsrl %1, %0": "=r"(shift) : "g"(high_denom) : "cc");
+	ASM_G("bsrl %1, %0": "=r"(shift) : "rm"(high_denom) : "cc");
 	shift = 31 - shift;
 #else
 	comp_shift = 0x80000000;
@@ -740,7 +740,7 @@ void mp_divrem_core(big_mp_t *num, mp_t *denom,
 			r = high_num;
 			ASM_G("divl %2"
 				: "+a"(q),"+d"(r)
-				: "g"(high_denom) : "cc");
+				: "rm"(high_denom) : "cc");
 #else
 			uint64 acc = (uint64)high_num << 32 | (uint64)low_num;
 			q = (uint32)(acc / high_denom);
@@ -837,7 +837,7 @@ uint32 mp_divrem_1(mp_t *num, uint32 denom, mp_t *quot) {
 		uint32 quot1 = num->val[i];
 		ASM_G("divl %2"
 			: "+a"(quot1),"+d"(rem)
-			: "g"(denom) : "cc");
+			: "rm"(denom) : "cc");
 
 		quot->val[i] = quot1;
 #else
