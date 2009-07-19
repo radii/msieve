@@ -106,7 +106,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 		return 0;
 	}
 
-	if (tmp[0] != ':' || !isxdigit(tmp[1]))
+	if (tmp[0] != ':')
 		return -5;
 	
 	atmp = a % (int64)b;
@@ -124,16 +124,22 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	if (polyval.sign == NEGATIVE)
 		factors[num_factors_r++] = 0;
 
-	/* read the rational factors */
+	/* read the rational factors (possibly an empty list) */
 
-	do {
-		uint32 p = strtoul(tmp + 1, &next_field, 16);
-		if (p > 1 && divide_factor_out(&polyval.num, p, factors,
-					&num_factors_r, compress)) {
-			return -8;
-		}
-		tmp = next_field;
-	} while(tmp[0] == ',' && isxdigit(tmp[1]));
+	if (isxdigit(tmp[1])) {
+		do {
+			p = strtoul(tmp + 1, &next_field, 16);
+			if (p > 1 && divide_factor_out(&polyval.num, p, 
+						factors, 
+						&num_factors_r, compress)) {
+				return -8;
+			}
+			tmp = next_field;
+		} while (tmp[0] == ',' && isxdigit(tmp[1]));
+	}
+	else {
+		tmp++;
+	}
 
 	if (tmp[0] != ':')
 		return -9;
@@ -141,8 +147,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	/* if there are rational factors still to be accounted
 	   for, assume they are small and find them by brute force */
 
-	for (i = p = 0; !mp_is_one(&polyval.num) &&
-				p < 1000; i++) {
+	for (i = p = 0; !mp_is_one(&polyval.num) && p < 1000; i++) {
 
 		p += prime_delta[i];
 		if (divide_factor_out(&polyval.num, p, factors,
@@ -160,21 +165,22 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	if (mp_is_zero(&polyval.num))
 		return -12;
 
-	do {
-		uint32 p = strtoul(tmp + 1, &next_field, 16);
-		if (p > 1 && divide_factor_out(&polyval.num, p, 
-					factors + num_factors_r, 
-					&num_factors_a, compress)) {
-			return -13;
-		}
-		tmp = next_field;
-	} while(tmp[0] == ',' && isxdigit(tmp[1]));
+	if (isxdigit(tmp[1])) {
+		do {
+			p = strtoul(tmp + 1, &next_field, 16);
+			if (p > 1 && divide_factor_out(&polyval.num, p, 
+						factors + num_factors_r, 
+						&num_factors_a, compress)) {
+				return -13;
+			}
+			tmp = next_field;
+		} while (tmp[0] == ',' && isxdigit(tmp[1]));
+	}
 
 	/* if there are algebraic factors still to be accounted
 	   for, assume they are small and find them by brute force */
 
-	for (i = p = 0; !mp_is_one(&polyval.num) &&
-				p < 1000; i++) {
+	for (i = p = 0; !mp_is_one(&polyval.num) && p < 1000; i++) {
 
 		p += prime_delta[i];
 		if (divide_factor_out(&polyval.num, p,
@@ -497,8 +503,6 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 }
 
 /*--------------------------------------------------------------------*/
-#define MAX_CYCLE_SIZE 500
-
 void nfs_read_cycles(msieve_obj *obj, 
 			factor_base_t *fb,
 			uint32 *num_cycles_out, 
@@ -510,89 +514,14 @@ void nfs_read_cycles(msieve_obj *obj,
 
 	uint32 i, j;
 	uint32 num_cycles;
-	uint32 curr_cycle;
 	uint32 num_relations;
-	uint32 rel_index[MAX_CYCLE_SIZE];
-	char buf[256];
-	FILE *cycle_fp;
-	FILE *dep_fp = NULL;
 	la_col_t *cycle_list;
 	relation_t *rlist;
-	uint64 mask = 0;
 
-	sprintf(buf, "%s.cyc", obj->savefile.name);
-	cycle_fp = fopen(buf, "rb");
-	if (cycle_fp == NULL) {
-		logprintf(obj, "error: read_cycles can't open cycle file\n");
-		exit(-1);
-	}
+	/* read the raw list of relation numbers for each cycle */
 
-	if (dependency) {
-		sprintf(buf, "%s.dep", obj->savefile.name);
-		dep_fp = fopen(buf, "rb");
-		if (dep_fp == NULL) {
-			logprintf(obj, "error: read_cycles can't "
-					"open dependency file\n");
-			exit(-1);
-		}
-		mask = (uint64)1 << (dependency - 1);
-	}
+	read_cycles(obj, &num_cycles, &cycle_list, dependency);
 
-	/* read the number of cycles to expect */
-
-	fread(&num_cycles, sizeof(uint32), (size_t)1, cycle_fp);
-	cycle_list = (la_col_t *)xcalloc((size_t)num_cycles, sizeof(la_col_t));
-
-	/* read the relation numbers for each cycle */
-
-	for (i = curr_cycle = 0; i < num_cycles; i++) {
-
-		la_col_t *c;
-
-		if (fread(&num_relations, sizeof(uint32), (size_t)1, cycle_fp) != 1)
-			break;
-
-		if (num_relations > MAX_CYCLE_SIZE) {
-			printf("error: cycle too large; corrupt file?\n");
-			exit(-1);
-		}
-
-		if (fread(rel_index, sizeof(uint32), (size_t)num_relations, 
-					cycle_fp) != num_relations)
-			break;
-
-		/* all the relation numbers for this cycle
-		   have been read; save them and start the
-		   count for the next cycle. If reading in 
-		   relations to produce a particular dependency
-		   from the linear algebra phase, skip any
-		   cycles that will not appear in the dependency */
-
-		if (dependency) {
-			uint64 curr_dep;
-
-			if (fread(&curr_dep, sizeof(uint64), 
-						(size_t)1, dep_fp) == 0) {
-				printf("dependency file corrupt\n");
-				exit(-1);
-			}
-			if (!(curr_dep & mask))
-				continue;
-		}
-
-		c = cycle_list + curr_cycle++;
-		c->cycle.num_relations = num_relations;
-		c->cycle.list = (uint32 *)xmalloc(num_relations * 
-						sizeof(uint32));
-		memcpy(c->cycle.list, rel_index, 
-				num_relations * sizeof(uint32));
-	}
-	logprintf(obj, "read %u cycles\n", curr_cycle);
-	num_cycles = curr_cycle;
-	fclose(cycle_fp);
-	if (dep_fp) {
-		fclose(dep_fp);
-	}
 	if (num_cycles == 0) {
 		free(cycle_list);
 		*num_cycles_out = 0;
@@ -602,8 +531,8 @@ void nfs_read_cycles(msieve_obj *obj,
 		return;
 	}
 
-	cycle_list = (la_col_t *)xrealloc(cycle_list, 
-				num_cycles * sizeof(la_col_t));
+	/* give up if caller doesn't want the relations as well */
+
 	if (fb == NULL || num_relations_out == NULL || rlist_out == NULL) {
 		*num_cycles_out = num_cycles;
 		*cycle_list_out = cycle_list;

@@ -171,7 +171,11 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 	fb_entry_t qcb[QCB_SIZE];
 	uint32 min_qcb_ideal;
 
-	/* find the largest algebraic factor across the whole set */
+	/* find the largest algebraic factor across the whole set
+
+	   If the largest ideal is too close to 2^32, force it
+	   to be too small so the choice of QCB primes does not
+	   wrap around 32 bits */
 
 	for (i = min_qcb_ideal = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
@@ -179,6 +183,7 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 		for (j = 0; j < r->num_factors_a; j++)
 			min_qcb_ideal = MAX(min_qcb_ideal, factors_a[j]);
 	}
+	min_qcb_ideal = MIN(min_qcb_ideal, (uint32)(-1) - 50000);
 
 	/* choose the quadratic character base from the primes
 	   larger than any that appear in the list of relations */
@@ -533,130 +538,6 @@ static void build_matrix(msieve_obj *obj, mp_t *n) {
 	fclose(matrix_fp);
 }
 
-/*--------------------------------------------------------------------*/
-static void dump_cycles(msieve_obj *obj, la_col_t *cols, uint32 ncols) {
-
-	uint32 i;
-	char buf[256];
-	FILE *cycle_fp;
-
-	sprintf(buf, "%s.cyc", obj->savefile.name);
-	cycle_fp = fopen(buf, "wb");
-	if (cycle_fp == NULL) {
-		logprintf(obj, "error: can't open cycle file\n");
-		exit(-1);
-	}
-
-	fwrite(&ncols, sizeof(uint32), (size_t)1, cycle_fp);
-
-	for (i = 0; i < ncols; i++) {
-		la_col_t *c = cols + i;
-		uint32 num = c->cycle.num_relations;
-		
-		fwrite(&num, sizeof(uint32), (size_t)1, cycle_fp);
-		fwrite(c->cycle.list, sizeof(uint32), (size_t)num, cycle_fp);
-	}
-	fclose(cycle_fp);
-}
-
-/*--------------------------------------------------------------------*/
-static void dump_matrix(msieve_obj *obj, 
-			uint32 nrows, uint32 num_dense_rows,
-			uint32 ncols, la_col_t *cols) {
-
-	uint32 i;
-	uint32 dense_row_words;
-	char buf[256];
-	FILE *matrix_fp;
-
-	sprintf(buf, "%s.mat", obj->savefile.name);
-	matrix_fp = fopen(buf, "wb");
-	if (matrix_fp == NULL) {
-		logprintf(obj, "error: can't open matrix file\n");
-		exit(-1);
-	}
-
-	fwrite(&nrows, sizeof(uint32), (size_t)1, matrix_fp);
-	fwrite(&num_dense_rows, sizeof(uint32), (size_t)1, matrix_fp);
-	fwrite(&ncols, sizeof(uint32), (size_t)1, matrix_fp);
-	dense_row_words = (num_dense_rows + 31) / 32;
-
-	for (i = 0; i < ncols; i++) {
-		la_col_t *c = cols + i;
-		uint32 num = c->weight + dense_row_words;
-		
-		fwrite(&c->weight, sizeof(uint32), (size_t)1, matrix_fp);
-		fwrite(c->data, sizeof(uint32), (size_t)num, matrix_fp);
-	}
-	fclose(matrix_fp);
-}
-
-/*--------------------------------------------------------------------*/
-static void read_matrix(msieve_obj *obj, 
-			uint32 *nrows_out, uint32 *num_dense_rows_out,
-			uint32 *ncols_out, la_col_t **cols_out) {
-
-	uint32 i;
-	uint32 dense_row_words;
-	uint32 ncols;
-	la_col_t *cols;
-	char buf[256];
-	FILE *matrix_fp;
-
-	nfs_read_cycles(obj, NULL, &ncols, &cols, NULL, NULL, 1, 0);
-
-	sprintf(buf, "%s.mat", obj->savefile.name);
-	matrix_fp = fopen(buf, "rb");
-	if (matrix_fp == NULL) {
-		logprintf(obj, "error: can't open matrix file\n");
-		exit(-1);
-	}
-
-	fread(nrows_out, sizeof(uint32), (size_t)1, matrix_fp);
-	fread(num_dense_rows_out, sizeof(uint32), (size_t)1, matrix_fp);
-	fread(ncols_out, sizeof(uint32), (size_t)1, matrix_fp);
-	dense_row_words = (*num_dense_rows_out + 31) / 32;
-	if (*ncols_out != ncols) {
-		printf("error: cycle file not in sync with matrix file\n");
-		exit(-1);
-	}
-
-	for (i = 0; i < ncols; i++) {
-		la_col_t *c = cols + i;
-		uint32 num;
-		
-		fread(&num, sizeof(uint32), (size_t)1, matrix_fp);
-		c->weight = num;
-		c->data = (uint32 *)xmalloc((num + dense_row_words) * 
-					sizeof(uint32));
-		fread(c->data, sizeof(uint32), 
-				(size_t)(num + dense_row_words), matrix_fp);
-	}
-	fclose(matrix_fp);
-	*cols_out = cols;
-}
-
-/*--------------------------------------------------------------------*/
-static void dump_dependencies(msieve_obj *obj, 
-			uint64 *deps, uint32 ncols) {
-
-	char buf[256];
-	FILE *deps_fp;
-
-	/* we allow up to 64 dependencies, even though the
-	   average case will have (64 - POST_LANCZOS_ROWS) */
-
-	sprintf(buf, "%s.dep", obj->savefile.name);
-	deps_fp = fopen(buf, "wb");
-	if (deps_fp == NULL) {
-		logprintf(obj, "error: can't open deps file\n");
-		exit(-1);
-	}
-
-	fwrite(deps, sizeof(uint64), (size_t)ncols, deps_fp);
-	fclose(deps_fp);
-}
-
 /*------------------------------------------------------------------*/
 void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
 
@@ -673,7 +554,6 @@ void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
 
 	/* convert the list of relations from the sieving 
 	   stage into a matrix */
-
 	if (!(obj->flags & MSIEVE_FLAG_NFS_LA_RESTART)) {
 		build_matrix(obj, n);
 		read_matrix(obj, &nrows, &num_dense_rows, &ncols, &cols);
@@ -686,7 +566,6 @@ void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
 			free(cols);
 			return;
 		}
-		dump_cycles(obj, cols, ncols);
 		dump_matrix(obj, nrows, num_dense_rows, ncols, cols);
 
 		/* clear off in-memory structures to defragment the heap */

@@ -82,6 +82,7 @@ COMMON_SRCS = \
 	common/filter/merge_util.c \
 	common/filter/singleton.c \
 	common/lanczos/lanczos.c \
+	common/lanczos/lanczos_io.c \
 	common/lanczos/lanczos_matmul0.c \
 	common/lanczos/lanczos_matmul1.c \
 	common/lanczos/lanczos_matmul2.c \

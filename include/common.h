@@ -230,7 +230,7 @@ uint32 factor_mpqs(msieve_obj *obj, mp_t *n, factor_list_t *factor_list);
 
 uint32 factor_gnfs(msieve_obj *obj, mp_t *n, factor_list_t *factor_list);
 
-#define MIN_NFS_BITS 300
+#define MIN_NFS_BITS 277
 
 /*--------------LINEAR ALGEBRA RELATED DECLARATIONS ---------------------*/
 
@@ -277,7 +277,29 @@ void reduce_matrix(msieve_obj *obj, uint32 *nrows,
 		uint32 num_dense_rows, uint32 *ncols, 
 		la_col_t *cols, uint32 num_excess);
 
+#define MIN_REORDER_SIZE 2000000
+
+void reorder_matrix(msieve_obj *obj, uint32 **rowperm, uint32 **colperm);
+
 void free_cycle_list(la_col_t *cycle_list, uint32 num_cycles);
+
+void dump_cycles(msieve_obj *obj, la_col_t *cols, uint32 ncols);
+
+void dump_matrix(msieve_obj *obj, 
+		uint32 nrows, uint32 num_dense_rows,
+		uint32 ncols, la_col_t *cols);
+
+void read_matrix(msieve_obj *obj, 
+		uint32 *nrows_out, uint32 *num_dense_rows_out,
+		uint32 *ncols_out, la_col_t **cols_out);
+
+void dump_dependencies(msieve_obj *obj, 
+			uint64 *deps, uint32 ncols);
+
+void read_cycles(msieve_obj *obj, 
+		uint32 *num_cycles_out, 
+		la_col_t **cycle_list_out, 
+		uint32 dependency);
 
 /*-------------- MISCELLANEOUS STUFF ----------------------------------*/
 

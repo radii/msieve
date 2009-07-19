@@ -351,6 +351,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\common\lanczos\lanczos_io.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\common\lanczos\lanczos_matmul0.c"
 				>
 			</File>
