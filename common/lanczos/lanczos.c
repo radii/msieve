@@ -745,7 +745,7 @@ static uint32 combine_cols(uint32 ncols,
 
 /*-----------------------------------------------------------------------*/
 static void dump_lanczos_state(msieve_obj *obj, 
-			uint64 *x, uint64 **vt_v0, uint64 **v, 
+			uint64 *x, uint64 **vt_v0, uint64 **v, uint64 *v0,
 			uint64 **vt_a_v, uint64 **vt_a2_v, uint64 **winv,
 			uint32 n, uint32 dim_solved, uint32 iter,
 			uint32 s[2][64], uint32 dim1) {
@@ -778,12 +778,13 @@ static void dump_lanczos_state(msieve_obj *obj,
 	fwrite(v[0], sizeof(uint64), (size_t)n, dump_fp);
 	fwrite(v[1], sizeof(uint64), (size_t)n, dump_fp);
 	fwrite(v[2], sizeof(uint64), (size_t)n, dump_fp);
+	fwrite(v0, sizeof(uint64), (size_t)n, dump_fp);
 	fclose(dump_fp);
 }
 
 /*-----------------------------------------------------------------------*/
 static void read_lanczos_state(msieve_obj *obj, 
-			uint64 *x, uint64 **vt_v0, uint64 **v, 
+			uint64 *x, uint64 **vt_v0, uint64 **v, uint64 *v0,
 			uint64 **vt_a_v, uint64 **vt_a2_v, uint64 **winv,
 			uint32 n, uint32 *dim_solved, uint32 *iter,
 			uint32 s[2][64], uint32 *dim1) {
@@ -823,6 +824,7 @@ static void read_lanczos_state(msieve_obj *obj,
 	status &= (fread(v[0], sizeof(uint64), (size_t)n, dump_fp) == n);
 	status &= (fread(v[1], sizeof(uint64), (size_t)n, dump_fp) == n);
 	status &= (fread(v[2], sizeof(uint64), (size_t)n, dump_fp) == n);
+	status &= (fread(v0, sizeof(uint64), (size_t)n, dump_fp) == n);
 
 	fclose(dump_fp);
 	if (status == 0) {
@@ -900,7 +902,9 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	uint32 dim_solved = 0;
 	uint32 first_dim_solved = 0;
 	uint32 report_interval = 0;
+	uint32 check_interval = 0;
 	uint32 next_report = 0;
+	uint32 next_check = 0;
 	uint32 next_dump = 0;
 	time_t first_time;
 
@@ -933,26 +937,24 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	vnext = (uint64 *)xmalloc(n * sizeof(uint64));
 	x = (uint64 *)xmalloc(n * sizeof(uint64));
 	scratch = (uint64 *)xmalloc(n * sizeof(uint64));
-	v0 = NULL;
+	v0 = (uint64 *)xmalloc(n * sizeof(uint64));
 
 	logprintf(obj, "memory use: %.1f MB\n", (double)
-			((6 * n * sizeof(uint64) +
+			((7 * n * sizeof(uint64) +
 			 packed_matrix_sizeof(packed_matrix))) / 1048576);
 
 	/* initialize */
 
 	iter = 0;
 	dim0 = 0;
-	next_dump = dump_interval;
 
 	if (obj->flags & MSIEVE_FLAG_NFS_LA_RESTART) {
-		read_lanczos_state(obj, x, vt_v0, v, vt_a_v, vt_a2_v,
+		read_lanczos_state(obj, x, vt_v0, v, v0, vt_a_v, vt_a2_v,
 				winv, n, &dim_solved, &iter, s, &dim1);
 		logprintf(obj, "restarting at iteration %u (dim = %u)\n",
 				iter, dim_solved);
 	}
 	else {
-		v0 = (uint64 *)xmalloc(n * sizeof(uint64));
 		init_lanczos_state(obj, packed_matrix, x, v0, vt_v0, v, 
 				vt_a_v, vt_a2_v, winv, n, s, &dim1);
 	}
@@ -978,6 +980,12 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 			report_interval = 8000;
 		first_dim_solved = dim_solved;
 		next_report = dim_solved + report_interval;
+	}
+
+	if (dump_interval) {
+		next_dump = dim_solved + dump_interval;
+		check_interval = 10000;
+		next_check = dim_solved + check_interval;
 	}
 
 	/* perform the iteration */
@@ -1051,6 +1059,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		/* begin the computation of the next v. First mask
 		   off the vectors that are included in this iteration */
 
+		dim_solved += dim0;
 		if (mask0 != (uint64)(-1)) {
 			for (i = 0; i < n; i++)
 				vnext[i] = vnext[i] & mask0;
@@ -1066,8 +1075,34 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 			mul_64xN_Nx64(v[0], v0, vt_v0[0], n);
 		}
 		else if (iter == 4) {
-			free(v0);
-			v0 = NULL;
+			/* v0 is not needed from now on; recycle it 
+			   for use as a check vector */
+			memset(v0, 0, n * sizeof(uint64));
+		}
+
+		/* perform an integrity check on the iteration. This 
+		   verifies that the current value of vnext is orthogonal 
+		   to the vnext that was computed about check_interval 
+		   dimensions ago
+		
+		   Checks happen on a fixed schedule, as well as 
+		   right before a checkpoint file is written */
+
+		if (check_interval && (dim_solved >= next_check ||
+		    dim_solved >= next_dump ||
+		    obj->flags & MSIEVE_FLAG_STOP_SIEVING)) {
+
+			mul_64xN_Nx64(v0, vnext, d, n);
+			for (i = 0; i < 64; i++) {
+				if (d[i] != (uint64)0) {
+					printf("\nerror: corrupt state, please "
+						"restart from checkpoint\n");
+					exit(-1);
+				}
+			}
+			/* check passed */
+			next_check = dim_solved + check_interval;
+			memcpy(v0, vnext, n * sizeof(uint64));
 		}
 
 		/* compute d, fold it into vnext and update v'*v0 */
@@ -1159,7 +1194,6 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 
 		/* possibly print a status update */
 
-		dim_solved += dim0;
 		if (report_interval) {
 			if (dim_solved >= next_report) {
 				time_t curr_time = time(NULL);
@@ -1177,18 +1211,16 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 			}
 		}
 
-		/* possibly dump a checkpoint file, check for interrupt.
-		   Do not checkpoint or interrupt during the first few 
-		   iterations, because the checkpoint file does not store 
-		   v0 and we would be unable to restart in this case */
+		/* possibly dump a checkpoint file, check for interrupt */
 
-		if (dump_interval && iter >= 4) {
+		if (dump_interval) {
 			if (dim_solved >= next_dump ||
 			    obj->flags & MSIEVE_FLAG_STOP_SIEVING) {
-				next_dump = dim_solved + dump_interval;
-				dump_lanczos_state(obj, x, vt_v0, v, vt_a_v, 
-						   vt_a2_v, winv, n, 
+
+				dump_lanczos_state(obj, x, vt_v0, v, v0, 
+						   vt_a_v, vt_a2_v, winv, n, 
 						   dim_solved, iter, s, dim1);
+				next_dump = dim_solved + dump_interval;
 			}
 			if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
 				break;
