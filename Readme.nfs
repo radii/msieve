@@ -1,0 +1,169 @@
+MSIEVE: A Library for Factoring Large Integers
+Number Field Sieve Module Documentation
+Jason Papadopoulos (jasonp@boo.net)
+4/3/09
+
+
+Introduction
+------------
+
+This file describes the implementation of the number field sieve that
+Msieve uses. Use of the NFS module must be explicitly specified, and 
+even then will only happen for factorizations above ~97 digits in size.
+I've made things harder for myself by insisting that the NFS implementation
+be immediately useful for factorizations that are difficult for the 
+quadratic sieve implementation that Msieve already contains. 
+
+A complete NFS implementation needs 7 pieces:
+
+1. Polynomial selector
+2. Factor base generator
+3. Line siever
+4. Lattice siever
+5. Relation filtering module
+6. Linear algebra solver
+7. Square root solver
+
+Each piece is very complicated both from an algorithmic and a programming
+point of view. Version 1.24 of Msieve has everything except item 4. I'm
+happy enough with most of the pieces that I'll claim they're done, although
+a good NFS implementation must have a much better polynomial selector than 
+is currently present. Still, the polynomial selector and lattice siever are
+very complex pieces of code, so it will probably be a long time before the 
+NFS implementation in Msieve will represent a cutting-edge NFS package.
+
+
+Before you begin
+----------------
+
+Before taking the plunge and using this code, you should understand that 
+the NFS module still needs a lot of work before it can truly handle big
+problems. I haven't done any of that work because it's so difficult to 
+get even something basic up and running. That means you have a really
+tough job to do: not use it.
+
+One of the unfortunate side effects of cryptography in general, and RSA in
+particular, is that it's just so damn cool. Factoring big numbers has an
+undeniable whiff of the subversive to it, and lots of people are attracted
+to that. More and more stuff in the information age is protected by RSA,
+and that means more and more people have an interest in breaking it, 
+usually by factoring the RSA modulus. The number field sieve is the only
+practical tool for breaking RSA; if you try anything else, you will fail.
+Period. So, given that bank accounts, computer games, and factoring contest
+prize money is all protected by RSA, and other NFS tools require a lot of
+sophistication from the people using them, I suspect that flocks of people
+will want to use Msieve to solve factoring problems that are much too large
+(i.e. 155 digits and up).
+
+If you are one of those people, *please* don't use Msieve. NFS is so hard
+that making sure it works takes extensive testing, which has not been done
+at all for factorizations over about 105 digits as of version 1.13; in 
+addition, the performance difference between a basic and an advanced 
+implementation of NFS is a factor of at least 10, so by refusing to learn
+how to use advanced tools like GGNFS you've turned a months-long factoring
+job into a years-long factoring job. Finally, I can't stop you from wasting
+your time, but I also can't stop you from making your friends believe
+Msieve will work, or from starting up distributed computing projects that
+use Msieve to waste the time of thousands of strangers. To the extent that
+my opinion matters to you, I think this would be bad.
+
+Despite the gloom-and-doom above, Msieve does allow working with numbers
+that are much too large to be factored successfully. I have no problem with
+experiments on big numbers, and plan to do a few myself.
+ 
+
+Running the NFS package
+-----------------------
+
+Factoring an integer using NFS has 4 main steps:
+
+1. Select Polynomial
+2. Generate Factor Base
+3. Collect Relations via Sieving
+4. Combine Relations
+
+(this is of course quite similar to the quadratic sieve, though the details
+are vastly different). Msieve allows steps 2 and 3 to run in parallel,
+which allows distributed sieving much like QS does. Step 1 could theoretically
+run in parallel, but I saw no point in doing this since the NFS code cannot
+handle really big problems and the entire implementation of step 1 will 
+eventually be replaced anyway.
+
+By default, the Msieve demo application will perform all steps in order.
+Each step can also be performed individually, for anyone who is familiar
+with how NFS works and needs maximum control of their factorization. The
+combining phase can run either all at once or in three separate subphases.
+Steps 1-4, as well as each of the three subphases of step 4, all leave
+intermediate information on disk that can be restarted from. In addition,
+the sieving leaves a reminder on disk that allows restarting the sieving
+from the previous point.
+
+In order to make the NFS code more useful, the results from the sieving 
+step are in GGNFS format. This lets you use GGNFS to finish a factorization
+Msieve has started, and also lets you use Msieve to finish a factorization
+that GGNFS has started. Because GGNFS contains a much faster siever than
+Msieve does, but Msieve has more sophisticated postprocessing, this 
+combination of the two tools can be nice for NFS experiments.
+
+
+Distributed Computing
+---------------------
+
+As with the quadratic sieve module, it is possible to use multiple computers
+to speed up the sieving step, which is by far the most time-consuming part
+of the NFS process. A straightforward recipe for doing so is as follows:
+
+- Run Msieve once and specify that only polynomial 
+  generation take place. This will produce a tiny 
+  factor base file containing the selected polynomial.
+
+- Make a copy the factor base file for each copy of Msieve
+  that will be sieving.
+
+- Start each copy of Msieve with a different range to sieve.
+  Each copy will automatically generate its own factor base.
+
+An alternative that works nicely over a fast network is to generate the 
+polynomial and also do a little sieving. This will generate the complete 
+factor base, which all of the sieving machines can simultaneously read 
+from a network directory. The factor base is read-only once generated,
+so this is safe.
+
+
+Some notes on this process:
+
+1. You can always just make up the polynomial you want Msieve to use, 
+   instead of waiting for the library to generate its own. This is desirable
+   if you already know the polynomial to use. Stick the polynomial into
+   a text file and run the recipe like normal.
+
+2. NFS works better if you budget a sizable chunk of time for selecting
+   polnomials. If you're impatient, or just want something for a quick
+   test, interrupting Msieve while polynomial generation is in progress
+   will immediately print the current best polynomial to the factor base
+   file. You can also put a time limit on polynomial generation from
+   the command line.
+
+3. Because Msieve uses a line siever, the range to sieve is measured in
+   'lines' This is a number 'b' between 1 and infinity, and specifying
+   the range to sieve involves just specifying a starting and ending value
+   of b
+
+4. *Unlike* the quadratic sieve, the rate at which relations accumulate 
+   is not constant. Small b values will generate many more relations than
+   large b values. Further, the library cannot just make up work to do
+   at random because it's likely that different sieving machines will
+   repeat each other's work. This means that for NFS, the bookkeeping
+   burden is on the user and not on the computer. One way to handle
+   this is to have a script assign relatively small ranges of work when
+   it notices sieving machines finishing their current range. A much
+   better way, not implemented, would be for the library to be told how
+   many machines are sieving and which number (1 to total) identifies
+   the current sieving machine. Then each sieving machine only does 1
+   out of every 'total' sieve lines. This automatically balances the
+   load fairly with no bookkeeping overhead, as long as all the sieving
+   machines are about the same speed.
+
+5. If interrupted, a sieving machine will complete its current line and
+   state the line that it finished. A script can then parse the logfile
+   or the screen output and use that to restart from that point later on.

@@ -1,0 +1,458 @@
+MSIEVE: A Library for Factoring Large Integers
+Jason Papadopoulos (jasonp@boo.net)
+4/3/09
+
+
+Introduction
+------------
+
+Msieve is the result of my efforts to understand and optimize how integers 
+are factored using the most powerful modern algorithms.
+
+This documentation corresponds to version 1.41 of the Msieve library. Do not
+expect to become a factoring expert just by reading it. I've included a
+relatively complete list of references that you can and should look up if
+you want to treat the code as more than a black box to solve your factoring
+problems.
+
+
+What Msieve Does
+----------------
+
+Factoring is the study (half math, half engineering, half art form) of 
+taking big numbers and expessing them as the product of smaller numbers. 
+If I find out 15 = 3 * 5, I've performed an integer factorization on the 
+number 15. As the number to be factored becomes larger, the difficulty 
+involved in completing its factorization explodes, to the point where you 
+can invent secret codes that depend on the difficulty of factoring and 
+reasonably expect your encrypted data to stay safe.
+
+There are plenty of algorithms for performing integer factorization. 
+The Msieve library implements most of them from scratch, and relies on
+optional external libraries for the rest of them. Trial division and 
+Pollard Rho is used on all inputs; if the result is less than 25 digits 
+in size, tiny custom routines do the factoring. For larger numbers, the code
+switches to the GMP-ECM library and runs the P-1, P+1 and ECM algorithms,
+expending a user-configurable amount of effort to do so. If these do not
+completely factor the input number, the library switches to the heavy 
+artillery. Unless told otherwise, Msieve runs the self-initializing quadratic
+sieve algorithm, and if this doesn't factor the input number then you've
+found a library problem. If you know what you're doing, Msieve also contains
+a complete implementation of the number field sieve, that has helped complete
+some of the largest public factorization efforts known. Information specific 
+to the quadratic sieve implementation is contained in Readme.qs, while the 
+number field sieve variant is described in Readme.nfs
+
+The maximum size of numbers that can be given to the library is hardwired
+at compile time. Currently the code can handle numbers up to 275 digits;
+however, you should bear in mind that I don't expect the library to be able
+to complete a factorization larger than about 120 digits by itself. 
+The larger size inputs can only really be handled by the number field
+sieve, and only part of the NFS code (the final part) is efficient and
+robust enough to deal with problems that large.
+
+Msieve was written with several goals in mind:
+
+	- To be as fast as possible. I claim (without proof) that for 
+	  completely factoring general inputs between 40 and 100 digits 
+	  in size, Msieve is faster than any other code implementing any 
+	  other algorithm. I realize that's a tall order, and that I'll 
+	  probably have to eat those words, but a *lot* of effort has gone 
+	  into making Msieve fast.
+
+	- To be as portable as possible. The code is written in C and is 
+	  completely self contained. It has its own basic multiple precision 
+	  library (which can be used in other applications) and is written 
+	  in as machine-independent a manner as possible. I've verified that 
+	  the source code compiles and runs correctly on 32- or 64-bit Intel 
+	  x86, 32- and 64-bit PowerPC, and 64-bit Alpha platforms. It's 
+	  reported to work in 32-bit mode on the RS6000. It works in Windows, 
+	  Linux (several flavors), Mac OS X, and AIX. Pretty much the only 
+	  requirement for building the code is that your compiler have a 
+	  native 64-bit data type.
+
+	- To be simple to use. The only input is the integer to be factored.
+	  Everything else happens automatically.
+
+	- To be free (as in beer). The entire code base is released into the
+	  public domain. This is hobby stuff for me, and the more it's used
+	  the better.
+
+If you choose to use Msieve, please let me know how it goes. I welcome bug
+reports, suggestions, optimizations, ports to new platforms, complaints,
+boasts, whatever.
+
+
+Getting Msieve
+--------------
+
+The latest version of Msieve can be found on my web page, www.boo.net/~jasonp.
+A precompiled Windows binary using the latest source (optimized for the AMD 
+athlon processor) is also available there.
+
+The source distribution comes with a unix makefile you can use if you want 
+to build msieve from source. If you have Microsoft Visual Studio 2007,
+Brian Gladman has kindly provided a set of build files that will generate
+Windows binaries.
+
+
+Using Msieve
+------------
+
+Just to be confusing, there are two things that I call 'Msieve' interchangeably.
+The source distribution builds a self-contained static library 'libmsieve.a',
+that actually performs factorizations, and also builds a 'msieve' demo
+application that uses the library. The library has a very lightweight inter-
+face defined in msieve.h, and can be used in other applications. While the
+demo application is (slightly) multithreaded, most the library is single-
+threaded and all of its state is passed in. The linear algebra code used
+in the quadratic- and number field sieve is multithread aware, and the
+entire library is supposed to be multithread-safe. 
+
+The demo application has only one job: to act as a delivery vehicle for 
+integers to be factored. Numbers can come from a text file, from redirected
+input, from the command line directly, or can be manually typed in one at a
+time. Batch input is also supported, so that you can just point the application
+to a text file with a collection of numbers, one per line. By default, all
+output goes to a logfile and a summary goes to the screen. For the complete
+list of options, try 'msieve -h'. 
+
+Starting with v1.08, the inputs to msieve can be integer arithmetic 
+expressions using any of the following operators:
+
+   + -  plus, minus        (lowest priority)
+   %    integer remainder
+   * /  multiply, integer divide
+   ^    power
+   ( )  grouping           (highest priority)
+
+Hence for example:
+
+        (10^53 - 1) / 9
+        
+gives the value:
+
+        11111111111111111111111111111111111111111111111111111
+        
+The integers used in an expression can be of any length but all intermediate 
+results and the final result are restricted to 275 or less decimal digits.
+
+While factoring an integer, the library can produce a very large amount of
+intermediate information. This information is stored in one or more auxiliary 
+savefiles, and the savefiles can be used to restart an interrupted 
+factorization. Note that factoring one integer and then another integer 
+will overwrite the savefiles from the first integer.
+
+The amount of memory that's needed will depend on the size of the number to
+be factored and the algorithm used. If running the quadratic sieve or the
+number field sieve, the memory requirements increase towards the end of 
+a factorization, when all of the intermediate results are needed at the 
+same time. For a 100-digit quadratic sieve factorization, most of the time 
+Msieve needs 55-65MB of memory, with the last stage of the factorization 
+needing 100-130MB. The final part of the number field sieve can use up 
+incredible amounts of memory; for example, completing the factorization of
+a 512-bit number like an RSA key needs 2-3GB of memory.
+
+
+Frequently Asked Questions
+--------------------------
+
+Q. I want to factor much bigger numbers. Can't Msieve solve problems
+   larger than you say?
+Q. I'm trying to break my ex-girlfriend's RSA key with Msieve, and it's
+   not working. What's wrong?
+A. The quadratic sieve really is not appropriate for factoring numbers
+   over ~110 digits in size, and the number field sieve implementation
+   isn't even close to done. On a fast modern CPU, a 110-digit factor-
+   ization takes nearly 120 hours for Msieve, and the time increases
+   steeply beyond that. If you have really big factorization needs, there
+   are essentially only two packages that you can use: GGNFS and the NFS
+   implementation by Chris Card. Both are hosted on SourceForge (see
+   www.sf.net/projects/ggnfs and www.sf.net/projects/factor-by-gnfs).
+   For the largest size problems, you have to use the number field sieve;
+   in fact, you have to use GGNFS for the first part of the factorization
+   and then msieve for the last part. 
+
+Q. Can you make Msieve network aware? Can you make it a client-server thingy?
+   Can I use the internet to factor numbers?
+A. The demo application for the Msieve library is just that, a demo. I don't
+   know anything about network programming and I'm not qualified to build
+   a client-server application that's safe in the face of internet threats.
+   If you have these kinds of smarts, you can use Msieve in your own code
+   and I'll help as much as I can. The demo is good enough for people with
+   a few machines on a small private LAN, and this is ~100% of the user
+   community right now.
+
+Q. How can I modify Msieve to work on a cluster?
+A. Distributed sieving is so easy that you don't need high-performance
+   parallel programming techniques or message passing libraries to do it.
+   If you're lucky enough to have a cluster then the batch scheduling
+   system that comes with the cluster is more than enough to implement
+   cluster-aware sieving. Of course if you have access to that much firepower
+   you owe it to yourself to use an NFS package of some sort.
+
+Q. Can you modify Msieve to run on multi-core processors?
+A. As described above, the really intensive part of the QS and NFS 
+   algorithms is the sieving, and it's a waste of effort to multithread 
+   that. You won't save any time compared to just running two copies of 
+   Msieve. The final stage *can* benefit from multithreading, and the
+   intensive parts of that are already multithread-aware. This can be
+   improved, but multithreading more parts of the library is a low 
+   priority for me.
+
+Q. Why put Msieve into the public domain and not make it GPL?
+   Wouldn't GPL-ed code protect your work and encourage contributions?
+A. Msieve is a learning exercise, not a collaborative effort per se. 
+   I don't expect other developers to help, though several have and it's
+   appreciated. As for protection, there's only one way to generate income 
+   from this code: use it to win factoring contests. While the number field
+   sieve can win factoring contests, you personally do not have the resources
+   to do so. Even if you did, this code just can't manage factorizations
+   that big. There's no reason to put licensing restrictions on this code.
+
+Q. Your multiple precision library sucks. Why didn't you use GMP?
+A. I know it sucks. Using GMP would have left MSVC users in the cold,
+   and even building GMP is a major exercise that requires essentially a
+   complete and up-to-date unix environment. The latest GMP did not even build
+   on several (old, buggy or experimental) platforms that Msieve ran happily 
+   on. The nice thing about sieve-based factoring is that for big 
+   factorizations the actual multiple precision math takes about 1% of the 
+   total runtime. Since bignum performance isn't an issue but portability 
+   is, I decided against GMP. Latter-day versions of Msieve use a much-
+   improved multiple-precision library that probably manages most of the 
+   speed gains possible if GMP was used.
+
+Credits
+-------
+
+Especially as the code became more useful, credit is due to several people
+who pushed it very hard. 
+
+Tom Womack, Greg Childers, Bruce Dodson, Hallstein Hansen, Paul Leyland 
+and Richard Wackerbarth have continually thrown enormous size problems 
+at the NFS postprocessing code of Msieve, and have been very patient as 
+I've frantically tried to keep up with them. If you try to use NFS and
+it just works, even when other programs fail, you primarily have these 
+guys to thank.
+
+Jeff Gilchrist has done a lot of testing, feedback on 64-bit windows,
+and general documentation writing
+
+Tom Cage (RIP) found lots of bugs and ground through hundreds of 
+factorizations with early versions of Msieve.
+
+Jay Berg did a lot of experimenting with very big factorizations in
+earlier Msieve versions
+
+The regulars in the Factoring forum of www.mersenneforum.org (especially
+Jes, Luigi, Sam, Dennis, Sander, Mark R., Peter S., Jeff G.) have also
+done tons of factoring work.
+
+Alex Kruppa and Bob Silverman all contributed useful theoretical 
+stuff. Bob's NFS siever code has been extremely helpful in getting me to
+understand how things work. 
+
+I thank my lucky stars that Chris Card figured out how NFS filtering 
+works before I had to. 
+
+Bob Silverman, Dario Alpern and especially Bill Hart helped out with 
+the NFS square root.
+
+'forzles' helped improve the multithreading in the linear algebra.
+
+Falk Hueffner and Francois Glineur found several nasty bugs in earlier versions.
+
+Brian Gladman contributed an expression evaluator, the Visual Studio build
+system, a lot of help with the numerical integration used in the NFS
+polynomial selector, and various portability fixes.
+
+J6M did the AIX port.
+
+Larry Soule did a lot of work incorporating GMP into the code, which I
+regrettably don't expect to use
+
+I know I left out people, but that's my fault and not theirs.
+
+
+Quadratic Sieve References
+--------------------------
+
+The book "Prime Numbers: A Computational Perspective", by Richard Crandall
+and Carl Pomerance, is an excellent introduction to the quadratic sieve and
+many other topics in computational number theory.
+
+Scott Contini's thesis, "Factoring Large Integers with the Self-Initializing
+Quadratic Sieve", is an implementer's dream; it fills in all the details of
+the sieving process that Crandall and Pomerance gloss over.
+
+Wambach and Wettig's 1995 paper "Block Sieving Algorithms" gives an introduction
+to making sieving cache-friendly. Msieve uses very different (more efficient)
+algorithms, but you should try to understand these first.
+
+Lenstra and Manasse's 1994 paper "Factoring with Two Large Primes" describes
+in great detail the cycle-finding algorithm that is the heart of the combining
+stage of Msieve. More background information on spanning trees and cycle-
+finding can be found in Manuel Huber's 2003 paper "Implementation of Algorithms
+for Sparse Cycle Bases of Graphs". This was the paper that connected the 
+dots for me (pun intended).
+
+There are three widely available descriptions of SQUFOF. An introductory one
+is Hans Riesel's section titled "Shanks' Factoring Method SQUFOF" in his book
+"Prime Numbers and Computer Methods for Factorization". The much more 
+advanced one is "Square Form Factorization", a PhD dissertation by Jason
+Gower (which is the reference I used when implementing the algorithm). Henri 
+Cohen's book (mentioned below) also has an extended treatment of SQUFOF.
+Daniel Shanks was a professor at the University of Maryland while I was a 
+student there, and his work got me interested in number theory and computer 
+programming. I dearly wish I met him before he died in 1996.
+
+Brandt Kurowski's 1998 paper "The Multiple Polynomial Quadratic Sieve: A 
+Platform-Independent Distributed Application" is the only reference I 
+could find that describes the Knuth-Schroeppel multiplier algorithm.
+
+Davis and Holdrige's 1983 paper "Factorization Using the Quadratic Sieve
+Algorithm" gives a surprising theoretical treatment of how QS works. Reading
+it felt like finding some kind of forgotten evolutionary offshoot, strangely
+different from the conventional way of implementing QS.
+
+Peter Montgomery's paper "A Block Lanczos Algorithm for Finding Dependencies
+over GF(2)" revolutionized the factoring business. The paper by itself isn't
+enough to implement his algorithm; you really need someone else's 
+implementation to fill in a few critical gaps.
+
+Michael Peterson's recent thesis "Parallel Block Lanczos for Solving Large
+Binary Systems" gives an interesting reformulation of the block Lanczos
+algorithm, and gives lots of performance tricks for making it run fast.
+
+Kaltofen's paper 'Blocked Iterative Sparse Linear System Solvers
+for Finite Fields' is a good condensing of Montgomery's original
+block Lanczos paper
+
+Gupta's IBM technical report 'Recent Advances in Direct Methods for
+Solving Unsymmetric Sparse Systems of Linear Equations' doesn't have
+anything in an NFS context, but there's gotta be some useful material
+in it for factoring people
+
+
+Number Field Sieve References
+-----------------------------
+
+Matthew Briggs' 'An Introduction to the Number Field Sieve' is
+a very good introduction; it's heavier than C&P in places
+and lighter in others
+
+Michael Case's 'A Beginner's Guide to the General Number Field
+Sieve' has more detail all around and starts to deal with
+advanced stuff
+
+Per Leslie Jensen's thesis 'Integer Factorization' has a lot of 
+introductory detail on NFS that other references lack
+
+Peter Stevenhagen's "The Number Field Sieve" is a whirlwind 
+introduction the algorithm
+
+Steven Byrnes' "The Number Field Sieve" is a good simplified
+introduction as well.
+
+Lenstra, Lenstra, Manasse and Pollard's paper 'The Number Field
+Sieve' is nice for historical interest
+
+'Factoring Estimates for a 1024-bit RSA Modulus' should be required
+reading for anybody who thinks it would be a fun and easy project to
+break a commercial RSA key.
+
+Brian Murphy's thesis, 'Polynomial Selection for the Number Field
+Sieve Algorithm', is simply awesome. It goes into excruciating
+detail on a very undocumented subject.
+
+Thorsten Kleinjung's 'On Polynomial Selection for the General Number 
+Field Sieve' explains in detail a number of improvements to 
+NFS polynomial selection developed since Murphy's thesis.
+
+Jason Gower's 'Rotations and Translations of Number Field Sieve
+Polynomials' describes some very promising improvements to the
+polynomial generation process. As far as I know, nobody has actually
+implemented them.
+
+D.J. Bernstein has two papers in press and several slides on
+some improvements to the polynomial selection process, that I'm
+just dying to implement.
+
+Aoki and Ueda's 'Sieving Using Bucket Sort' described the kind of
+memory optimizations that a modern siever must have in order to
+be fast
+
+Dodson and Lenstra's 'NFS with Four Large Primes: An Explosive
+Experiment' is the first realization that maybe people should
+be using two large primes per side in NFS after all
+
+Franke and Kleinjung's 'Continued Fractions and Lattice Sieving' is
+the only modern reference available on techniques used in a high-
+performance lattice siever.
+
+Bob Silverman's 'Optimal Parametrization of SNFS' has lots of detail on
+parameter selection and implementation details for building a line
+siever
+
+Cavallar's 'Strategies in Filtering in the Number Field Sieve'
+is really the only documentation on NFS postprocessing
+
+Denny and Muller's extended abstract 'On the Reduction of Composed
+Relations from the Number Field Sieve' is an early attempt at NFS
+filtering that's been completely forgotten by now, but their techniques
+can work on top of ordinary NFS filtering
+
+Montgomery's 'Square Roots of Products of Algebraic Numbers' describes
+the standard algorithm for the NFS square root phase
+
+Nguyen's 'A Montgomery-Like Square Root for the Number Field Sieve'
+is also standard stuff for this subject; I haven't read this or the
+previous paper in great detail, but that's because the convetional
+NFS square root algorithm is still a complete mystery to me
+
+David Yun's 'Algebraic Algorithms Using P-adic Constructions' provided
+a lot of useful theoretical insight into the math underlying the
+simplex brute-force NFS square root algorithm that msieve uses
+
+
+Decio Luiz Gazzoni Filho adds:
+
+The collection of papers `The Development of the Number Field
+Sieve' (Springer Lecture Notes In Mathematics 1554) should be
+absolutely required reading -- unfortunately it's very hard to get
+ahold of. It's always marked `special order' at Amazon.com, and I
+figured I shouldn't even try to order as they'd get back to me in a
+couple of weeks saying the book wasn't available. I was very lucky to
+find a copy available one day, which I promptly ordered. Again, I
+cannot recommend this book enough; I had read lots of literature on
+NFS but the first time I `got' it was after reading the papers here.
+Modern expositions of NFS only show the algorithm as its currently
+implemented, and at times certain things are far from obvious. Now
+this book, being a historical account of NFS, shows how it progressed
+starting from John Pollard's initial work on SNFS, and things that
+looked out of place start to make sense. It's particularly
+enlightening to understand the initial formulation of SNFS, without
+the use of character columns.
+[NOTE: this has been reprinted and is available from bn.com, at least   -JP]
+
+As usual, a very algebraic and deep exposition can be found in Henri
+Cohen's book `A Course In Computational Algebraic Number Theory'.
+Certainly not for the faint of heart though. It's quite dated as
+well, e.g. the SNFS section is based on the `old' (without character
+columns) SNFS, but explores a lot of the underlying algebra.
+
+In order to comprehend NFS, lots of background on algebra and
+algebraic number theory is necessary. I found a nice little
+introductory book on algebraic number theory, `The Theory of
+Algebraic Numbers' by Harry Pollard and Harold Diamond. It's an old
+book, not contaminated by the excess of abstraction found on modern
+books. It helped me a lot to get a grasp on the algebraic concepts.
+Cohen's book is hard on the novice but surprisingly useful as one
+advances on the subject, and the algorithmic touches certainly help.
+
+As for papers: `Solving Sparse Linear Equations Over Finite Fields'
+by Douglas Wiedemann presents an alternate method for the matrix
+step. Block Lanczos is probably better, but perhaps Wiedemann's
+method has some use, e.g. to develop an embarassingly parallel
+algorithm for linear algebra (which, in my opinion, is the current
+holy grail of NFS research).

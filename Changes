@@ -1,0 +1,1632 @@
+Version 1.41: 4/3/09
+	- Added an extra phase after the clique removal in the NFS filtering,
+		that deletes heavy relations until the specified excess
+		is achieved. I only expect this to be useful in the case of
+		extreme oversieving (thanks to Bruce Dodson for showing
+		how necessary this was, even for very large jobs)
+	- Added tweaks to the GMP conversion functions to account for
+		64-bit MSVC (thanks Brian Gladman)
+	- Added assembly language for 64-bit MSVC, for use with NFS
+		polynomial selection (thanks Brian Gladman / Jeff Gilchrist)
+	- Fixed a crash in NFS polynomial selection, that happens when 
+		two products of small primes have very different size
+		(thanks Mikael Klasson)
+	- Made the polynomial rootfinder choose initial values away from
+		the origin (thanks to Al Edwards for a very pathological
+		SNFS polynomial)
+	- Set the default skewness to 1.0 in more places (thanks Tom Womack)
+	- Lowered the minimum size that's allowed to run GNFS
+	- Recompiled the demo binary to use GMP-ECM v6.2.2
+
+Version 1.40: 3/24/09
+	- NFS polynomial selection changes:
+		- Added Murphy's scoring algorithm, expressed as a
+		  numerical integration. The Murphy score is used as the
+		  final measure of polynomial goodness, and is directly
+		  comparable to the scores produced by the GGNFS tools
+		- Made the numerical integration code adaptive, and greatly
+		  simplified it
+		- Added major changes to the stage 2 root sieve, which reduce
+		  overhead and allow quick searching of extremely large search
+		  spaces. This is required so that large inputs do not cause
+		  the root sieve to literally take forever
+		- Made the polynomial rootfinder work in double-double
+		  precision. This is neeeded to compute roots to full
+		  double precision accuracy, preventing numerical instability 
+		  in Bernstein's algorithm
+		- Reduced some of the overhead in stage1 and added 64-bit
+		  assembly language (much more to do here)
+		- Changed the initial stage 2 numerical optimization to only
+		  select rotations, and to use Bernstein's scoring function
+		- Fixed a bug in the multivariable optimization and made
+		  the solver into common code
+		- Added error bailout code to the poly rootfinder
+		- Changed the format of intermediate saved polynomials to
+		  be compatible with GGNFS; this means an entry from
+		  the ".p" file can be cut-n-pasted into the GGNFS tools
+	- Made lots of NFS utility functions, and most of the NFS filtering, 
+		into common code, in preparation for an overhaul of the QS code
+	- Generalized the hashtable code to automatically grow the hash
+		array and to index arbitrary size structures. This is a 
+		necessary first step for allowing NFS postprocessing to
+		scale beyond what it can handle now
+	- Modified the main driver to allow NFS on any size input, no matter
+		how small, if only the postprocessing is desired
+	- Added patches from Brian Gladman that allow the Lanczos
+		inline asm to work with MSVC Express (thanks Ben Buhrow)
+	- Added more Intel cache codes and better CPU identification
+	- Made NFS input ranges 64-bit numbers to deal with large leading
+		coefficients for NFS polynomial selection
+	- Switched to measuring CPU time when calculating deadlines or 
+		elapsed time (thanks andi47)
+	- Added printing of elapsed time in each stage of NFS postprocessing,
+		for compatibility with GGNFS scripts (thanks Jo Yeung Uk)
+	- Inlined the modular inverse routines and added 64-bit versions of
+		several functions
+	- Fixed a typo when conditionally defining HAS_CMOV, and also
+		when turning on MMX and SSE for the QS code
+	- Cleaned up the MSVC project files (thanks Jeff Gilchrist)
+	- Tweaked some asm to compile correctly with gcc 4.x; also changed
+		the generic code branch of mp_mod{add|sub}_1
+	- Allowed the NFS filtering to limit the number of relations read in
+
+
+Version 1.39: 12/1/08
+	- NFS polynomial selection changes:
+		- Rewrote stage 1 to use Kleinjung's new algorithm as 
+		  described at the CADO workshop. This is much simpler and
+		  potentially can find better polynomials
+		- Major overhaul of the root sieve; this was badly needed
+		  because Kleinjung's new algorithm generates enormous
+		  search spaces for roots. The result is a lot more modular,
+		  allows 64-bit rotations, uses lattice sieving to cover
+		  large ranges, and searches arbitrarily-shaped intervals
+		  without regard to their size
+		- Added error aborts to the stage 2 size minimization step
+		- Added the ability to specify coefficient ranges to search
+		  via command line option in the demo binary, and also 
+		  enforced a time limit on polynomial search that is specified
+		  in the driver
+	- Merged extensive patches from Brian Gladman that fix the use of
+		inline assembly language for MSVC and Intel's compiler, on
+		both Windows and Linux
+	- Corrected many long-standing errors in the x86 assembly language
+	- Modified the NFS filtering to not preemptively rerun clique
+		processing unless the merge phase proves that it has the
+		capacity to see more ideals (thanks Bruce Dodson)
+	- Allowed NFS polynomials up to degree 7 (thanks Serge Batalov)
+	- Reduced the number of quadratic characters to 20; this makes
+		the NFS linear algebra slightly more efficient
+
+
+Version 1.38: 9/24/08
+	- Changed the NFS square root to only consider relations that appear
+		an odd number of times, and then only once. This reduces
+		the runtime and memory use of the entire square root by up 
+		to a factor of two, though perhaps this depends on the
+		amount of oversieving (thanks Paul Zimmermann)
+	- Upgraded the library to expect GMP-ECM v6.2.1, and merged many 
+		fixes by Christian Cornelssen to the GMP-ECM driver
+	- Fixed a bug enumerating polynomial coefficients in stage 1 of
+		the skewed NFS polynomial selection (thanks Patrick Stach)
+	- Changed the NFS filtering to test the density of the dataset
+		after clique removal and retry the later stages if the
+		density is too low (thanks Tom Womack)
+	- Changed the linear algebra to report the estimated time to
+		completion (thanks Serge Batalov)
+	- NFS sieving changes:
+		- Modified the factor base generation to correctly report
+		  progress when the algebraic and rational bounds are different
+		- Increased the maximum size of primes used by the
+		  batch factoring
+		- Changed the sieving to not quit in the middle of
+		  a sieve line when interrupted
+	- Incremented the maximum size of numbers multiplied in the NFS
+		square root (thanks Paul Zimmermann / Alex Kruppa)
+	- Removed the extra sanity check added to the NFS square root in
+		the previous version; Paul Zimmermann rightly points out
+		that it treats a natural outcome of the square root as an error
+	- Fixed a bug initializing the savefile memory buffer
+
+Version 1.37: 8/27/08
+	- Performed a significant overhaul of stage 1 in the NFS polynomial
+		selection (needs much more work)
+	- NFS filtering changes:
+		- Combined the duplicate removal with analysis of free
+		  relations; now successive filtering runs will add more
+		  free relations, and large primes have free relations chosen
+		  for them independent of any factor base bound (thanks
+		  to Paul Zimmermann for showing that extra free relations
+		  make a noticeable difference in filtering quality)
+		- Overhauled the main filtering driver and the singleton 
+		  removal; now the singleton and clique passes are completely
+		  separate and redundant operations are removed. The most
+		  noticeable effect is that there is no clique processing
+		  after the disk-based singleton removal
+		- Changed the merging to avoid favoring merges that cancel
+		  out relations; this makes merging faster, and the merge
+		  postprocessing phase deletes redundant relations anyway
+		- Fixed a small bug in the merge phase, and added a 
+		  little extra cleanup
+		- Added a limit on the size of cliques (thanks Hugo Platzer)
+	- Increased the effort expended to calculate the root score 
+		for NFS polynomials, for p dividing the polynomial
+		discriminant (thanks Paul Zimmermann)
+	- Rearranged the main driver to print any factors found if it
+		is interrupted
+	- Fixed an inconsistency in the way the windows version of the 
+		savefile reading code emulated end-of-file
+	- Allow the demo binary to optionally run at idle priority
+		(thanks Mark Rodenkirch)
+	- Made GNFS parameters more sensible (thanks Jo Yeong Uk)
+	- Fixed the win32 version of rint() (thanks Brian Gladman)
+	- Added a little extra paranoia to the NFS square root
+	- Increased the maximum input size to 275 digits; anyone
+		who pushes *this* limit is nuts
+
+Version 1.36: 5/17/08
+	- NFS polynomial selection changes:
+		- Complete overhaul of the root sieve code. The result
+		  will potentially work a lot harder, and does not depend
+		  on the approximate measures of polynomial size that were
+		  originally used
+		- Added many changes and bugfixes to the stage 2 multivariate
+		  optimization
+		- Changed the objective function in the initial multivariate
+		  optimization pass of stage 2 to match the rounding of
+		  variables at the end. This prunes many more polynomials
+		- Added buffering of the most promising polynomial rotations
+		  so that Bernstein's rating algorithm is applied much more 
+		  often than before (it's much faster than Murphy's algorithm
+		  so we can afford to use it more)
+	- Linear algebra changes:
+		- Removed one instruction from one of the Lanczos 
+		  vector-vector inner loops
+		- Moved the allocation of per-thread memory into the
+		  thread loop proper, to hopefully allocate node-local
+		  memory on NUMA systems
+		- Added extra paranoia when calculating the number of threads 
+		  to spawn; also added code to compensate if the actual number
+		  of threads is different
+		- Add extra safeguards when constructing the post-Lanczos 
+		  matrix in the beginning of the linear algebra
+		- Reduced the minimum matrix size for which blocking and 
+		  multithreading is turned on
+		- Added forgotten 64-bit windows define
+	- Improved the cache size detection to account for the latest Intel
+		and AMD processors (thanks Greg Childers)
+	- Changed the NFS filtering to increase the target matrix density,
+		since the improved filtering code generates much better
+		matrices in the presence of significant excess relations
+	- Added a forgotten patch to the MP library, in the non-assembly-
+		language branch (thanks Christian Cornelssen)
+		
+Version 1.35: 4/14/08
+	- NFS skewed polynomial selection changes:
+		- Replaced the rather simple stage 2 polynomial optimization 
+		  code with more advanced global and local methods from
+		  Numerical Recipes (needs lots of cleanup)
+		- Improved the calculation of projective roots after the 
+		  initial stage 2 optimization pass
+		- Substituted Bernstein's algorithm in place of Murphy's
+		  for the final rating of skewed polynomials
+		- Modified stage 1 to forward all polynomials to the
+		  optimization code in stage 2; this centralizes the 
+		  optimization step for a small performance penalty
+		- Removed large amounts of now-redundant code 
+		- Modified the size score to consider all complex roots
+		  of the polynomial; this is necessary even if the imaginary
+		  parts of the root have large absolute value
+	- Fixed a buffer overflow bug in the NFS square root, which was
+		actually a long division bug that only showed up in MSVC
+		(thanks Chad Davis and Sergey Miklin for debugging help)
+	- Modified the NFS filtering to reduce the filtering bound
+		if more than two passes are needed (thanks Chad Davis)
+	- Updated the MSVC build project to v9 and fixed several
+		porting errors in the previous release (thanks Brian Gladman,
+		Chad Davis, Sergey Miklin)
+
+Version 1.34: 3/22/08
+	- Added a heavily modified version of the Franke/Kleinjung NFS
+		polynomial selection tools. Massive additional work is
+		still needed here
+	- NFS filtering changes:
+		- Reduce the number of singleton removal passes to two
+		  (on average). The second pass now uses an extremely small
+		  filtering bound, writes to disk, and reads back only the
+		  ideals that occur rarely. This is a lot faster and more
+		  robust, especially in the case of heavy oversieving
+		- Fine-tuned the choice of initial bound. The new algorithm 
+		  is less needlessly conservative
+		- Changed the hashing of (a,b) pairs in the duplicate removal
+		  to hopefully avoid most false positives
+	- Changed the QS code to use signed_mp_t functions where appropriate.
+		This removes a number of silly hacks
+	- Forced the NFS square root to always use IEEE precision, after 
+		taking a week to find out it was set incorrectly for a large
+		SNFS run (thanks Richard Wackerbarth)
+	- Added tuning of the size of reciprocals in the NFS square root,
+		to avoid wasting time on small inputs (thanks Chad Davis)
+	- Added initialization for NFS parameters when the input size exceeds 
+		the pre-tabulated list (thanks Greg Childers)
+	- Modified the mp_mod{add|sub}_1 routines to be more efficient and
+		avoid potential register allocation errors (thanks Alex Kruppa)
+	- Linked the win32 demo binary to be large-address aware, allowing
+		3GB of memory to be used on windows machines (thanks _dc_)
+
+Version 1.33: 1/13/08
+	- Centralized all the handling of savefiles, in order to abstract
+		away a bug fix that lets Windows binaries read and write
+		savefiles over 4GB in size
+	- Overhauled the computation of root score in the NFS polynomial
+		selection. The result is more accurate, deterministic,
+		and much faster
+	- NFS square root changes
+		- Modified the FFT library to change the number of bits
+		  in convolution elements dynamically, which halves the
+		  size of the convolution sometimes
+		- Adjusted the size of reciprocals computed during the
+		  algebraic square root to be as large as possible
+		  for a given size FFT
+	- Implemented a cap on the number of quadratic characters; this
+		allows caching of the computed values within the relation
+		structures, and speeds up building of the initial NFS matrix
+		(the code is cleaner too)
+	- NFS filtering changes:
+		- Changed the duplicate and singleton removal to save the
+		  line numbers of relations to *skip*, not keep, when 
+		  performing the initial disk-based passes. This saves having
+		  to write out huge disk files when most relations start
+		  off being valid and not duplicates
+		- Changed the final disk-based singleton pass to dump
+		  relations to disk and read into memory at the end of the
+		  pass. This greatly reduces the maximum memory use of the 
+		  singleton removal
+		- Generalized the clique removal to be able to handle 
+		  really huge amounts of excess relations (thanks Chad Davis)
+		- Changed the clique removal to avoid bothering to do any 
+		  work if the number of cliques to delete is too small
+		- Updated the comments to reflect the fact that what this
+		  deletes is not really cliques but just connected components
+		  of a graph (thanks Alex Kruppa / Chris Card)
+	- Modified the line sieve parameter lists to allow asymmetric sieve
+		lines (thanks Tom Womack)
+	- Added reporting of memory use to the NFS merge phase and linear
+		algebra (the former is not very accurate, for some reason)
+	- Modified the NFS free relation building code to avoid having
+		to generate a factor base
+	- Restored the code that allowed separate rational and algebraic
+		filtering bounds
+	- Modified the NFS batch factoring to be much more careful checking
+		the size of factors found (thanks Tom Womack)
+	- Added logging of the amount of ECM work completed, and improved
+		the stopping conditions to account for multiple factors found
+		(thanks henryzz)
+	- Restored error recovery code that was mistakenly removed from
+		the linear algebra (thanks Cedric Vonck)
+	- Fixed a bug in the early-exit part of the new trial factoring code
+		(thanks Dennis Langdeau)
+	- Added more special cases for Intel's compiler
+	- Fine-tuned the checks for corrupt NFS relations (thanks Tom Womack)
+	- Modified the NFS initialization to not delete the savefile if
+		no sieving is specified (thanks Philippe Strohl)
+	- Switched to a consistent buffer size to receive lines from
+		the savefile; also increase the size to accomodate larger N
+	- Removed the silly approximations used when reporting the size of
+		inputs to the QS and NFS routines
+	- Increased the maximum input size to 255 digits
+
+Version 1.32: 12/15/07
+	- Merged a patch from 'forzles' that changes the threading 
+		implementation in the linear algebra to work using a 
+		thread pool instead of spawn-and-join. This allows a 
+		significant speedup on multi-core CPUs, sometimes 2 to
+		4 times the speedup from using extra threads compared to
+		v1.31
+	- Split out the main computational linear algebra routines from the
+		multithread framework that uses them; this cuts out 2/3
+		of the code that people optimizing the linear algebra need
+		to see in one file
+	- Changed the type assigned to uint32, to silence cygwin warnings
+	- Changed the relation-reading code to reject relations whose
+		(a,b) pair is zero (thanks Greg Childers)
+
+Version 1.31: 12/13/07
+	- NFS sieving changes:
+		- Added experimental code to batch relations containing large
+		  primes together and factor them all at once, using an
+		  algorithm described by D.J. Bernstein
+		- Changed the sieving to dynamically choose whether relations
+		  will have two or three large primes, with the choice re-
+		  calculated for every sieve block. This item and the
+		  previous one makes it possible to find relations with three
+		  rational and/or algebraic large primes at modest extra
+		  runtime cost, and increases the overall speed of line
+		  sieving by 50-100% when the input is large enough. The 
+		  same techniques can apply to a future lattice siever
+		- Made the choice of cutoff for trial factoring relations
+		  automatic
+		- Fixed a minor bug in the resieving code
+		- Modified the sieving to avoid printing factors < 256
+	- Added the ability to optionally compile and optionally run GMP-ECM
+		on all inputs, with a little tuning to attempt to minimize
+		the overall time
+	- Overhauled the Pollard Rho code; the new version is much more
+		efficient and configured to do more work in order to find
+		factors of expected size
+	- Overhauled the main driver to remove some hacks and some
+		unnecessary work
+	- Added a compile-time list of primes that several subsystems within
+		the library now use
+	- Removed trial factoring from the MPQS and NFS drivers
+	- Added early-out optimizations to the trial factoring
+	- Modified the tiny factoring code to revert to QS if SQUFOF 
+		fails (thanks Dennis Langdeau), and always perform
+		Pollard Rho
+	- Added wrappers for all the C memory allocation functions that abort
+		if memory allocation failure is detected
+	- Added compile options that allow accessing large files on many
+		32-bit unix systems (thanks Greg Childers)
+
+Version 1.30: 11/16/07
+	- NFS filtering changes:
+		- Modified the merge phase to use pairs of 32-bit words
+		  to represent nonzero matrix elements, instead of a single
+		  linked list structure with pointers. This simplifies 
+		  a lot of code, makes merging 30-50% faster for big jobs, and
+		  reduces the memory use on 64-bit machines by over 60%
+		- Modified the merge phase to concatenate the lists
+		  of relations and ideals within a relation set. This removes
+		  half of the memory management during merges
+		- Removed legacy #defines from the duplicate removal
+	- Added checks for the Intel compiler, which can now understand
+		gcc inline assembly (thanks to Brian Gladman)
+	- Restored MSVC versions of the Lanczos inline assembly (thanks to
+		Brian Gladman)
+	- Added an extra check for zero polynomials in the factor base
+		root finder (thanks Hallstein Hansen)
+	- Fixed a typo in the main library driver (thanks Philip Mason)
+	- Modified the tiny factoring code to revert to Pollard Rho if
+		the SQUFOF or tiny QS routines fail (thanks to Philip Mason
+		for a test case)
+	- Made the numerical rootfinder work harder to find difficult roots
+	- Turned the breakover point for using the tiny factoring routines 
+		into a library-wide #define
+	- Restored logging of the initial NFS matrix size; this was mistakenly
+		removed in the previous version
+
+Version 1.29: 10/28/07
+	- Linear algebra changes:
+		- Added checkpoint and restart for large matrix sizes
+		- Added Montgomery's optimizations to reduce the number
+		  of vector-vector operations
+		- Modified the matrix multiply assembly code for slightly
+		  higher performance on 64-bit x86
+		- Pushed the dense matrix rows into the per-thread state, 
+		  so that multithreaded runs execute the dense row portion
+		  of the matrix multiply in parallel
+		- Modified the test for iteration failure *again*, after
+		  Greg Childers encountered it on a very large job
+	- NFS linear algebra changes:
+		- Performed an overhaul of the matrix-building code.
+		  This makes the process much more modular and eliminates
+		  unnecessary sorting. It also noticeably decreases memory use
+		- Modified the matrix building code to avoid needing a
+		  complete factor base
+	- NFS filtering changes:
+		- Increased the array sizes used for the 2-way merges,
+		  and added extra sanity checking (thanks Tom Womack)
+		- Modified 2-way merge phase to delete relation sets 
+		  that would never survive the full merge phase
+		- Allowed the filtering bound and number of relations read
+		  to be passed in from applications. The latter is convenient
+		  for exploring the filtering space and the former can
+		  be used to correct suboptimal bounds that the library chooses
+	- Modified find_large_ideals() to use a single bound for large
+		ideals, not separate rational and algebraic bounds
+	- Changed the file format for NFS cycles. The new format takes up
+		slightly more disk space, but simplifies nfs_read_cycles and 
+		removes some hacks that were necessary with the old format
+	- Modified nfs_read_cycles to optionally return just the cycles
+		and not the relations they need
+	- Switched the 'size' and 'number' arguments of most calls to
+		fread and fwrite
+	- Increased the maximum size of the FFT multiply
+	- Removed the warning printed for large inputs; most factorization
+		attempts for numbers > 150 digits are SNFS jobs, not RSA keys
+		(thanks Sander Hoogendorn)
+
+Version 1.28: 10/3/07
+	- Fixed logging of factors to avoid trying to free a stack array
+	- Fixed 64-bit compile warnings
+
+Version 1.27: 10/2/07
+	- Much more work on NFS polynomial selection (still not runnable)
+	- Linear algebra changes:
+		- Added special block-multiply code for the moderately 
+		  dense matrix rows. This reduces the memory use of the
+		  linear algebra by about 15%
+		- Used 32-bit loads to grab pairs of array offsets at a
+		  time within the matrix multiply. Since the number of
+		  memory accesses is a bottleneck, the reduced number of
+		  these provides a 1-2% speedup
+		- Always track the number of dimensions solved. This prevents 
+		  spurious failures when the solver runs on small matrices
+		- Aligned the vector-vector loops
+	- Modified the polynomial rootfinder to use different starting points
+		when looking for roots. This is required for many SNFS 
+		polynomials whose derivatives vanish at the default start point
+	- Modified the driver to not log any factors if there is only
+		one composite factor found (i.e. the library was interrupted) 
+	- Updated the default makefile target to state that gcc
+		on x86 must use the specialized make targets
+	- Raised the input size limit to 235 digits
+
+Version 1.26: 8/2/07
+	- Began experiments on improved polynomial selection (nothing
+		is in a runnable state yet)
+	- Changed the scratch structure used in the NFS filtering
+		merge phase to use hardwired array sizes. This removes
+		a lot of needlessly complex code and prevents a
+		subtle buffer overflow (thanks Hallstein Hansen)
+	- Added signed_mp_{add|sub|mul|clear|copy}
+
+Version 1.25: 6/27/07
+	- Changed the QS sieve core to empty MMX state before attempting
+		any trial factoring of sieve values. This had been broken
+		since v1.20, but the last version's changes to mp_iroot 
+		were the first to make the bug fatal (thanks Miroslaw Kwasniak)
+	- Fixed comments in the numerical integrator
+
+Version 1.24: 6/25/07
+	- Removed the dependency on the Gnu Scientific Library. The NFS
+		polynomial selector now is completely self-contained, and
+		hopefully will be able to handle any input polynomial
+		(GSL's numerical integrator sometimes fails). Many thanks
+		to Brian Gladman for lots of help doing this
+	- Added numerical integration code provided by Brian Gladman
+	- Added a polynomial rootfinder derived from Numerical Recipes
+	- Modified the NFS filtering driver to lower the filtering bound
+		and retry the merge phase if the matrix produced is too 
+		sparse. This seems to be required in order for the linear
+		algebra to produce nontrivial dependencies sometimes
+		(thanks to Tom Womack for a very obstinate factorization)
+	- Changed the NFS filtering to hardwire the maximum number of
+		relations in a relation set
+	- Performed a major overhaul of mp_iroot
+	- Modified an error test in the linear algebra, after a report
+		from Hallstein Hansen that the error still occurs, 
+		probably spuriously
+	- Fixed a possible buffer overflow in mp_mul (thanks valgrind)
+	- Fixed a serious memory leak in the cleanup after the merge
+		portion of NFS filtering (thanks valgrind)
+	- Fixed a memory leak in the trial division used by the NFS
+		driver. Also made trial division mandatory in the NFS
+		driver, since the factor base bound will always exceed the
+		trial factoring bound (thanks valgrind)
+	- Corrected a typo in the NFS siever (thanks Joppe Bos)
+
+Version 1.23: 6/3/07
+	- Linear algebra changes:
+		- Made singleton removal alternate with deleting cliques 
+		  from the input matrix. This seems to be required when
+		  the initial matrix is large and very sparse, otherwise 
+		  only trivial dependencies are found
+		- Made the iteration skip verifying that all columns are
+		  used in the last iteration. I think that this causes
+		  unnecessary restarts of the linear algebra
+		- Allowed for combine_cols to find zero dependencies
+	- NFS filtering changes:
+		- Allowed the singleton removal to grow the size of 
+		  hashtables used during disk-based passes
+		- Modified the filtering driver to more intelligently tune 
+		  the bound on large ideals when there is a very large 
+		  amount of excess, and/or when sieving uses 29+ bit 
+		  large primes 
+		- Changed the singleton removal cutoffs to avoid doing the
+		  last (pretty useless) disk-based pass most of the time
+		- Changed the singleton removal to delete the file from the
+		  duplicate removal phase when finished with it
+	- Fixed a bug reading NFS relations (thanks Greg Childers)
+
+Version 1.22: 5/27/07
+	- Linear algebra changes:
+		- Added simple multithreading
+		- Modified the dense matrix multiply to use blocks of 64
+		  rows instead of 32. This is slightly faster, and allows
+		  reusing the general vector-vector code from elsewhere
+		- Modified the matrix packing code to pack the matrix in
+		  two passes instead of one; this saves an enormous number
+		  of reallocations and significantly reduces the working
+		  set size of the linear algebra
+		- Modified the driver to correctly choose when to pack
+		  the matrix, and to correctly pack dense rows when no 
+		  post-Lanczos matrix is desired
+		- Fixed a memory leak freeing the packed matrix
+		- Cleaned up combine_cols
+		- Added more fixes for OS X Intel (thanks Romain Muguet)
+	- Forced the buffer size for ideals in a relation_lp_t to match 
+		that of the buffer in a relation_t. This fixes a fairly
+		common NFS square root failure (thanks Hallstein Hansen)
+	- Fixed a bug in the factor base generator change from v1.21
+		(thanks Tom Womack and Jes Hansen)
+	- Made the Pentium 2 and 3 QS sieve cores have a 64kB block size
+	- Modified the expression evaluator to accept integers in octal or
+		hex format. Dear reverse engineers: it isn't that hard
+	- Added more sanity checking to NFS matrix construction
+	- Added more QS tuning from Bill Hart
+	- Fixed a typo in the tiny QS code (thanks Volturno)
+
+Version 1.21: 5/11/07
+	- NFS filtering changes:
+		- Changed the merge phase to count the average weight
+		  of cycles that would appear in the matrix, not the average
+		  weight of all cycles found. This allows for a somewhat
+		  smaller matrix when there is a large amount of excess
+		- Changed the filtering driver to iteratively rerun the
+		  singleton removal with gradually smaller bounds. This is
+		  much better at dynamically figuring out a bound for large 
+		  ideals that is small and can produce a sensible matrix
+		- Added back the code that buries ideals that are too
+		  heavy. The current merging architecture makes it possible
+		  to apply burying of ideals more intelligently than my
+		  initial experiments, and burying ideals saves a lot of
+		  memory as merging progresses
+		- Modified the singleton removal to use a larger hashtable
+		  for the initial disk-based pruning passes, and also to
+		  rebuild the hashtable after a pruning pass if it was 
+		  saturated going into the pruning pass
+		- Increased the maximum clique batch size, to save time
+		  when filtering datasets that have a lot of excess
+		- Increased the number of excess columns in the final matrix;
+		  maybe this will help prevent occaisional bad behavior
+	- Merged Brian Gladman's MSVC versions of the inline assembly code,
+		as well as his rearrangement of the unrolled Lanczos loops
+	- Merged Brian Gladman's latest MSVC build files
+	- Modified the NFS square root to handle inputs where there are no
+		q for which (algebraic polynomial) mod q is irreducible
+	- Changed the NFS linear algebra to assemble the matrix on disk
+		and read in the columns after relations are freed. This 
+		reduces the memory use of the linear algebra by about 30%
+	- Fixed yet another bug in the NFS factor base generator, which
+		would sometimes miss roots of polynomials that would be
+		degree 1 after reduction by p (thanks to Hallstein Hansen)
+	- Documented the QS improvements
+	- Sharpened the detection of older and newer AMD processors
+	- Allowed for use of AMD's MMX extensions; this allows a slight QS
+		speedup when the full SSE instruction set is not available
+	- Added some QS tuning from Bill Hart
+
+Version 1.20: 5/1/07
+	- Added support throughout the NFS module for relations with
+		64-bit 'a' values. This makes the postprocessing a little
+		slower, but finally allows msieve to complete any previously
+		started GGNFS run
+	- QS changes:
+		- Modified the makefile to create a 'fat binary', the same
+		  core sieving routine compiled over and over again with 
+		  different optimizations and preprocessor directives. The 
+		  QS driver now selects the optimal routine at runtime, 
+		  and this makes several CPUs noticeably faster for small
+		  and moderate size factorizations 
+		- Used two different reciprocal values instead of one, 
+		  so that remainder operations involving small factor 
+		  base primes are faster now
+		- Modified the sizing up of the factor base into distinct
+		  regions; this gives ranges of factor base primes that
+		  use reciprocals, and also allows a large range where
+		  remainder operations are essentially free (for primes
+		  smaller than the cutoff for using hashtables)
+		- Increased the unrolling of the sieve scanning loop to 64
+		- Used multimedia vector instructions to scan the sieve
+		  interval, if they are available. This makes small and
+		  moderate size factorizations up to 5% faster
+		- When sizing MPQS polynomials, use the rounded up value
+		  of the sieve interval instead of the original. Not doing
+		  this means the sieve interval would be slightly lopsided,
+		  making sieve values slightly larger on average
+		- Modified generation of reciprocals so that the quotient
+		  from integer division is exact, i.e. doesn't need correcting
+		- Reduced the number of small primes that are not sieved
+		  as the input size increases. Skipping small primes is less
+		  important in these cases, and the extra relations found
+		  more than make up for the extra time spent sieving
+		- Removed obsolete code from MPQS polynomial generation
+		- Reduced the limit on QS factor base primes to 2^26 (need
+		  an extra bit in the factor base structure)
+		- Cleaned up check_sieve_val
+	- Completed documenting the NFS filtering
+	- Modified the cache detection code to handle level 1 cache sizes too
+	- Added code to detect the (x86) CPU type
+	- Modified the NFS square root to handle negative leading rational
+		polynomial coefficients; also added code to check the sign
+		of the leading algebraic polynomial coefficient
+	- Fixed a bug sorting relations during the NFS merge postprocessing
+	- Fixed find_large_ideals to reduce b values modulo p before
+		calling mp_modinv_1; the latter cannot handle b that
+		exceed p (thanks to Greg Childers)
+	- Fixed a typo parsing NFS options in the demo program
+	- Increased the allowed relation set size during NFS merging; the
+		limit cannot be too restrictive, or else many cycles will not
+		be found (a big cycle can turn into a small cycle because
+		of a fortuitous merge, but not if the cycle is pruned first)
+	- Made the prefetching of long buffers conditionally compiled; most
+		modern CPUs can prefetch these automatically so explicit 
+		prefetch instructions are unnecessary
+	- Modified the NFS square root to not stop unless the largest
+		remaining composite is very small. This will protect all
+		the NFS relations from being overwritten by the MPQS code
+	- Removed the use of assembly code using cmov instructions when
+		compiling for 64-bit x86
+	- Changed inline assembly code to not explicitly clobber the EBX
+		register; apparently OS X on Intel reserves this register
+		for the PIC base address (thanks Romain Muguet)
+	- Increased size of the buffer used in the demo to hold input numbers,
+		to accomodate ridiculously huge SNFS inputs (thanks Tom Womack)
+
+
+Version 1.19: 4/17/07
+	- Linear algebra changes:
+		- Made the block Lanczos code much more modular
+		- Added cache blocking to the matrix multiply, with 
+			automatic sizing of blocks based on the size of
+			CPU caches
+		- Added x86-specific MMX code to the computationally intensive
+			routines. This item and the previous reduce the
+			solve time for large problems by a factor of 4-6!
+		- Pushed the restart of failed linear algebra runs into
+			the block Lanczos code itself, instead of relying
+			on the QS and NFS code to do it
+		- Added progress reporting for larger jobs
+		- Increased the number of rows that are converted to packed
+			format, and made the final number of such rows a
+			multiple of 32
+	- Modified the file format of the NFS factor base, to allow manual
+		adjustment of NFS parameters
+	- Added an extra NFS matrix row to guarantee that the number of
+		free relations in each dependency is even
+	- Fixed a rare buffer overflow in the FFT multiplication code 
+		(thanks to Greg Childers / valgrind)
+	- Added automatic external cache size detection code
+	- Began documenting the NFS filtering
+	- In the NFS linear algebra, increased the bound for primes that 
+		are packed into dense rows; this saves about 5% of the 
+		working set during the linear algebra
+	- Made all header files safe for C++ compilation
+
+Version 1.18: 4/5/07
+	- NFS filtering changes:
+		- Added a postprocessing step to the merge phase that removes
+		  relations by rearranging the basis defined by the current
+		  collection of cycles. This makes the final linear system
+		  about 2-4% lighter
+		- Made the merge phase a lot more modular, since merging and
+		  postprocessing of the merged relations need many of the
+		  same utility functions
+		- Added the capability to force building of a matrix, even
+		  when there aren't as many excess relations as the filtering
+		  code wants by default
+		- Modified the filtering driver to not use the factor base 
+		  at all; instead, a histogram of all the primes in the 
+		  set of relations is built up during duplicate removal,
+		  and the large prime cutoff is chosen based on that
+		- Modified the clique removal to choose the clique batch size
+		  based on the amount of excess to prune, instead of using
+		  a hardwired size
+		- Modified the merge phase to choose the maximum relation
+		  set size to keep based on the amount of excess relations.
+		  This can save a lot of memory when there is a large number
+		  of excess relations
+		- Modified the merge phase to keep producing cycles as long
+		  as possible, instead of stopping when there are more cycles
+		  than skipped ideals. This gives many more cycles to choose
+		  from, and makes it much easier to converge to a sensible
+		  matrix, especially when there aren't many excess relations
+	- Modified nfs_read_relation to ignore factors of zero that 
+		are read in (thanks to Greg Childers)
+	- Fixed a buffer overflow in mp_divrem_core that occurs when the
+		quotient requires an entire mp_t (thanks sp65536)
+	- Fixed a longstanding bug in the polynomial rootfinder that 
+		generated incorrect roots for nonmonic linear NFS 
+		polynomials (thanks Macz)
+	- Fixed the NFS square root to work correctly in the case of a
+		nonmonic linear polynomial and free relations
+	- Changed the extended precision floating point to not use
+		ppc_intrinsics.h on PowerPC. This header apparently does not 
+		exist on the Playstation3 (Cell) dev. environment (thanks Macz)
+	- Updated the Visual Studio build files, courtesy of Brian Gladman
+	- Added a little more documentation to the NFS square root
+
+Version 1.17: 3/12/07
+	- NFS filtering changes:
+		- Peformed a major overhaul of the merging code. The
+		  new version uses two heaps of ideals, and this allows
+		  undoing decisions made about which ideals to try to
+		  merge. The big advantage of this approach is that merging
+		  starts by computing the lightest possible (but too large) 
+		  matrix, then continues reducing the matrix dimension 
+		  until the result has a specified density
+		- Added minimum-spanning-tree combining of relation sets,
+		  and performed a major overhaul of the core merging code
+		- When merging, keep the relations making up a relation set
+		  in sorted order. This allows the relation lists to be merged
+		  just like the ideal lists, and allows repeated relations to
+		  be removed from cycles as merging progresses
+		- When estimating the weight gain from combining relation
+		  sets, give a bonus to merging relation sets that lead to
+		  cancellations in the combined list of relations. All of
+		  these improvements combine to reduce the weight of the 
+		  final matrix by up to 50%
+		- Removed more compile-time limits in the merge phase
+		- Fixed a serious and subtle bug in the merge phase, which
+		  caused the weight of merged relation sets to be wrong
+		- Changed the second singleton removal pass to use the
+		  same large ideal cutoff for rational and algebraic factor
+		  bases, even if they have different sizes
+		- Added code to give up on relation sets that are too dense,
+		  i.e. that contain too many relations
+		Many thanks to Greg Childers for providing an NFS factorization
+		that made me scramble to improve the NFS filtering
+	- Added the beginning of a skewed polynomial selector (currently
+		turned off)
+	- Performed a complete overhaul of the driver and the manager
+		for factors found. This pushes the recursive use of
+		factorization into the library and unifies how all
+		the different algorithms handle factors found
+	- Added the Pollard-Brent algorithm; this makes inputs containing
+		6-8 digit factors complete much faster (thanks to Leonardo
+		Volpi for pointing out that latter-day msieve versions
+		performed quite badly in this regard)
+	- Modified the NFS linear algebra to sort lists of ideals by
+		prime and then by rational/algebraic type. This assures
+		that the Lanczos code begins with the sparsest possible matrix
+	- Added code that brute-force divides read-in NFS relations by 
+		small primes, in case some factors in the savefile 
+		are missing. This is required to perform the postprocessing 
+		for a factorization started with GGNFS. Also simplified 
+		nfs_read_relation() and corrected a minor bug there
+	- Fixed a horrible use-after-free bug in purge_singletons_final_core()
+		(thanks valgrind)
+	- Fixed a bug in the sieving during NFS polynomial selection; 
+		factors of 11 were not being used
+	- Modified the lanczos code to remember if some of the input matrix
+		was converted into dense rows; this allows the linear algebra
+		to restart properly after a bad initial solution
+	- Added a failsafe path for long division by zero
+	- Made mp_clear a static inline function instead of a macro. The extra
+		type checking this allows would have prevented a silly bug
+		in the NFS square root (in ap_poly_mul)
+	- Fixed the routine that checks the relation product in the NFS
+		square root to not assume degree 5 algebraic polynomials
+	- Fixed a stupid bug in mp_is_prime
+
+Version 1.16: 1/17/07
+	- Made the code to analyze polynomials independent of the 
+		polynomial degree and skewness; also made the interface
+		to the analysis code much more modular
+	- Rearranged the sampling code for NFS polynomial root properties
+		so that samples are only generated one at a time
+	- Modified the NFS driver to analyze any polynomial when it is 
+		read in at the beginning of an NFS run, even if the 
+		polynomial was not generated by the library
+	- Fixed a stupid bug in mp_log that caused NFS polynomial search
+		to be cut short early
+	- Fixed a bug in the factor base generator that only shows up
+		for SNFS factorizations (thanks to Greg Childers)
+	- Allowed 6th degree polynomials, for people with SNFS factorizations
+	- Reduced the required amount of NFS matrix excess from 200 to 80
+
+Version 1.15: 1/11/07
+	- Made as much of the NFS linear algebra code as possible into
+		common code, so that the QS module can take advantage
+		of the much more sophisticated matrix handling. Also
+		generalized the code to form dense rows automatically
+	- Fixed the linear algebra code that performed post-Lanczos 
+		elimination to get true dependencies; it was completely wrong
+	- Fixed an obscure bug in the FFT multiply code, that was causing
+		the NFS square root to fail. Also added a verification
+		step after the product of the NFS relations is computed
+	- Modified the initial stage of the NFS linear algebra to 
+		dynamically allocate the structures for forming dense rows
+	- Made common code to accurately count the number of nonzero
+		entries in QS or NFS matrices, replacing lots of ad hoc
+		code that didn't do a good job
+	- More reductions in the memory use of the NFS square root
+	- Documented the NFS square root
+	- Changed the method for detecting the floating point precision
+		at runtime; the old method doesn't work if the compiler
+		can emit SSE2 instructions
+	- Use two separate hash functions when indexing 2-word structures.
+		This is much more robust against data that is prone to hash
+		collisions; for example, the previous 1-hash-function
+		implementation performs miserably on big-endian systems during
+		NFS filtering
+	- Reduced the size of the NFS quadratic character base; the problems
+		in the NFS square root were not due to an insufficient number
+		of quadratic characters
+
+Version 1.14: 1/5/07
+	- Modified the NFS module to allow free relations
+	- NFS square root changes:
+		- Try only one start point to the Newton iteration per
+		  dependency. This allows a major reduction in memory use
+		  for the final iteration
+		- tune the choice of starting point for the Newton iteration
+		  so that the final iteration has precision just larger
+		  than what the true square root needs
+		- fixed memory leaks that occurred if a dependency had
+		  a fatal error
+		- Modified the checking to count up the powers of all 
+		  the algebraic ideals, not just the primes to which 
+		  those ideals correspond
+	- Made the parity row mandatory for NFS linear algebra
+	- Modified find_large_ideals to avoid finding the exact root
+		to which a rational ideal corresponds. This makes the
+		routine twice as fast, and makes filtering much easier
+		when the rational poly is (ever) nonlinear
+	- Disabled the NFS rootfinder assembly code for gcc < 3.0, and
+		added some tweaks to allow compilation with less than
+		full optimization (thanks to Daniel Roethlisberger)
+	- Fixed a long-standing bug in the buffering of savefile data,
+		that under fairly rare circumstances caused junk to be
+		written to the savefile. If a run was then restarted, the
+		first few relations would be reported as corrupted (thanks
+		to Maximilian Hasler for the first report of this)
+
+Version 1.13: 12/31/06
+	- Added NFS square root code. This computes the algebraic square
+		root by brute force, and while the current version is
+		a little slow and a little memory-intensive, the runtime
+		is much better than the literature claims
+	- Added floating point FFT-multiply code. The core FFT arithmetic
+		can be made *much* faster, but it's good enough for now
+	- Added a basic arbitrary-precision math library
+	- Split off the rootfinding code from the NFS factor base
+		generation, optimized the rootfinder (~30% faster now),
+		added functions needed by the NFS square root
+	- Performed a major overhaul of the code that manages factors
+		found by the sieve methods. The new code is simpler,
+		usable by QS and NFS, and allows stopping before all
+		dependencies are processed. This was long overdue,
+		and cleans up the QS square root significantly
+	- Modified the NFS driver to be fire-and-forget, using filtering
+		information to feed back into the sieving
+	- NFS filtering changes:
+		- allocate critical structures dynamically, so that 
+		  filtering can at least complete in the face of 
+		  tough datasets
+		- double the number of clique removals in the first pass
+		- streamline the inputs to the second pass
+	- Made the extended-precision floating point code independent of
+		NFS poly generation
+	- Increased the limit on QS factor base primes to 2^27
+	- Increased the limit on input size to 164 digits, and added
+		completely untested parameter tuning for inputs up to a little
+		over 155 digits. I'm flattered that you think msieve can
+		handle 120+ digit problems, and could I sell you a bridge
+		near New York City?
+	- Changed poly_get_roots to also return the leading poly coefficient
+		mod p. Even though it doesn't save much time, this value
+		is always needed in calling code and it's available for free
+	- Increased the size of the NFS quadratic character base again.
+		The previous size wasn't enough to allow an algebraic
+		square for even a 100-digit factorization
+	- Changed the lanczos code to pack nontrivial dependencies into the
+		low-order bits of the dependency vector
+	- Modified the demo to allow individual NFS postprocessing phases
+		to be run
+	- Added a check to the QS multiplier selection that a given
+		multiplier doesn't cause overflow if used
+	- Fixed a silly bug in QS polynomial initialization
+	- Changed mp_modsqrt_1 to avoid the need for random numbers
+	- Added mp_log; this removes some duplicated code
+	- Moved mp_t conversion into the multiple precision library
+	- Corrected some of the documentation in the NFS linear algebra
+	- Overhauled the NFS readme
+
+Version 1.12: 9/8/06
+	- Fixed a bug declaring the hash multiplier on 64-bit systems
+		(thanks to Igor Schein)
+
+Version 1.11: 9/7/06
+	- Added the NFS rational square root, and also the very beginning
+		of the algebraic square root
+	- Modified nfs_read_cycles() to optionally load only the cycles
+		corresponding to a particular dependency from the linear
+		algebra phase. This lets the routine be reused for the
+		NFS square root
+	- Removed hashtable_just_added(); the NFS hashtable implementation
+		cannot find out after the fact whether a given entry was
+		just added to the hashtable
+	- Fixed the fix for the stupid bug in mp_str2mp (thanks to
+		Bernardo Boncompagni)
+
+Version 1.10: 8/25/06
+	- Changed the NFS linear algebra to add a row to the matrix if the
+		rational polynomial is not monic and linear
+	- Fixed a stupid bug in mp_str2mp (thanks to Philippe Strohl)
+
+Version 1.09: 8/23/06
+	- Fixed silly mistake in mp_modmul
+
+Version 1.08: 8/23/06
+	- Major reorganization of the NFS code: 
+		- the poly selection code is much more modular, so that
+		  other poly selection methods can reuse as much existing
+		  code as possible 
+		- moved the filtering code to its own directory with 
+		  its own header file, and reorganized it
+		- general rearrangement of header files, and grouping
+		  together of related but previously scattered functions
+	- Added documentation for all NFS code except the filtering merge 
+		phase (which is still under development)
+	- Added a neat expression evaluator, a Visual Studio 2005 build 
+		system, use of the Visual Studio prefetch instrinsic, a
+		fix for mp_addmul_1 and some portability fixes, all courtesy 
+		of Brian Gladman
+	- Modified QS and NFS postprocessing to use more compact structures
+		to represent lists of relations and lists of cycles. The 
+		result is more memory efficient (especially on 64-bit systems)
+		and reduces the number of small memory allocations. It also 
+		removes a lot of cheesy pointer games that the previous 
+		version played when building an NFS matrix.
+	- Modified QS postprocessing to change the sorting criteria for
+		generated cycles, and performed a general cleanup of the
+		QS filtering code. The primary benefit is that full and
+		partial relations are treated identically, and this simplifies
+		the linear algebra and square root
+	- Pushed the generation / reading of NFS factor bases into the sub-
+		phases of the NFS code, instead of doing it once at the top
+		level driver. This allows each stage to fine-tune the factor
+		base so as to save memory
+	- NFS linear algebra changes:
+		- increased the size of the quadratic character base
+		- generalized the matrix building code to work correctly
+		  with any number of dense rows and any number of rows
+		  in the post-Lanczos elimination phase, including zero
+		  for both of these quantities
+		- modified the Lanczos matrix multiply to allow for dense
+		  rows packed into 32-bit bitfields. Packing the first few
+		  dense rows into bitfields removes about 20% of the Lanczos
+		  working set
+		- after reducing the initial matrix, permute the rows so
+		  that the smallest row indices are the heaviest
+	- NFS filtering changes:
+		- ignore the smallest ideals when estimating the weight 
+		  of a relation. These often cancel each other in the 
+		  matrix phase, and potentially confuse the optimization 
+		  process in the merge phase. The result is a slightly 
+		  sparser matrix given to the Lanczos code
+		- fixed a minor bug calculating the weight of cliques 
+		  found during clique removal. Matrices are about 1% sparser
+		- changed singleton removal to always dump a singleton file
+		  to disk when finished
+	- Modified QS multiplier selection to allow for even numbers (again!).
+		Also reduced the number of multiplier test primes, to keep
+		the runtime of multiplier selection down. Thanks to Bill 
+		Hart for finding an input where an even multiplier is optimal
+	- Extended to smaller factorizations the trick used to pick QS 
+		polynomial A values that are close to the optimium
+	- Expanded the API for using hashtables in the NFS code; this greatly
+		simplifies all the places that need general hashtable support
+	- Changed the multiplier used in hashtables to be prime. This
+		appears to make NFS filtering run about 3% faster
+
+Version 1.07: 7/30/06
+	- Added an NFS linear algebra phase. For NFS size matrices the
+		block lanczos code is very slow, but otherwise all the
+		pieces are there
+	- NFS filtering improvements:
+		- during the full merge, separated the burying of heavy
+		  ideals and the merging of light ideals. Compared to 
+		  interleaving the two processes, this makes the final 
+		  matrix a few percent lighter
+		- split singleton removal into two parts, one for ideals
+		  above those in the factor base (with light clique removal)
+		  and one for factor base ideals (with aggressive clique
+		  removal). This makes the final matrix a tiny bit more
+		  sparse, and greatly reduces the worst-case memory con-
+		  sumption of singleton removal
+		- made memory allocation during the final singleton pass
+		  less aggressive
+		- increased the limit on number of ideals allowed for a single
+		  relation. Previously some relations exceeded that limit and
+		  were silently skipped
+		- removed some debug code
+	- Modified nfs_read_relation to, as an option, store only (one copy of)
+		ideals whose multiplicity in a relation has odd parity.
+		This saves memory in the matrix build phase, and makes 
+		find_large_ideals simpler and very slightly faster
+	- Modified find_large_ideals to correctly handle projective roots,
+		small ideals like 2 or 3, and a rational factor of -1. This
+		makes the routine suitable for use in NFS matrix-building
+	- Changed the file format for NFS cycles, to make parsing easier
+	- More QS improvements:
+		- Reduced the QS sieve block size when compiling for PowerPC
+		- Separated the list of modular square roots from the other
+		  factor base information. They're only needed during poly
+		  initialization, and the smaller factor base structures 
+		  make better use of cache (~5% speedup for small jobs)
+		- Added profiling code to the sieve phase. This has been 
+		  present in my internal sources for a while, but there's
+		  no harm in making it public since it's off by default
+	- Changed qsort callbacks to correctly sort uint32 arrays when the
+		array elements need all 32 bits
+	- Modified the makefile to have separate targets for compiling
+		with and without the NFS code (default without). This makes
+		it easy to compile without dependencies on external libraries
+		or experimental code. Also changed Apple compile flags to
+		assume FSF gcc as the compiler
+	- Make the 'flags' field of msieve_obj volatile. Bits in this are
+		checked to see if they changed asynchronously in other threads,
+		and the compiler needs to know this field cannot be cached
+	- Modified the tiny factoring code to give up when the factors of N
+		found are 1 and N. Michael Fuhr and Dennis Langdeau found
+		several inputs that would recurse infinitely when this happened.
+		Unfortunately it's still an open issue to make these
+		factorizations actually *work*
+	- Always try to open /dev/urandom unless compiling for win32.
+		Apparently several OSes have this facility and there's
+		a fallback path if they do not (thanks to Michael Fuhr)
+
+Version 1.06: 4/21/06
+	- Added an NFS filtering phase. All the steps are there (except for
+		minimum spanning tree combining of relation-sets) but it's
+		not documented yet because the current code is pretty messy
+		and needs to be integrated better
+	- Many QS improvements (thanks to Colin Percival for ideas and
+		discussions that led to some of these):
+		- Fixed a bug in the multiplier selection
+		- Exchanged the loop order in choose_multiplier(), so that 
+		  precomputations can be performed without having to buffer 
+		  them all 
+		- Increased the number of primes tested when choosing 
+		  the multiplier
+		- Added a safety check when choosing the number of primes 
+		  to use in the multiplier selection
+		- Increased the amount of unrolling when scanning the sieve
+		  array from 8 to 32 
+		- Unrolled the loop that adds the sieve updates from 
+		  large primes 
+		- Switched back to a compile-time sieve block size
+		- Removed the exception code in the inner sieve loops for
+		  factor base entries that are not sieved
+		- Modified the sieve initialization to cover the whole interval
+		  in one pass, instead of handling positive and negative
+		  offsets in separate passes
+		- Converted an inner loop in the poly selection to use the 
+		  faster modular inverse
+		- Moved the corrections for root updates into the sieve trial
+		  factoring code, where they are much cheaper
+		- Pulled common subexpressions out of the loops used for 
+		  switching sieve polynomials
+		- Use conditional move instructions (where supported) to 
+		  reduce the overhead of switching sieve polynomials
+		The reduction in overhead improves performance by 10-20%,
+		even for large factorizations. The amount of improvement
+		varies a good deal, and I still have to figure out why
+	- When NFS sieving, turn off factor base entries whose prime 
+		is divisible by the current b value, and turn off
+		projective roots in the same way
+	- Removed all the special case sieve code for NFS factor base
+		primes of 2. This also fixes a bug that made relations 
+		always say they had a factor of 2, even if they did not
+	- Made separate QS and NFS versions of the functions that write to
+		the savefile 
+	- Made the NFS siever skip initialization entirely if no relations
+		are needed
+	- Turned off prefetching for gcc older than 3.0 (thanks to Tony Goddard)
+
+Version 1.05: 2/4/06
+	- Made the NFS factor base an array of ordinary structures and made
+		the version used by the line siever an array of line-siever-
+		specific structures. This cleans up the siever code, saves
+		memory outside the siever code and paves the way for a 
+		lattice siever to do the same thing later
+	- Changed d2mp() in the NFS poly generation code to work correctly
+		on PowerPC processors. QS and NFS should both work on
+		that platform now
+	- Added some fixes to the portions of the MP library that are
+		only compiled for non-x86 platforms
+	- Fixed a silly mistake parsing NFS arguments in the demo application
+		(thanks to Bill Hart)
+	- Added a note to the makefile about linking with GSL (thanks sp65536)
+
+Version 1.04: 1/31/06
+	- Added the beginnings of a package that implements the general
+		number field sieve. It's not even close to done, but
+		includes a polynomial selector, factor base generator
+		and line siever, the latter two being quite sophisticated.
+		GNFS must be turned on explicitly, and only applies to 
+		factorizations above ~97 digits 
+	- Major reorganization of the library code; anything that is
+		not specific to the QS implementation has been moved
+		elsewhere, for reuse by other modules. This is a fundamental
+		shift: QS is not the purpose of this library anymore,
+		factoring is
+	- Major overhaul of the multiple precision library. This includes
+		new functions, reduced overhead, better algorithms and 
+		more assembly language. Some routines are an order of 
+		magnitude faster now, although only small factorizations
+		really benefit from the faster library (my test C70 is
+		about 10% faster).
+	- Finally added a prime sieve to build factor bases, and increased
+		the trial factoring bound
+	- Combined the trial factoring with all of the checking afterwards
+		(i.e. for primes, perfect powers, and small inputs). This
+		lets different modules do their own trial factoring and
+		automatically handle cases where MPQS or GNFS is not needed
+	- Added some MSVC portability fixes from Brian Gladman
+
+Version 1.03: 11/27/05
+	- Modified the demo to recurse fully, in the case of multiple
+		composite factors found. Also print out the number to be
+		factored when in quiet mode
+	- Fixed a dumb mistake assigning the number of words in mp_add_1
+		and mp_sub_1 (thanks terrasse247)
+	- Replaced include of stdint.h with the more portable inttypes.h
+
+Version 1.02: 11/20/05
+	- Greatly increased the size of the factor base and the sieve interval
+		for large factorizations (90 digits and up). Thanks to
+		Jay Berg for pointing out how suboptimal the original choices
+		turned out to be. Expect to see speedups of 20% for 
+		100 digit and 50% for 105 digit factorizations! I've chosen 
+		what appear to be optimal parameters up to 110 digits, but 
+		beyond that is still only guesswork
+	- Modified the sieve code to dynamically choose the number of
+		polynomials that are simultaneously sieved. Since sieve 
+		intervals can now be large, statically picking the number
+		of polynomials runs the risk of chewing up massive amounts
+		of memory
+	- Modified the polynomial selection code to choose larger factors
+		of polynomials for large factorizations. This shouldn't have
+		a performance penalty and can potentially save lots of memory
+	- For big factorizations, modified the poly generation code to choose
+		some factors deliberately too small. This makes the last factor
+		chosen deliberately too large, and reduces the difference 
+		between the current poly and the optimal poly. The result
+		is a ~2% increase in relation discovery rate. Also added an
+		explicit limit on the number of factor base primes to be
+		searched as candidates for this last factor (the limit was
+		always there, but now the code runs the risk of hitting it)
+	- More multiplier changes. All possible multipliers are tried
+		for any input, not just one of the four subsets previously
+		used. The time needed to test all multipliers is really
+		trivial compared to the time needed for a big factorization
+	- Made the counting of cycles during sieving optional. For 
+		distributed clients that will only do sieving, and for which
+		the tracking of cycles is unnecessary, this saves a lot
+		of memory
+	- When sieving is interrupted, exhaust all of the polynomials for the
+		current 'A' value before stopping, if there are not too many 
+		such polynomials. If 'A' has very many polynomials, stop
+		once 2000 have been sieved. This is a compromise that allows
+		getting the sieving to which users are entitled, without
+		having to wait 15 minutes for a shutdown
+	- Clamped the maximum factor base prime at 16 million (2^24). With
+		the new parameters, there's a danger that the very largest
+		factorizations will hit this limit
+	- If the demo program discovers that a previously found factor is
+		composite, it will automatically recurse and factor it. The
+		changes to implement this were so trivial it's embarrassing
+		I didn't make them long ago
+	- Added a tiny MPQS routine to factor inputs that are too small 
+		(~25 digits or less) for the main QS code to handle 
+		comfortably. This fixes a longstanding 'blind spot' for 
+		19-21 digit factorizations
+	- Allow sieving to stop after a specified number of relations.
+		This is also a cheap way to force the combining phase to
+		run before the requisite number of relations have been found
+	- Added safety checks that allow the linear algebra to run even
+		if the resulting matrix is known to be underdetermined.
+		Factorizations for which this is the case are pretty much
+		guaranteed to fail, but several people want to try finishing
+		their factorizations early
+	- Removed the bit about 'the best possible quadratic sieve code' from
+		the readme. At least one person has interpreted this to mean
+		I believe QS code can't get any better than msieve, which
+		in fact I do not believe
+
+Version 1.01: 7/22/05
+	- Complete overhaul of the multiplier selection and factor base
+		construction code. Now it's much cleaner and better 
+		documented, much faster, and chooses better multipliers 
+		on average. After four separate attempts to figure out
+		how multipliers are supposed to work, I think this version
+		finally gets it right
+	- Force all polynomial 'a' values to have at least three primes.
+		This is only an issue for very small factorizations
+	- Fixed another bug in the polynomial selection, triggered only
+		when the factor base is very small (thanks Washuu)
+	- Corrected some typos in the readme
+
+Version 1.0: 6/20/05
+	- Increased the precision of the multiple precision library
+		to 125 digits. Also added sieving parameters for 105-125
+		digit inputs. These are not tested at all, but they have 
+		to be better than using the 105-digit parameters everywhere
+	- For 90+ digit inputs, use a trial division cutoff that is larger
+		than the double large prime cutoff. This makes sieving
+		a little slower, but the increase in partial relations found
+		outweighs the slowdown. Assuming that a linear increase in
+		partial relations makes the factorization linearly faster
+		(this may not be true), tuning this step makes factorizations
+		above 90 digits around 5% faster
+	- Added an option to shut down gracefully after a specified 
+		number of minutes
+	- Only squarefree multipliers are allowed
+	- Print the number of bits in all the sieving cutoffs
+	- Added notification to screen if sieving completed
+	- Modified demo.c to not depend on numbers ending in
+		a carriage return when being read in
+	- Fixed a stupid bug generating random seeds in linux;
+		also use /dev/urandom instead of /dev/random
+	- Catch SIGTERM as well as SIGINT
+	- Cleaned up the wording on progress messages; hopefully the
+		new wording won't confuse so many people about
+		the nature of the relations being collected
+	- Added mp.h back into msieve.h, so that the main structure
+	  	automatically chooses the right size for an mp_t
+	- Added build flags for more platforms to the makefile
+	- Used the types from stdint.h to handle 32-bit vs 64-bit
+	- Munged enough typedefs so things compile on AIX with xlc
+	- Allow a multiplier of 1, even if the input is not 1 mod 4
+	- Increased the trial factoring bound in mp_is_prime to 256
+	- Added code to print the elapsed time even if the run was interrupted
+	- Added readme
+
+Version 0.88: 12/24/04
+	- Moved all the core factorization code into a library and
+		forked off a demo application to call it. Also
+		built a lightweight API that hides the library internals
+	- Encapsulated all the static data needed to perform a factorization
+		into an msieve_obj struct; this removes all dependencies
+		on global variables and makes the factorization library
+		thread-safe
+	- Made logging much more flexible: to file, to screen, both or neither
+	- Removed the need for the roots of the large factor base primes to
+		be in sorted order in one of the inner sieve loops;
+		amazingly, the one branch that implemented the sort
+		took over half the total runtime of poly initialization!
+	- Store the precomputed values for initializing polynomials in
+		two different formats: structure-of-arrays for the small FB
+		primes and array-of-structures for the large FB primes.
+		This makes moderate-size factorizations somewhat faster
+	- Much more paranoia in the choice of random seeds
+	- Reduced the size of a block of work when the L1 cache is smaller;
+		hopefully this will speed up factorizations on Intel CPUs.
+	- Added an extra check that the number of cycles found by the
+		cycle finder not exceed the number of cycles expected.
+		The absence of this check could have caused some 
+		factorizations to crash. This appears to only be an issue
+		with early versions of gcc 4.0.0 (see gcc bugzilla #19050)
+	- Added powers of odd numbers to the list of small multipliers
+		available; no sieving for these numbers is performed, so
+		powers are okay now
+	- Fixed several memory leaks that happen when performing small
+		factorizations in batch mode
+	- Count the number of digits in the input and in any factors found
+	- If sieving is not actually happening when a Ctrl-C occurs,
+		exit immediately
+	- When reading relations from disk, make sure that a relation con-
+		tains at most one -1 factor
+	- Compute the elapsed time if QS is actually needed
+
+Version 0.87: 12/11/04
+	- Modified the sieve code to perform sieving for several
+		polynomials simultaneously, and interleaved polynomial
+		(re)initialization with the sieving. This allows cache 
+		blocking of both the factor base and the sieve interval, 
+		and makes poly initialization take almost zero time.
+		This in turn allows extremely small sieve intervals, allowing
+		smooth relations to be found faster. The end result is
+		a big speedup in the sieve stage, 15-20% at least
+	- Modified the hashtable-based portion of the sieving to generate
+		more efficient compiled code; 1-2% speedup
+	- Changed the savefile format again, to avoid printing out 'b' values
+	- Fixed an extremely subtle bug involving a sieve offset of -1;
+		this is a special case for SIQS but not MPQS
+	- Removed the up-front verification pass; the worst that can
+		happen is that the postprocessing will not find enough
+		valid relations, so you'll just have to sieve some more
+	- Performed an overhaul of out-of-date documentation
+	- Add batch mode (again)
+	- Added a makefile
+	- Consume whitespace before parsing the input number
+	- Correctly factor an input of zero
+
+Version 0.86: 11/29/04
+	- Modified the polynomial generation code to generate 'a'
+		values as close as possible to the theoretical
+		'best' value. Sieving is ~10% faster now, *and*
+		finds more partial relations than before
+	- The calculation of cutoff scores for trial factoring
+		sieve values was completely wrong; it assumed (like
+		QS did) that small sieve offsets yielded small polynomial
+		values. Correcting this removes ~30% of calls to
+		the trial factoring code
+	- Compute the second trial factoring cutoff inside check_sieve_val();
+		this makes it more likely that sieve values near a real
+		root of the MPQS polynomial will not be thrown away
+	- Changed all savefile writes to be manually buffered, so that
+		disk access only happens in large blocks and is explicitly
+		flushed. This *may* solve the mysterious problems people
+		are seeing where relations in a large run get corrupted.
+		It also makes small factorizations run much faster
+	- Added code to verify every relation before sieving starts, and
+		change the filtering stage to recompute numbers of cycles
+		and relations from scratch
+	- Make sure that lists of numbers read from the savefile are
+		sorted in ascending order
+	- Clamped the bound for single large primes at 32 bits. Someday
+		this may become important
+
+Version 0.85: 11/26/04
+	- If any partial relations are duplicates, rebuild the graph
+		of large primes and recompute the expected number of cycles. 
+		This is the only way to survive a large number of duplicates
+	- Slightly modify the cycle-finder to allow quitting even if
+		some partial relations do not participate in cycles
+	- Make sure that relations read from disk do not have too
+		many factors (i.e. are corrupt)
+	- Use the default cache size for the Pentium 4; using the correct
+		cache size for this processor causes performance loss
+	- Print timestamps to stdout and not stderr; apparently I'm the
+		only one who likes seeing timestamps when output is
+		redirected to a file
+	- Print relation counts to stderr, and only print the last progress
+		notification to stdout. This should give a nice capsule
+		description if output is redirected, and keeps thousands
+		of lines of progress notifications out of logs.
+	
+Version 0.84: 11/25/04
+	- Cache-based optimizations: decoupled the small FB size
+		from the sieve block size, made the sieve block size
+		variable, added cache size detection for x86 processors
+		(and hopefully accurate compile directives for PowerPCs)
+	- Change the savefile scheme to only have one output file, containing
+		relations and polynomials mixed together. This greatly
+		simplifies parsing saved data; it also means that savefiles
+		from different runs (or machines!) can be concatenated
+		together and read in all at once. 
+	- Added much more paranoia to the parsing of savefiles
+	- Restart the linear algebra on any error in find_nonsigular_sub();
+		these errors are a consequence of a bad random start
+		point for the matrix code and just need a different
+		start point to work
+	- Added versions of malloc() and free() that align allocated memory
+	- Fix a potential bug in the counting of partial relations just
+		as the filtering stage is starting
+	- Increased the minimum trial factoring bound slightly
+
+Version 0.83: 11/23/04
+	- Fixed a bug in the polynomial generation code that was
+		triggered by the multiplier improvements of 0.82
+
+Version 0.82: 11/22/04
+	- Changed the multiplier computation to use the modified
+		Knuth-Schroeppel algorithm (now that I finally found
+		a paper that describes it)
+	- For diagnostic purposes, print the version and the 
+		seeds for the random number generator 
+	- Remove some debug printouts, fix some typos
+
+Version 0.81: 11/20/04
+	- Added a preprocessing stage to the matrix code to remove
+		singleton rows. This reduces the number of linear
+		algebra failures for small inputs and eliminates
+		(I hope) the inability to find dependencies at all
+		for some factorizations
+	- Restart the Lanczos iteration if not all columns are used
+		between two iteration steps. This saves the program
+		having to be rerun manually
+	- Slightly modified some of the output text
+
+Version 0.8: 11/19/04
+	- Renamed the program to 'msieve'. The 'm' is for 'Michey'
+	- Added double large prime support
+	- Wholesale changes to support checkpoint and restart. Not
+		only does this make things more crashworthy, it 
+		drastically reduces memory consumption
+	- Added block Lanczos for the linear algebra step. The Gauss
+		elimination code was really huffing and puffing for
+		big factorizations, especially since double large primes
+		are making much more dense matrices 
+	- Changed the way polynomials are stored, to reduce memory use
+		during the final stage of factorization
+	- Changed the trial division to use multiplication by
+		reciprocals. This makes the trial division part
+		of checking a sieve value ~20% faster, and is 
+		especially important with double large primes
+		because trial factoring happens much more often
+	- Use built-in tables to compute both the initial trial factoring
+		bound and the factor base bound. This avoids having to
+		guess how many primes the trial factoring will need
+		(previously the number used was a huge overestimate that
+		wasted lots of time)
+	- Moved all code that deals with relations (allocation, freeing,
+		purging, cycle generation) to its own file
+	- Used SQUFOF for inputs 19 digits or less after trial factoring;
+		also fixed a bug in the polynomial selection code that
+		caused 20-22 digit factorizations to needlessly fail
+	- Fixed another bug in the polynomial selection code that only
+		showed up for small factor bases
+	- Collapsed all of the sieve initialization into a single
+		routine again, and performed some long-needed cleanup
+	- Changed the seeding of the random number generator to be different
+		for every invocation of the program
+	- Increased the size limit of an mp_t to 115 digits. It's presuming
+		a bit much, but someone may need the extra room
+	- In the square root phase, if a factor is found and it divides
+		the multiplier then don't print it (it's part of the multiplier)
+	- Fixed a silly bug in mp_bits, for zero inputs
+
+Version 0.7: 10/23/04
+	- Coded up the self-initializing variant of MPQS. 70-digit
+		factorizations are 15% faster, and the speedup climbs
+		to 50% for 90-digit factorizations. This was a lot
+		trickier than I thought. Note that the minimum input
+		size is now around 20 digits
+	- Changed the small prime multiplier computation to penalize
+		larger multipliers. The previous version only looked at
+		the factor base and didn't account for the fact that a
+		larger multiplier meant a larger number to factor
+	- Finally added (basic) parameter tuning based on size of the
+		input number. For smaller factorizations the result is
+		up to twice as fast compared to a single set of parameters;
+		for larger factorizations the difference is smaller
+	- For all factors found, report the factor as prime, composite
+		or probable prime
+	- Removed the floating-point modular inverse. SIQS doesn't
+		need it, and it was pretty kludgy to begin with
+	- Big reorganization of the driver code; added capability to
+		factor multiple integers in batch mode. Also changed
+		the initial factor base calculations to save memory
+	- The linear algebra phase now collects 64 dependencies 
+		instead of 32. This increases the odds of a complete
+		factorization, and the extra overhead of 64-bit arithmetic 
+		on 32-bit platforms should be negligible
+	- Replaced mp_isqrt with mp_iroot, and used the latter to 
+		determine if the input is a perfect power
+	- Added several casts to make the code 64-bit clean
+	- Added a progress notification for every 500 full relations
+		collected (this was long overdue)
+
+Version 0.6: 10/9/04
+	- Another overhaul of the low-level sieving code. This version
+		uses a weird hashtable technique for most of the 
+		factor base primes. The result is a dramatic speedup 
+		in sieving and trial factoring of sieve values, and an 
+		overall speedup of ~30% for 80 digit factorizations
+	- I was wrong in thinking that it wouldn't make any difference
+		to skip sieving with small primes. For 60-80 digit
+		factorizations quite a bit of time is spent in the
+		small prime phase of the sieve, and implementing the
+		small prime variation gives a 5-10% overall speedup
+	- replaced the use of mp_expo_1 in the polynomial initial-
+		ization stage with a custom version that uses floating
+		point. For big factorizations (>60 digits) this more
+		than doubles the speed of the initialization, for an
+		overall speedup approaching 20%
+	- removed the sieve tuning subsystem; it just wasn't working
+		any better than picking a single set of parameters
+		for all factorizations
+	- modified the factor base size calculation and the MPQS
+		poly generation code to handle the case when the
+		number to be factored is very small. The minimum
+		size input for which the MPQS code works is ~12 digits
+	- modified mp_divrem to use mp_divrem_1 whenever possible;
+		this prevents a host of problems with small denominators
+	- modified mp_gcd to use mp_mod_1 whenever possible;
+		this is faster and prevents infinite loops
+	- streamlined handling of the multiplier during the
+		MPQS square root phase
+	- fixed some compiler warnings about improper casts
+	- switched to gcc's built-in prefetch intrinsic
+
+Version 0.5: 7/10/04
+	- massive overhaul of the entire sieving phase, including a
+		top-level code reorganization, removing dependence
+		on hard-coded constants, and multiple efficiency 
+		optimizations. The result is cleaner, more robust,
+		better documented and 20-30% faster
+	- added an experimental tuning phase that estimates the sieving
+		runtime and can in principle choose all sieving parameters
+		simultaneously to optimize the sieving time. In practice
+		it still needs some work.
+	- added multipliers of 2, 6 and 10 to the list of multipliers 
+		available. This required small changes to the MPQS init
+		phase and to the square root phase
+	- fixed several edge conditions in the handling of 0 or 1
+		partial relations, that would otherwise crash
+	- fixed the calculation of new sieve bailout values to avoid
+		an infinite loop when only one more relation was needed
+	- added more sanity-checking when generating random witnesses
+		in mp_is_prime
+	- inlined mp_expo_1 and removed the initial remainder
+		operation, which is unnecessary if the base is
+		about the same size as the modulus. This requires
+		an extra normalization in the third case of 
+		mp_legendre_1, but makes the MPQS initialization 
+		stage slightly faster.
+	- renamed mp_modmul to mp_modmul_1
+	- split out the MPQS square root code into its own file
+
+Version 0.4: 6/10/04
+	- multiple polynomials at last! Even with no tuning, the
+		speedup is incredible (5x for 50 digit numbers,
+		10x for 60-70 digit numbers). The sieve code is simpler,
+		and the trial division code is both simpler and faster.
+	- added multiple-precision versions of mp_expo_1, mp_legendre_1,
+		and mp_modsqrt_1. 
+	- added mp_rand, mp_is_prime, mp_random_prime, mp_next_prime
+	- forced the bound for trial division to a minimum of 10000
+	- bail out if the input number has been completely factored
+		after the trial division phase
+	- fixed a bug in the second case of mp_legendre_1
+	- fixed typos in comments
+
+Version 0.3: 4/13/04
+	- changed the basic sieving routines to use division-free
+		arithmetic. This removes compiler-dependent code,
+		removes artificial limits to the size of the sieving
+		interval, removes the latency of 64-bit division for
+		machines which don't support it directly, and is much
+		faster (~15%) even on x86 machines with hardware
+		64-bit divide.
+	- added L1 and L2 cache blocking to the sieving routines. 
+		Additional 15% speedup
+	- major changes to how trial division on sieve values is performed.
+		This removes the entire multiple-precision library from
+		all critical paths in the program, and makes everything
+		~10% faster. The speedup increases as the numbers to be
+		factored, and the factor base, gets larger
+	- added computation of a small prime multiplier in the initial
+		stages of the program, to optimize the choice
+		of factor bases. This can make a huge difference
+		in performance (I've seen 25% speedups)
+	- forced precompution of all of the primes needed in the 
+		initial stages of the program. This makes trial 
+		division and multiplier selection much faster
+	- forced use of the dense Gaussian solver on any matrix smaller 
+		than a cutoff size, even if the sparse solver can keep going
+	- fixed an initialization bug in mp_mul_1
+	- changed the inline asm for mp_modmul. The original version broke
+		mp_modsqrt_1, which in turn broke (in a very obscure way)
+		the trial division of sieve values
+	- modified a loop bound in build_matrix to avoid a buffer overrun
+		when the number of relations is much larger than required
+	- moved freeing of the sieve array to point after its last use,
+		instead of at the end of the program
+	- added code to sort the factors found into ascending order; 
+		otherwise compiler and OS specific details of qsort 
+		cause the factors to be printed out in a different 
+		order on different machines
+	- packed several code groups in the square root phase
+		into loops (makes for cleaner code)
+
+Version 0.2: 3/29/04
+	- fixed a silly bug that threw away half the depen-
+		dencies in the square root phase
+	- modified division routine to compute quotient
+		correctly when num is larger than square
+		of denom
+	- used fixed division routine to make GCDs hugely
+		faster when one operand is much smaller than
+		the other
+	- used faster GCDs to print out only prime factors
+		that the program finds (rather than products of
+		two or more prime factors)
+	- included test that number to be factored is not 
+		a perfect square
+	- modified gcc inline assembly to put condition 
+		codes in the clobber list
+	- fixed many compiler warnings
+	- used __inline for VC++
+	- included some more header files to avoid
+		missing function prototypes
+	- cleaned up some typos in source code comments
+
+Version 0.1: 3/24/04
+	Initial release
