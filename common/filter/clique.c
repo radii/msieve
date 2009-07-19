@@ -165,9 +165,9 @@ static void heapify(clique_t *h, uint32 index, uint32 size) {
 
 static void make_heap(clique_t *h, uint32 size) {
 
-	int32 i;
-	for (i = HEAP_PARENT(size); i >= 0; i--)
-		heapify(h, (uint32)i, size);
+	uint32 i;
+	for (i = HEAP_PARENT(size); i; i--)
+		heapify(h, i-1, size);
 }
 
 /*--------------------------------------------------------------------*/
@@ -214,8 +214,8 @@ static void delete_relations(filter_t *filter,
 	curr_relation = relation_array;
 	old_relation = relation_array;
 	for (i = j = 0; i < num_relations; i++) {
-		uint32 array_word = (uint32 *)curr_relation -
-					(uint32 *)relation_array;
+		uint32 array_word = (uint32)((uint32 *)curr_relation -
+						(uint32 *)relation_array);
 		relation_ideal_t *next_relation = 
 				next_relation_ptr(curr_relation);
 
@@ -231,7 +231,7 @@ static void delete_relations(filter_t *filter,
 		else {
 			/* relation has survived */
 
-			uint32 curr_num_ideals = curr_relation->ideal_count;
+			uint8 curr_num_ideals = curr_relation->ideal_count;
 			uint32 k;
 			old_relation->rel_index = curr_relation->rel_index;
 			old_relation->gf2_factors = curr_relation->gf2_factors;
@@ -248,7 +248,7 @@ static void delete_relations(filter_t *filter,
 	/* trim the relation array */
 
 	filter->relation_array = (relation_ideal_t *)xrealloc(relation_array,
-				(old_relation + 1 - relation_array) *
+				(size_t)(old_relation + 1 - relation_array) *
 				sizeof(relation_ideal_t));
 	filter->num_relations = num_relations - num_delete;
 }
@@ -349,8 +349,8 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 						sizeof(ideal_relation_t));
 			}
 			reverse_array[num_reverse].relation_array_word =
-					(uint32 *)curr_relation -
-					(uint32 *)relation_array;
+					(uint32)((uint32 *)curr_relation -
+						(uint32 *)relation_array);
 			reverse_array[num_reverse].next = 
 						ideal_map[ideal].payload;
 			ideal_map[ideal].payload = num_reverse++;
@@ -480,9 +480,14 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 			curr_clique_ideal++;
 		}
 
-		/* clique is enumerated */
+		/* clique is enumerated; throw it away if it is
+		   too large to fit into a packed structure */
 
-		clique_score += num_clique_relations;
+		if (num_clique_relations > 65535 ||
+		     num_clique_ideals > 65535)
+			continue;
+
+		clique_score += (double)num_clique_relations;
 		if (num_clique < clique_heap_size) {
 			/* heap not full; append this clique */
 			next_clique = clique_heap + num_clique;
@@ -501,8 +506,8 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 			
 		/* save this clique */
 
-		next_clique->num_relations = num_clique_relations;
-		next_clique->num_ideals = num_clique_ideals;
+		next_clique->num_relations = (uint16)num_clique_relations;
+		next_clique->num_ideals = (uint16)num_clique_ideals;
 		next_clique->score = clique_score;
 		next_clique->relation_array_word = 
 				(uint32 *)xmalloc(num_clique_relations *
@@ -634,18 +639,5 @@ void filter_purge_cliques(msieve_obj *obj, filter_t *filter) {
 		   any additional singletons */
 
 		filter_purge_singletons_core(obj, filter);
-	}
-
-	/* in the vast majority of cases, max_clique_relations = 2
-	   is enough to burn up all of the excess in the dataset.
-	   However, when there is a really huge amount of 
-	   initial excess, we may run out of cliques before 
-	   running out of excess. In that case, force the deletion
-	   of the heaviest relations and remove singletons again */
-
-	if (filter->num_relations - filter->num_ideals >=
-				filter->target_excess + 100000) {
-
-		filter_purge_heavy_relations(obj, filter);
 	}
 }

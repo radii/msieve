@@ -52,7 +52,7 @@ static INLINE relation_ideal_t *next_relation_ptr(relation_ideal_t *r) {
 	return (relation_ideal_t *)((uint8 *)r +
 			sizeof(relation_ideal_t) - 
 			sizeof(r->ideal_list[0]) * 
-			(TEMP_FACTOR_LIST_SIZE - r->ideal_count));
+			(size_t)(TEMP_FACTOR_LIST_SIZE - r->ideal_count));
 }
 
 /* main structure controlling relation filtering */
@@ -69,6 +69,7 @@ typedef struct {
 					are required for filtering to proceed */
 	uint32 max_ideal_weight;   /* the largest number of relations that
 				        contain the same ideal */
+	uint64 lp_file_size;       /* number of bytes in LP file */
 } filter_t;
 
 /* representation of a 'relation set', i.e. a group
@@ -100,6 +101,33 @@ typedef struct {
 	uint32 max_relations;         /* largest relations in a relation set */
 	relation_set_t *relset_array; /* current list of relation sets */
 } merge_t;
+
+/* the large-prime-only versions of relations are assumed to 
+   start off in a disk file. The following reads the relations
+   into filter->relation_array, skipping over ideals that occur
+   more and max_ideal_weight times. max_ideal_weight = 0 means
+   read the entire file into memory */
+
+void filter_read_lp_file(msieve_obj *obj, filter_t *filter,
+				uint32 max_ideal_weight);
+
+/* perform approximate singleton removal on relations packed
+   into a disk file, then prune the singletons from the file.
+   The relations are not read into memory */
+
+void filter_purge_lp_singletons(msieve_obj *obj, filter_t *filter,
+				uint64 ram_size);
+
+#if 0
+/* perform clique removal on relations packed into a disk file, 
+   then prune the singletons from the file. The relations are 
+   not read into memory. This code anticipates that later passes
+   will need excess relations of their own, and so is a bit
+   conservative about how much excess is left when clique removal
+   completes */
+
+void filter_purge_lp_cliques(msieve_obj *obj, filter_t *filter);
+#endif
 
 /* remove singletons from a memory-resident collection of relations */
 

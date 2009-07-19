@@ -24,28 +24,24 @@ extern "C" {
 #endif
 
 /* create '<savefile_name>.d', a binary file containing
-   the line numbers of unique relations. The return value is
-   the large prime bound to use for the rest of the filtering.
+   the line numbers of duplicated or corrupted relations.
    Duplicate removal only applies to the first max_relations
-   relations found (or all relations if zero) */
+   relations found (or all relations if zero). The return
+   value is the large prime bound to use for the singleton removal */
 
 uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
-				uint32 max_relations); 
+				uint32 max_relations,
+				uint32 *num_relations_out); 
 
-/* read '<savefile_name>.d' and create '<savefile_name>.s', a 
-   binary file containing the line numbers of relations that
-   are not singletons. All ideals larger than the bounds specified
-   in 'filter' are tacked */
+/* read '<savefile_name>.d' and create '<savefile_name>.lp', a 
+   binary file containing the relations surviving the singleton
+   removal pass. If pass = 0, the .d file is assumed to contain
+   relation numbers to skip; otherwise it contains relation numbers
+   to keep */
    
-void nfs_purge_singletons_initial(msieve_obj *obj, 
-			factor_base_t *fb, filter_t *filter);
-
-/* read and modify '<savefile_name>.s', to account for ideals
-   larger than the filtering bound in 'filter' and occurring in
-   at most max_ideal_weight relations (or all relations if zero) */
-   
-void nfs_purge_singletons(msieve_obj *obj, factor_base_t *fb,
-			filter_t *filter, uint32 max_ideal_weight);
+void nfs_write_lp_file(msieve_obj *obj, factor_base_t *fb,
+			filter_t *filter, uint32 max_relations,
+			uint32 pass);
 
 #ifdef __cplusplus
 }

@@ -75,12 +75,6 @@ typedef struct ideal_set_t {
 
 void filter_purge_cliques(msieve_obj *obj, filter_t *filter);
 
-/* delete the heaviest relations in the current dataset, deleting
-   any resulting singletons, until the number of cycles available
-   converges to filter->target_excess */
-
-void filter_purge_heavy_relations(msieve_obj *obj, filter_t *filter);
-
 /* initialize the merge process */
 
 void filter_merge_init(msieve_obj *obj, filter_t *filter); 
