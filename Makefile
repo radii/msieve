@@ -9,7 +9,7 @@
 # please consider making those additions public too, so that others may 
 # benefit from your work.	
 #
-# $Id$
+#  $Id$
 # --------------------------------------------------------------------
 
 # xlc on AIX; note that apparently a 64-bit binary crashes

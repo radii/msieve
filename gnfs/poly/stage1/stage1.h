@@ -9,7 +9,7 @@ useful. Again optionally, if you add to the functionality present here
 please consider making those additions public too, so that others may 
 benefit from your work.	
 
-$Id$
+ $Id$
 --------------------------------------------------------------------*/
 
 #ifndef _STAGE1_H_
