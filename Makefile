@@ -8,7 +8,8 @@
 # useful. Again optionally, if you add to the functionality present here
 # please consider making those additions public too, so that others may 
 # benefit from your work.	
-#        				   --jasonp@boo.net 4/3/09
+#
+# $Id$
 # --------------------------------------------------------------------
 
 # xlc on AIX; note that apparently a 64-bit binary crashes

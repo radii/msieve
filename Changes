@@ -1,3 +1,69 @@
+Version 1.42:
+	- NFS polynomial selection changes:
+		- Added support for generating degree-4 and degree-6
+		  GNFS polynomials, as well as some tuning for the degree-4
+		  case. Degree 6 is not completely done (needs a better
+		  root sieve and parameter selection)
+		- Added a tweak to the end of stage 1 that makes sure
+		  most polynomials passed to stage 2 have third-to-last
+		  coefficients that are small enough. This allows stage 
+		  2 to run on more candidates, especially when the leading 
+		  coefficient is large
+		- Added several internal checks
+		- Tweaked the stage 1 sieving parameters to make the inner
+		  loops longer during large jobs
+		- Switched to exponential (not linear) interpolation 
+		  when choosing parameters (thanks Tom Womack)
+		- Added degree-5 parameters for very large jobs, up to
+		  180 digits (thanks Tom Womack)
+		- Reduced the minimum NFS input size to just under 90 digits
+		- Reverted back to to using the L2-norm for the initial
+		  multivariable optimization step in stage 2; using Bernstein's
+		  scoring function is not sensitive enough
+		- Pushed the file for saved NFS polynomials into the skewed
+		  poly selector, instead of making it globally visible in
+		  general poly config structures. This also allows the file
+		  to only be created if polynomial selection happens
+	- NFS filtering changes:
+		- Removed most of the NFS-specific singleton removal; instead,
+		  write the large ideals to file and read that in sub-
+		  sequent passes
+		- Made the disk-based singleton removal into common code
+		- Retool the filtering driver to make the minimum number of
+		  disk passes, based on the available memory and the number
+		  of relations to deal with
+		- Made the duplicate removal guess the best size of the
+		  hashtable to use (saves lots of memory for big jobs)
+	- Performed a complete overhaul of the polynomial rootfinder,
+		replacing Laguerre's method with a simplified Jenkins-
+		Traub rootfinder combined with Newton polishing. This
+		will hopefully always work, even for the surprising
+		number of SNFS polynomials whose equimodular roots 
+		completely foiled the original rootfinder (thanks to 
+		Brian Gladman for a great deal of help)
+	- Changed the ECM driver to use the supported public interface
+		to GMP-ECM; also compiled the demo binary with GMP-4.3.1
+		and GMP-ECM 6.2.3
+	- Added an integrity check to the linear algebra, to detect when
+		the state gets corrupted (thanks Kazumaro Aoki)
+	- Modified the NFS relation parsing to allow relations with
+		factor lists that are empty, since the smallest factors
+		are not printed (thanks Serge Batalov)
+	- Improved the error handling of the multivariable minimization
+		and special-cased 1-dimensional minimizations
+	- Added many patches to the inline asm (thanks Alex Kruppa)
+	- Made most of the matrix file IO routines into common code
+	- Got started cleaning up the huge number of type conversion warnings
+		that gcc 4.4.0 emits
+	- Fixed a bug in the linear algebra that caused an immediate
+		write of a checkpoint on startup (thanks Serge Batalov)
+	- Fixed a potential register allocation bug in the linear
+		algebra (thanks Emmanuel Thomé)
+	- Made sure the search for QCB primes does not get too close
+		to 2^32 (thanks Tom Womack)
+	- Fixed a small memory leak in the integrator (thanks valgrind)
+
+
 Version 1.41: 4/3/09
 	- Added an extra phase after the clique removal in the NFS filtering,
 		that deletes heavy relations until the specified excess

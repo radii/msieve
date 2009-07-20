@@ -8,7 +8,8 @@ Optionally, please be nice and tell me if you find this source to be
 useful. Again optionally, if you add to the functionality present here
 please consider making those additions public too, so that others may 
 benefit from your work.	
-       				   --jasonp@boo.net 4/3/09
+
+$Id$
 --------------------------------------------------------------------*/
 
 /* Conditionally compiled interface to the GMP-ECM library. This
