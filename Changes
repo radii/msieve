@@ -1,4 +1,4 @@
-Version 1.42:
+Version 1.42: 7/19/09
 	- NFS polynomial selection changes:
 		- Added support for generating degree-4 and degree-6
 		  GNFS polynomials, as well as some tuning for the degree-4
