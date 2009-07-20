@@ -1,7 +1,6 @@
 MSIEVE: A Library for Factoring Large Integers
 Quadratic Sieve Module Documentation
-Jason Papadopoulos (jasonp@boo.net)
-4/3/09
+Jason Papadopoulos
 
 
 Introduction
