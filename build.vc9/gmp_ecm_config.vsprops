@@ -7,7 +7,7 @@
 	<Tool
 		Name="VCCLCompilerTool"
 		AdditionalIncludeDirectories=";..\..\..\gmp;..\..\..\gmp-ecm"
-		PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;HAVE_GMP;HAVE_GMP_ECM"
+		PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;HAVE_GMP_ECM"
 	/>
 	<Tool
 		Name="VCLinkerTool"

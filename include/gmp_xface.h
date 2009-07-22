@@ -12,8 +12,6 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#ifdef HAVE_GMP
-
 #ifndef _GMP_XFACE_H_
 #define _GMP_XFACE_H_
 
@@ -103,5 +101,3 @@ static INLINE int64 gmp2int64(mpz_t src) {
 #endif
 
 #endif /* _GMP_XFACE_H_ */
-
-#endif /* HAVE_GMP */

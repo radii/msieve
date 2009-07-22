@@ -349,10 +349,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\gnfs\poly\poly_noskew.c"
-					>
-				</File>
-				<File
 					RelativePath="..\..\gnfs\poly\poly_skew.c"
 					>
 				</File>

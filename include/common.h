@@ -16,6 +16,7 @@ $Id$
 #define _COMMON_H_
 
 #include <msieve.h>
+#include <gmp_xface.h>
 
 #ifdef __cplusplus
 extern "C" {

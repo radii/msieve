@@ -15,7 +15,6 @@ $Id$
 #ifndef _GNFS_POLY_POLY_SKEW_H_
 #define _GNFS_POLY_POLY_SKEW_H_
 
-#include <gmp_xface.h>
 #include "poly.h"
 
 #ifdef __cplusplus

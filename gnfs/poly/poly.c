@@ -217,11 +217,7 @@ int32 find_poly(msieve_obj *obj, mp_t *n) {
 	/* run the core polynomial finder */
 
 	obj->flags |= MSIEVE_FLAG_SIEVING_IN_PROGRESS;
-#if defined(HAVE_GMP)
 	find_poly_skew(obj, n, &config, deadline);
-#else
-	find_poly_noskew(obj, n, &config, deadline);
-#endif
 	obj->flags &= ~MSIEVE_FLAG_SIEVING_IN_PROGRESS;
 
 	/* save the best polynomial */

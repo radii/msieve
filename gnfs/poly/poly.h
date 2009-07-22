@@ -62,11 +62,7 @@ void poly_config_free(poly_config_t *config);
 
 #define SIZE_EPS 1e-6
 
-/* main routines */
-
-void find_poly_noskew(msieve_obj *obj, mp_t *n,
-			poly_config_t *config,
-			uint32 deadline);
+/* main routine */
 
 void find_poly_skew(msieve_obj *obj, mp_t *n,
 			poly_config_t *config,

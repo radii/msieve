@@ -29,22 +29,18 @@
 # get overridden by architecture-specific builds)
 CC = gcc -D_FILE_OFFSET_BITS=64
 WARN_FLAGS = -Wall -W -Wconversion
+WARN_FLAGS = -Wall -W
 OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
 #OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
 
 CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) -I. -Iinclude -Ignfs/poly
 
-LIBS = -lm
+LIBS = -lgmp -lm
 
 # tweak the compile flags
 ifeq ($(ECM),1)
 	CFLAGS += -DHAVE_GMP_ECM
 	LIBS += -lecm
-	GMP = 1
-endif
-ifeq ($(GMP),1)
-	CFLAGS += -DHAVE_GMP
-	LIBS += -lgmp
 endif
 ifeq ($(WIN32_3GB),1)
 	LDFLAGS += -Wl,--large-address-aware
@@ -155,15 +151,25 @@ QS_CORE_OBJS_X86_64 = \
 NFS_HDR = \
 	gnfs/filter/filter.h \
 	gnfs/poly/poly.h \
+	gnfs/poly/poly_skew.h \
+	gnfs/poly/stage1/stage1.h \
+	gnfs/poly/stage2/stage2.h \
 	gnfs/sieve/sieve.h \
 	gnfs/sqrt/sqrt.h \
 	gnfs/gnfs.h
 
 NFS_SRCS = \
 	gnfs/poly/poly.c \
+	gnfs/poly/poly_skew.c \
 	gnfs/poly/polyutil.c \
 	gnfs/poly/root_score.c \
 	gnfs/poly/size_score.c \
+	gnfs/poly/stage1/stage1.c \
+	gnfs/poly/stage1/stage1_roots.c \
+	gnfs/poly/stage1/stage1_sieve.c \
+	gnfs/poly/stage2/optimize.c \
+	gnfs/poly/stage2/root_sieve.c \
+	gnfs/poly/stage2/stage2.c \
 	gnfs/filter/duplicate.c \
 	gnfs/filter/filter.c \
 	gnfs/filter/singleton.c \
@@ -177,32 +183,6 @@ NFS_SRCS = \
 	gnfs/gnfs.c \
 	gnfs/relation.c
 
-SKEW_POLY_SRCS = \
-	gnfs/poly/poly_skew.c \
-	gnfs/poly/stage1/stage1.c \
-	gnfs/poly/stage1/stage1_roots.c \
-	gnfs/poly/stage1/stage1_sieve.c \
-	gnfs/poly/stage2/optimize.c \
-	gnfs/poly/stage2/root_sieve.c \
-	gnfs/poly/stage2/stage2.c
-
-NOSKEW_POLY_SRCS = gnfs/poly/poly_noskew.c
-
-ALL_NFS_OBJS = $(NFS_SRCS:.c=.no) \
-	       $(SKEW_POLY_SRCS:.c=.no) \
-	       $(NOSKEW_POLY_SRCS:.c=.no)
-
-ifeq ($(GMP),1)
-	NFS_HDR += \
-		gnfs/poly/poly_skew.h \
-		gnfs/poly/stage1/stage1.h \
-		gnfs/poly/stage2/stage2.h
-
-	NFS_SRCS += $(SKEW_POLY_SRCS)
-else
-	NFS_SRCS += $(NOSKEW_POLY_SRCS)
-endif
-
 NFS_OBJS = $(NFS_SRCS:.c=.no)
 
 #---------------------------------- make targets -------------------------
@@ -212,11 +192,7 @@ all:
 	@echo "x86       32-bit Intel/AMD systems (required if gcc used)"
 	@echo "x86_64    64-bit Intel/AMD systems (required if gcc used)"
 	@echo "generic   portable code"
-	@echo "add 'ECM=1' if GMP-ECM is available (enables ECM and"
-	@echo "advanced NFS polynomial selection)"
-	@echo "or add 'GMP=1' if only GMP is available and you want the"
-	@echo "advanced NFS polynomial selection"
-
+	@echo "add 'ECM=1' if GMP-ECM is available (enables ECM)"
 
 x86: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) \
 		$(QS_CORE_OBJS_X86) $(NFS_OBJS)
@@ -249,7 +225,7 @@ generic: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) $(NFS_OBJS)
 clean:
 	rm -f msieve msieve.exe libmsieve.a $(COMMON_OBJS) 	\
 		$(QS_OBJS) $(QS_CORE_OBJS) $(QS_CORE_OBJS_X86) \
-		$(QS_CORE_OBJS_X86_64) $(ALL_NFS_OBJS)
+		$(QS_CORE_OBJS_X86_64) $(NFS_OBJS)
 
 #----------------------------------------- build rules ----------------------
 

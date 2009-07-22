@@ -21,7 +21,7 @@ $Id$
 
 #include <common.h>
 
-#if !defined(HAVE_GMP) || !defined(HAVE_GMP_ECM)
+#ifndef HAVE_GMP_ECM
 
 uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n, 
 		   factor_list_t *factor_list) {
@@ -32,7 +32,6 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 
 #else
 
-#include <gmp_xface.h>
 #include <ecm.h>
 
 /* description of the work to do in order to find factors
