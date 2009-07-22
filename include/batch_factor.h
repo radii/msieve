@@ -16,7 +16,6 @@ $Id$
 #define _BATCH_FACTOR_H_
 
 #include <common.h>
-#include <ap.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,9 +72,7 @@ typedef struct {
    that Bernstein's algorithm computes */
 
 typedef struct {
-	fastmult_info_t fastmult_info; /* for large-integer multiplies */
-
-	ap_t prime_product;  /* product of primes used in the gcd */
+	mpz_t prime_product;  /* product of primes used in the gcd */
 
 	uint32 num_success;       /* number of surviving relations */
 	uint32 target_relations;  /* number of relations to batch up */

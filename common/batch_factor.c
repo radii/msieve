@@ -15,55 +15,50 @@ $Id$
 #include <batch_factor.h>
 
 /*------------------------------------------------------------------*/
+#define BREAKOVER_WORDS 50
+
 static void multiply_primes(uint32 first, uint32 last, 
-				fastmult_info_t *info,
-				prime_sieve_t *sieve, ap_t *prod) {
+				prime_sieve_t *sieve, mpz_t prod) {
 
 	/* recursive routine to multiply all the elements of a
 	   list of consecutive primes. The current invocation
 	   multiplies elements first to last of the list, inclusive.
 	   The primes are created on demand */
 
-	ap_t half_prod;
+	mpz_t half_prod;
 	uint32 mid = (last + first) / 2;
 
-	/* base case; accumulate a few primes in an mp_t
-	   and convert to an ap_t */
+	/* base case; accumulate a few primes */
 
-	if (last < first + MAX_MP_WORDS) {
-		mp_t tmp;
-		
-		mp_clear(&tmp);
-		tmp.nwords = 1;
-		tmp.val[0] = get_next_prime(sieve);
-		while (++first <= last)
-			mp_mul_1(&tmp, get_next_prime(sieve), &tmp);
-
-		ap_mp2ap(&tmp, POSITIVE, prod);
+	if (last < first + BREAKOVER_WORDS) {
+		mpz_set_ui(prod, (unsigned long)get_next_prime(sieve));
+		while (++first <= last) {
+			mpz_mul_ui(prod, prod, 
+				 (unsigned long)get_next_prime(sieve));
+		}
 		return;
 	}
 
 	/* recursively handle the left and right halves of the list */
 
-	ap_init(&half_prod);
-	multiply_primes(first, mid, info, sieve, prod);
-	multiply_primes(mid + 1, last, info, sieve, &half_prod);
+	mpz_init(half_prod);
+	multiply_primes(first, mid, sieve, prod);
+	multiply_primes(mid + 1, last, sieve, half_prod);
 
 	/* multiply them together. We can take advantage of 
 	   fast multiplication since in general the two half-
 	   products are about the same size*/
 
-
-	ap_mul(&half_prod, prod, prod, info);
-	ap_clear(&half_prod);
+	mpz_mul(prod, prod, half_prod);
+	mpz_clear(half_prod);
 }
 
 /*------------------------------------------------------------------*/
-static void relation_to_ap(relation_batch_t *rb,
-				uint32 index, ap_t *out) {
+static void relation_to_gmp(relation_batch_t *rb,
+				uint32 index, mpz_t out) {
 
 	/* multiply together the unfactored parts of an
-	   NFS relation, then convert to an ap_t */
+	   NFS relation, then convert to an mpz_t */
 
 	uint32 i, nwords;
 	cofactor_t *c = rb->relations + index;
@@ -102,14 +97,14 @@ static void relation_to_ap(relation_batch_t *rb,
 		for (i = 0; i < nwords; i++)
 			num3.val[i] = f[i];
 	}
-	ap_mp2ap(&num3, POSITIVE, out);
+	mp2gmp(&num3, out);
 }
 
 /*------------------------------------------------------------------*/
 static void multiply_relations(uint32 first, uint32 last, 
 				relation_batch_t *rb,
-				ap_t *prod) {
-	ap_t half_prod;
+				mpz_t prod) {
+	mpz_t half_prod;
 
 	/* recursive routine to multiply together a list of
 	   relations. The current invocation multiplies relations
@@ -118,27 +113,27 @@ static void multiply_relations(uint32 first, uint32 last,
 	/* base case of recursion */
 
 	if (first == last) {
-		relation_to_ap(rb, first, prod);
+		relation_to_gmp(rb, first, prod);
 		return;
 	}
 
 	/* recurse on the left and right halves */
 
-	ap_init(&half_prod);
+	mpz_init(half_prod);
 	if (last == first + 1) {
-		relation_to_ap(rb, first, &half_prod);
-		relation_to_ap(rb, last, prod);
+		relation_to_gmp(rb, first, half_prod);
+		relation_to_gmp(rb, last, prod);
 	}
 	else {
 		uint32 mid = (last + first) / 2;
 		multiply_relations(first, mid, rb, prod);
-		multiply_relations(mid + 1, last, rb, &half_prod);
+		multiply_relations(mid + 1, last, rb, half_prod);
 	}
 
 	/* multiply the halves */
 
-	ap_mul(&half_prod, prod, prod, &rb->fastmult_info);
-	ap_clear(&half_prod);
+	mpz_mul(prod, prod, half_prod);
+	mpz_clear(half_prod);
 }
 
 /*------------------------------------------------------------------*/
@@ -421,79 +416,50 @@ static void check_relation(relation_batch_t *rb,
 /*------------------------------------------------------------------*/
 static void compute_remainder_tree(uint32 first, uint32 last,
 				relation_batch_t *rb,
-				ap_t *numerator) {
+				mpz_t numerator) {
 
 	/* recursively compute numerator % (each relation in 
 	   rb->relations) */
 
-	uint32 nbits, dbits;
 	uint32 mid = (first + last) / 2;
-	ap_t relation_prod, remainder;
+	mpz_t relation_prod, remainder;
 
 	/* recursion base case: numerator already fits in
 	   an mp_t, so manually compute the remainder and
 	   postprocess each relation */
 
-	if (numerator->nwords <= MAX_MP_WORDS) {
-		mp_t num;
-		mp_clear(&num);
-		num.nwords = numerator->nwords;
-		memcpy(num.val, numerator->val, 
-				num.nwords * sizeof(uint32));
-		while (first <= last)
-			check_relation(rb, first++, &num);
+	if (mpz_size(numerator) * GMP_LIMB_BITS/32 <= MAX_MP_WORDS) {
+		if (mpz_sgn(numerator) > 0) {
+			mp_t num;
+			gmp2mp(numerator, &num);
+			while (first <= last)
+				check_relation(rb, first++, &num);
+		}
 		return;
 	}
 
 	/* multiply together the unfactored parts of all the
 	   relations from first to last */
 
-	ap_init(&relation_prod);
-	ap_init(&remainder);
-	multiply_relations(first, last, rb, &relation_prod);
-
-	nbits = ap_bits(numerator);
-	dbits = ap_bits(&relation_prod);
-	if (nbits < dbits) {
-
-		/* product size exceeds numerator size, so the
-		   remainder is already known */
-
-		remainder = *numerator;
-	}
-	else {
-		/* remainder needs to be computed. First compute
-		   the reciprocal value to use, taking care to
-		   avoid making it too large */
-
-		ap_t recip;
-
-		ap_init(&recip);
-		ap_recip(&relation_prod, &recip,
-				MIN(nbits - dbits, 20000000),
-				&rb->fastmult_info);
-		ap_mod(numerator, &relation_prod, &recip,
-				&remainder, &rb->fastmult_info);
-		ap_clear(&recip);
-
-		/* correct for negative remainder (recursion base
-		   case can't deal with these) */
-
-		while (remainder.sign == NEGATIVE)
-			ap_add(&remainder, &relation_prod, &remainder);
-	}
-	ap_clear(&relation_prod);
+	mpz_init(relation_prod);
+	mpz_init(remainder);
+	multiply_relations(first, last, rb, relation_prod);
 
 	/* use the remainder to deal with the left and right
 	   halves of the relation list */
 
-	compute_remainder_tree(first, mid, rb, &remainder);
-	compute_remainder_tree(mid + 1, last, rb, &remainder);
-
-	/* clear a locally-generate remainder */
-
-	if (remainder.val != numerator->val)
-		ap_clear(&remainder);
+	if (mpz_cmp(numerator, relation_prod) < 0) {
+		mpz_clear(relation_prod);
+		compute_remainder_tree(first, mid, rb, numerator);
+		compute_remainder_tree(mid + 1, last, rb, numerator);
+	}
+	else {
+		mpz_tdiv_r(remainder, numerator, relation_prod);
+		mpz_clear(relation_prod);
+		compute_remainder_tree(first, mid, rb, remainder);
+		compute_remainder_tree(mid + 1, last, rb, remainder);
+	}
+	mpz_clear(remainder);
 }
 
 /*------------------------------------------------------------------*/
@@ -505,7 +471,6 @@ void relation_batch_init(msieve_obj *obj, relation_batch_t *rb,
 
 	prime_sieve_t sieve;
 	uint32 num_primes, p;
-	uint32 bits;
 
 	/* count the number of primes to multiply. Knowing this
 	   in advance makes the recursion a lot easier, at the cost
@@ -526,12 +491,10 @@ void relation_batch_init(msieve_obj *obj, relation_batch_t *rb,
 			num_primes, min_prime, max_prime);
 
 	init_prime_sieve(&sieve, min_prime, max_prime);
-	fastmult_info_init(&rb->fastmult_info);
-	ap_init(&rb->prime_product);
-	multiply_primes(0, num_primes - 2, &rb->fastmult_info, 
-			&sieve, &rb->prime_product);
-	bits = ap_bits(&rb->prime_product);
-	logprintf(obj, "multiply complete, product has %u bits\n", bits);
+	mpz_init(rb->prime_product);
+	multiply_primes(0, num_primes - 2, &sieve, rb->prime_product);
+	logprintf(obj, "multiply complete, product has %u bits\n", 
+				(uint32)mpz_sizeinbase(rb->prime_product, 2));
 					
 	rb->savefile = savefile;
 	rb->print_relation = print_relation;
@@ -577,8 +540,7 @@ void relation_batch_init(msieve_obj *obj, relation_batch_t *rb,
 /*------------------------------------------------------------------*/
 void relation_batch_free(relation_batch_t *rb) {
 
-	ap_clear(&rb->prime_product);
-	fastmult_info_free(&rb->fastmult_info);
+	mpz_clear(rb->prime_product);
 	free(rb->relations);
 	free(rb->factors);
 }
@@ -660,7 +622,7 @@ uint32 relation_batch_run(relation_batch_t *rb) {
 	rb->num_success = 0;
 	if (rb->num_relations > 0) {
 		compute_remainder_tree(0, rb->num_relations - 1,
-					rb, &rb->prime_product);
+					rb, rb->prime_product);
 	}
 
 	/* wipe out batched relations */

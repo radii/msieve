@@ -1,4 +1,7 @@
 Version 1.43:
+	- Made the GMP library mandatory
+	- Deleted the ancient unskewed polynomial selector
+	- Modified the batch factoring code to use GMP
 
 
 Version 1.42: 7/19/09
