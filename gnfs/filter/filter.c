@@ -186,6 +186,8 @@ static uint32 do_partial_filtering(msieve_obj *obj, filter_t *filter,
 
 	uint32 relations_needed;
 	uint32 max_weight = 20;
+	uint32 num_relations = filter->num_relations;
+	uint32 num_ideals = filter->num_ideals;
 
 	if (filter->num_relations < 20000000)
 		max_weight = 25;
@@ -193,6 +195,8 @@ static uint32 do_partial_filtering(msieve_obj *obj, filter_t *filter,
 	for (; max_weight < MAX_KEEP_WEIGHT; max_weight += 5) {
 
 		filter->target_excess = entries_r + entries_a;
+		filter->num_relations = num_relations;
+		filter->num_ideals = num_ideals;
 
 		filter_read_lp_file(obj, filter, max_weight);
 
@@ -309,7 +313,7 @@ uint32 nfs_filter_relations(msieve_obj *obj, mp_t *n) {
 
 		   The first pass used a large bound; the second 
 		   filtering bound is much smaller. To allow reuse of 
-		   previous results, this choice of bound is used 
+		   previous results, the second bound is used 
 		   during the rest of the filtering */
 
 		dump_relation_numbers(obj, &filter);
