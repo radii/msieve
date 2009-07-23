@@ -26,15 +26,16 @@ $Id$
 	#include <windows.h>
 	#include <process.h>
 
-#else /* !WIN32 */
+#else
 
 	#include <fcntl.h>
 	#include <unistd.h>
 	#include <errno.h>
 	#include <pthread.h>
 	#include <sys/resource.h>
+	#include <float.h>
 
-#endif /* WIN32 */
+#endif
 
 /* system-independent header files ------------------------------------*/
 
