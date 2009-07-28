@@ -1,7 +1,7 @@
 Version 1.43:
 	- Made the GMP library mandatory
+	- Removed the arbitrary precision math library, replaced with GMP
 	- Deleted the ancient unskewed polynomial selector
-	- Modified the batch factoring code to use GMP
 	- Reset the number of relations and ideals properly when reading
 		LP relations with increasing max weight (thanks Greg Childers)
 	- Added float.h for unix builds (thanks Christian Cornelssen)

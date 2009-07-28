@@ -287,10 +287,6 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\..\common\ap.c"
-				>
-			</File>
-			<File
 				RelativePath="..\..\common\batch_factor.c"
 				>
 			</File>
@@ -300,10 +296,6 @@
 			</File>
 			<File
 				RelativePath="..\..\common\expr_eval.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\common\fastmult.c"
 				>
 			</File>
 			<File
@@ -417,10 +409,6 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath="..\..\include\ap.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\include\batch_factor.h"
 				>
 			</File>
@@ -434,10 +422,6 @@
 			</File>
 			<File
 				RelativePath="..\..\include\ddcomplex.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\include\fastmult.h"
 				>
 			</File>
 			<File

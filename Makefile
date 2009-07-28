@@ -56,12 +56,10 @@ COMMON_HDR = \
 	common/filter/filter.h \
 	common/filter/filter_priv.h \
 	common/filter/merge_util.h \
-	include/ap.h \
 	include/batch_factor.h \
 	include/common.h \
 	include/dd.h \
 	include/ddcomplex.h \
-	include/fastmult.h \
 	include/gmp_xface.h \
 	include/integrate.h \
 	include/msieve.h \
@@ -88,12 +86,10 @@ COMMON_SRCS = \
 	common/smallfact/smallfact.c \
 	common/smallfact/squfof.c \
 	common/smallfact/tinyqs.c \
-	common/ap.c \
 	common/batch_factor.c \
 	common/dickman.c \
 	common/driver.c \
 	common/expr_eval.c \
-	common/fastmult.c \
 	common/hashtable.c \
 	common/integrate.c \
 	common/minimize.c \

@@ -16,7 +16,6 @@ $Id$
 #define _GNFS_SQRT_SQRT_H_
 
 #include "gnfs.h"
-#include <ap.h>
 
 #ifdef __cplusplus
 extern "C" {
