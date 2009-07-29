@@ -35,8 +35,6 @@ OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
 
 CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) -I. -Iinclude -Ignfs/poly
 
-LIBS = -lgmp -lm
-
 # tweak the compile flags
 ifeq ($(ECM),1)
 	CFLAGS += -DHAVE_GMP_ECM
@@ -46,8 +44,10 @@ ifeq ($(WIN32_3GB),1)
 	LDFLAGS += -Wl,--large-address-aware
 endif
 
-# Note to MinGW users: comment out the next line, you don't need it
-LIBS += -lpthread
+# Note to MinGW users: the library does not use pthread calls in
+# win32 or win64, so it's safe to pull libpthread into the link line.
+# Of course this does mean you have to install the minGW pthreads bundle...
+LIBS += -lgmp -lm -lpthread
 
 #---------------------------------- Generic file lists -------------------
 

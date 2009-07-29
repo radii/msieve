@@ -1,9 +1,11 @@
 Version 1.43:
 	- Made the GMP library mandatory
 	- Removed the arbitrary precision math library, replaced with GMP
-	- Deleted the ancient unskewed polynomial selector
+	- Deleted the ancient unskewed NFS polynomial selector
+	- Removed now-unused double-double code
 	- Reset the number of relations and ideals properly when reading
 		LP relations with increasing max weight (thanks Greg Childers)
+	- Adjusted the library link order in the makefile
 	- Added float.h for unix builds (thanks Christian Cornelssen)
 
 
