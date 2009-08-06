@@ -64,7 +64,6 @@ COMMON_HDR = \
 	include/integrate.h \
 	include/msieve.h \
 	include/mp.h \
-	include/mp_int.h \
 	include/polyroot.h \
 	include/util.h
 

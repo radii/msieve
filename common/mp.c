@@ -12,7 +12,7 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include <mp_int.h>
+#include <mp.h>
 
 /* silly hack: in order to expand macros and then
    turn them into strings, you need two levels of
@@ -20,6 +20,18 @@ $Id$
 
 #define _(x) #x
 #define STRING(x) _(x)
+
+/*---------------------------------------------------------------*/
+static uint32 num_nonzero_words(uint32 *x, uint32 max_words) {
+
+	/* return the index of the first nonzero word in
+	   x, searching backwards from max_words */
+
+	uint32 i;
+	for (i = max_words; i && !x[i-1]; i--)
+		;
+	return i;
+}
 
 /*---------------------------------------------------------------*/
 uint32 mp_bits(mp_t *a) {
@@ -663,23 +675,8 @@ void mp_divrem_core(big_mp_t *num, mp_t *denom,
 	uint32 nacc[2*MAX_MP_WORDS+1];
 	uint32 dacc[MAX_MP_WORDS];
 
-	mp_clear(quot);
-	mp_clear(rem);
-
 	i = num->nwords;
 	j = denom->nwords;
-	if (mp_cmp((mp_t *)num, denom) < 0) {
-		mp_copy((mp_t *)num, rem);  /* copy low half of num only! */
-		return;
-	}
-	if (j <= 1) { 		
-		/* quotient and remainder had better fit in an mp_t */
-		rem->val[0] = mp_divrem_1((mp_t *)num, denom->val[0], quot);
-		if (rem->val[0] > 0)
-			rem->nwords = 1;
-		return;
-	}
-
 	high_denom = denom->val[j-1];
 
 #if defined(GCC_ASM32X) || defined(GCC_ASM64X) 
@@ -797,10 +794,28 @@ void mp_divrem(mp_t *num, mp_t *denom, mp_t *quot, mp_t *rem) {
 		quot = &tmp_quot;
 	if (rem == NULL)
 		rem = &tmp_rem;
-	
+
+	if (mp_cmp(num, denom) < 0) {
+		/* no division necessary */
+		mp_copy(num, rem); 
+		mp_clear(quot);
+		return;
+	}
+	if (denom->nwords <= 1) { 		
+		/* 1-word division is special-cased */
+		rem->val[0] = mp_divrem_1(num, denom->val[0], quot);
+		if (rem->val[0] > 0)
+			rem->nwords = 1;
+		return;
+	}
+
+	/* perform the full long division routine */
+
+	mp_clear(quot);
+	mp_clear(rem);	
 	mp_divrem_core((big_mp_t *)num, denom, quot, rem);
 
-#if 0
+#if 1
 	/* an extremely paranoid check for an extremely
 	   complex routine */
 
@@ -819,9 +834,6 @@ uint32 mp_divrem_1(mp_t *num, uint32 denom, mp_t *quot) {
 
 	int32 i;
 	uint32 rem = 0;
-
-	if (quot == NULL)
-		return mp_mod_1(num, denom);
 
 	for (i = (int32)num->nwords; i < MAX_MP_WORDS; i++)
 		quot->val[i] = 0;
@@ -864,24 +876,23 @@ void mp_modmul(mp_t *a, mp_t *b, mp_t *n, mp_t *res) {
 	mp_t *small = a;
 	mp_t *large = b;
 	big_mp_t prod;
-	mp_t tmp_quot;
 
 	if (small->nwords > large->nwords) {
 		small = b;
 		large = a;
 	}
-	if (small->nwords == 0) {
+	if (mp_is_zero(small)) {
 		mp_clear(res);
 		return;
 	}
 
-	memset(prod.val, 0, sizeof(prod.val));
+	memset(&prod, 0, sizeof(big_mp_t));
 	for (i = 0; i < small->nwords; i++) 
 		mp_addmul_1(large, small->val[i], prod.val + i);
 	
 	prod.nwords = num_nonzero_words(prod.val, a->nwords + b->nwords);
 
-	mp_divrem_core(&prod, n, &tmp_quot, res);
+	mp_mod((mp_t *)&prod, n, res);
 }
 
 /*---------------------------------------------------------------*/

@@ -445,10 +445,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\include\mp_int.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\include\msieve.h"
 				>
 			</File>

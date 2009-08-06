@@ -41,6 +41,17 @@ typedef struct {
 	uint32 val[MAX_MP_WORDS];
 } mp_t;
 
+/* a double-size mp_t, used for double-size multiplication
+   and long division
+
+   Note that the following will only work if the layout
+   of the first MAX_MP_WORDS+1 words of big_mp_t matches
+   that of an mp_t */
+
+typedef struct {
+	uint32 nwords;
+	uint32 val[2 * MAX_MP_WORDS];
+} big_mp_t;
 
 /* signed multiple-precision integers */
 
@@ -204,8 +215,8 @@ void mp_divrem(mp_t *num, mp_t *denom, mp_t *quot, mp_t *rem);
 
 	/* Division routine where the denominator is a
 	   single word. The quotient is written to quot
-	   (if not NULL) and the remainder is returned.
-	   quot may overwrite the input */
+	   and the remainder is returned.  quot may 
+	   overwrite the input */
 
 uint32 mp_divrem_1(mp_t *num, uint32 denom, mp_t *quot);
 
