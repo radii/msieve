@@ -801,6 +801,8 @@ void mp_divrem(mp_t *num, mp_t *denom, mp_t *quot, mp_t *rem) {
 		mp_clear(quot);
 		return;
 	}
+
+	mp_clear(rem);	
 	if (denom->nwords <= 1) { 		
 		/* 1-word division is special-cased */
 		rem->val[0] = mp_divrem_1(num, denom->val[0], quot);
@@ -812,7 +814,6 @@ void mp_divrem(mp_t *num, mp_t *denom, mp_t *quot, mp_t *rem) {
 	/* perform the full long division routine */
 
 	mp_clear(quot);
-	mp_clear(rem);	
 	mp_divrem_core((big_mp_t *)num, denom, quot, rem);
 
 #if 1
