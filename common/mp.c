@@ -823,7 +823,12 @@ void mp_divrem(mp_t *num, mp_t *denom, mp_t *quot, mp_t *rem) {
 	mp_mul(quot, denom, &test);
 	mp_add(&test, rem, &test);
 	if (mp_cmp(&test, num)) {
+		char buf[1000];
 		printf("division failed\n");
+		printf("%s\n", mp_sprintf(num, 16, buf));
+		printf("%s\n", mp_sprintf(denom, 16, buf));
+		printf("%s\n", mp_sprintf(quot, 16, buf));
+		printf("%s\n", mp_sprintf(rem, 16, buf));
 		exit(-1);
 	}
 #endif
