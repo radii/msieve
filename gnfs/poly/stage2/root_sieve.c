@@ -331,7 +331,7 @@ sieve_one_block(uint16 *sieve_block, uint32 sieve_block_size,
 			uint64 *b = block_array + block_offset;
 			uint64 *c = contrib_array + contrib_offset;
 
-#if defined(GCC_ASM32X) && defined(HAS_MMX)
+#if defined(GCC_ASM32X) && defined(HAS_MMX) && defined(NDEBUG)
 			j = 0;
 			ASM_G volatile(
 			    "cmpl $0, %3              \n\t"

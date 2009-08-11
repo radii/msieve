@@ -231,7 +231,7 @@ static void mul_trans_one_block(packed_block_t *curr_block,
 	   more xor operations. Also convert two 16-bit reads into
 	   a single 32-bit read with unpacking arithmetic */
 
-#if defined(GCC_ASM32A) && defined(HAS_MMX)
+#if defined(GCC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
 
 	#define _txor(x)				\
 		"movl 4*" #x "(%1,%0,4), %%eax    \n\t"	\

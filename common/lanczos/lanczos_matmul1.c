@@ -128,7 +128,7 @@ static void mul_one_med_block(packed_block_t *curr_block,
 
 	#undef _txor
 
-#elif defined(MSC_ASM32A) && defined(HAS_MMX)
+#elif defined(MSC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
 
 	#define _txor(k)				\
 	    ASM_M movzx edx, ax				\
@@ -219,7 +219,7 @@ static void mul_one_block(packed_block_t *curr_block,
 	   with a single 32-bit load and extra arithmetic to
 	   unpack the array indices */
 
-#if defined(GCC_ASM32A) && defined(HAS_MMX)
+#if defined(GCC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
 
 	#define _txor(x)				\
 		"movl 4*" #x "(%1,%0,4), %%eax  \n\t"	\

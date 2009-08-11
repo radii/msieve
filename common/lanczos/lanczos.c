@@ -231,7 +231,7 @@ void mul_Nx64_64x64_acc(uint64 *v, uint64 *x,
 		}
 	}
 
-#if defined(GCC_ASM32A) && defined(HAS_MMX)
+#if defined(GCC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
 	i = 0;
 	ASM_G volatile(
 		     ALIGN_LOOP
@@ -333,7 +333,7 @@ void mul_64xN_Nx64(uint64 *x, uint64 *y,
 
 	memset(xy, 0, 64 * sizeof(uint64));
 
-#if defined(GCC_ASM32A) && defined(HAS_MMX)
+#if defined(GCC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
 	i = 0;
 	ASM_G volatile(
 		     ALIGN_LOOP
