@@ -6,11 +6,18 @@
 	>
 	<Tool
 		Name="VCCLCompilerTool"
-		AdditionalIncludeDirectories=";..\..\..\gmp;..\..\..\gmp-ecm"
+		AdditionalIncludeDirectories="&quot;..\..\..\$(mp_lib)&quot;;&quot;..\..\..\gmp-ecm&quot;"
 		PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;HAVE_GMP_ECM"
 	/>
 	<Tool
 		Name="VCLinkerTool"
-		AdditionalDependencies="..\..\..\gmp\build.vc9\lib\$(IntDir)\gmp.lib ..\..\..\gmp-ecm\build.vc9\$(IntDir)\ecm.lib"
+		AdditionalDependencies="..\..\..\$(mp_lib)\build.vc9\lib\$(IntDir)\$(mp_lib).lib ..\..\..\gmp-ecm\build.vc9\$(IntDir)\ecm.lib"
+	/>
+	<UserMacro
+		Name="mp_lib"
+		Value="mpir"
+		InheritsFromParent="true"
+		Delimiter=";"
+		PerformEnvironmentSet="true"
 	/>
 </VisualStudioPropertySheet>
