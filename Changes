@@ -1,6 +1,8 @@
 Version 1.43:
 	- Made the GMP library mandatory
 	- Removed the arbitrary precision math library, replaced with GMP
+	- Added checks that the input NFS number corresponds to the input
+		NFS polynomials (thanks Tom Womack)
 	- Deleted the ancient unskewed NFS polynomial selector
 	- Removed now-unused double-double code
 	- Reset the number of relations and ideals properly when reading

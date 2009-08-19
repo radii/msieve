@@ -53,22 +53,28 @@ int32 read_poly(msieve_obj *obj, mp_t *n,
 	FILE *fp;
 	char buf[LINE_BUF_SIZE];
 	mp_t read_n;
+	signed_mp_t val, rpow, tmp;
 
 	fp = fopen(obj->nfs_fbfile_name, "r");
 	if (fp == NULL)
 		return -1;
 	
-	/* check that the polynomial is for the 
-	   right number */
-
+	buf[0] = 0;
 	fgets(buf, (int)sizeof(buf), fp);
 	if (buf[0] != 'N') {
 		fclose(fp);
+		logprintf(obj, "warning: factor base file uninitialized\n");
 		return -1;
 	}
+
+	/* check that the polynomial is for the 
+	   right number */
+
 	mp_str2mp(buf + 2, &read_n, 10);
 	if (mp_cmp(&read_n, n)) {
 		fclose(fp);
+		logprintf(obj, "warning: NFS input not found in "
+				"factor base file\n");
 		return -1;
 	}
 
@@ -111,8 +117,6 @@ int32 read_poly(msieve_obj *obj, mp_t *n,
 		fgets(buf, (int)sizeof(buf), fp);
 	}
 
-	/* do some sanity checking */
-
 	for (i = MAX_POLY_DEGREE; i >= 0; i--) {
 		if (!mp_is_zero(&rat_poly->coeff[i].num))
 			break;
@@ -128,10 +132,55 @@ int32 read_poly(msieve_obj *obj, mp_t *n,
 		alg_poly->degree = i;
 
 	fclose(fp);
+
 	if (rat_poly->degree == 0 || alg_poly->degree == 0) {
-		logprintf(obj, "warning: polynomial is corrupt\n");
-		return -1;
+		logprintf(obj, "error: polynomial is missing or corrupt\n");
+		exit(-1);
 	}
+	if (rat_poly->degree != 1) {
+		logprintf(obj, "error: no support for nonlinear "
+				"rational polynomials\n");
+		exit(-1);
+	}
+	
+	/* plug the rational polynomial coefficients into the 
+	   algebraic polynomial */
+
+	i = alg_poly->degree;
+	signed_mp_copy(alg_poly->coeff + i, &val);
+	signed_mp_copy(rat_poly->coeff + 1, &rpow);
+
+	for (i--; i >= 0; i--) {
+		signed_mp_mul(&val, rat_poly->coeff + 0, &tmp);
+		tmp.sign = (tmp.sign == POSITIVE) ? NEGATIVE : POSITIVE;
+		signed_mp_copy(&tmp, &val);
+
+		signed_mp_mul(alg_poly->coeff + i, &rpow, &tmp);
+		signed_mp_add(&val, &tmp, &val);
+
+		signed_mp_mul(rat_poly->coeff + 1, &rpow, &tmp);
+		signed_mp_copy(&tmp, &rpow);
+	}
+
+	/* verify that |result| >= N, and that N % result == 0. 
+	   The only place where we do any mod-N arithmetic is the 
+	   NFS square root, which will not work if N has additional 
+	   factors that are not reflected in the polynomials */
+
+	if ((i = mp_cmp(&val.num, n)) < 0) {
+		logprintf(obj, "error: NFS input does not match polynomials\n");
+		logprintf(obj, "check that input doesn't have small factors\n");
+		exit(-1);
+	}
+	else if (i > 0) {
+		mp_mod(&val.num, n, &read_n);
+		if (!mp_is_zero(&read_n)) {
+			logprintf(obj, "error: NFS input does not "
+					"match polynomials\n");
+			exit(-1);
+		}
+	}
+
 	return 0;
 }
 
