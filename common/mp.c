@@ -820,7 +820,7 @@ void mp_divrem(mp_t *num, mp_t *denom, mp_t *quot, mp_t *rem) {
 	/* an extremely paranoid check for an extremely
 	   complex routine */
 
-	if (num->nwords < MAX_MP_WORDS) {
+	if (num->nwords <= MAX_MP_WORDS) {
 		mp_t test;
 		mp_mul(quot, denom, &test);
 		mp_add(&test, rem, &test);
