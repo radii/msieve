@@ -53,6 +53,7 @@
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				DebugInformationFormat="4"
+				CompileAs="0"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -118,6 +119,7 @@
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				DebugInformationFormat="3"
+				CompileAs="0"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -182,6 +184,7 @@
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				DebugInformationFormat="3"
+				CompileAs="0"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -247,6 +250,7 @@
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				DebugInformationFormat="3"
+				CompileAs="0"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -291,6 +295,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\common\filter\clique.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\common\dickman.c"
 				>
 			</File>
@@ -299,31 +307,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\common\filter\clique.c"
-				>
-			</File>
-			<File
 				RelativePath="..\..\common\filter\filter.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\common\filter\merge.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\common\filter\merge_post.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\common\filter\merge_pre.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\common\filter\merge_util.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\common\filter\singleton.c"
 				>
 			</File>
 			<File
@@ -363,6 +347,22 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\common\filter\merge.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\common\filter\merge_post.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\common\filter\merge_pre.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\common\filter\merge_util.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\common\minimize.c"
 				>
 			</File>
@@ -384,6 +384,10 @@
 			</File>
 			<File
 				RelativePath="..\..\common\savefile.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\common\filter\singleton.c"
 				>
 			</File>
 			<File
@@ -425,15 +429,15 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\include\integrate.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\common\filter\filter.h"
 				>
 			</File>
 			<File
 				RelativePath="..\..\common\filter\filter_priv.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\include\integrate.h"
 				>
 			</File>
 			<File
