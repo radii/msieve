@@ -1012,7 +1012,7 @@ uint32 inv_sqrt_mod_q(mp_poly_t *res, mp_poly_t *s_in, mp_poly_t *f_in,
 	   Avert your eyes from the pain that is Duff's Device! */
 
 	if (i == NUM_ISQRT_RETRIES && q < 150) {
-		uint32 c0, c1, c2, c3 = 0, c4 = 0, c5 = 0, c6 = 0;
+		uint32 c0, c1, c2, c3 = q, c4 = q, c5 = q, c6 = q;
 
 		switch (f->degree) {
 		case 7:

@@ -54,13 +54,7 @@ uint32 get_prime_for_sqrt(mp_poly_t *alg_poly,
 			   will lead to a factor). Technically we also need to
 			   check that alg_poly mod q is squarefree, but that
 			   would require a full polynomial factoring routine;
-			   I'm gambling that being squarefree is not rare.
-			  
-			   Note that experience with choosing suboptimal q
-			   shows that life isn't too much more difficult than
-			   the ordinary case. Experimentally, the square
-			   root algorithm fails to converge approximately
-			   half the time */
+			   I'm gambling that being squarefree is not rare. */
 
 			uint32 roots[MAX_POLY_DEGREE];
 			uint32 high_coeff;

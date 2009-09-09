@@ -397,11 +397,12 @@ static uint32 get_initial_inv_sqrt(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 
 	for (i = 0; i < ISQRT_NUM_ATTEMPTS; i++) {
 		if (get_prime_for_sqrt(mp_alg_poly, start_q + 1, &q)) {
-			logprintf(obj, "warning: no irreducible prime found, "
-					"switching to small primes\n");
-			if (start_q > 150)
+			if (start_q > 150) {
+				logprintf(obj, "warning: no irreducible prime "
+					"found, switching to small primes\n");
 				start_q = 50;
-			get_prime_for_sqrt(mp_alg_poly, start_q + 1, &q);
+				continue;
+			}
 		}
 
 		/* convert prod mod q to an mp_poly_t */
