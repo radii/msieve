@@ -135,9 +135,6 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 	for (i = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
 
-		if (r->refcnt % 2 == 0)
-			continue;
-
 		for (j = 0; j < r->num_factors_r; j++) {
 			curr = (rat_prime_t *)hashtable_find(&h, 
 						r->factors + j, NULL,
@@ -185,32 +182,24 @@ typedef struct {
 static uint32 verify_alg_ideal_powers(relation_t *rlist, 
 					uint32 num_relations,
 					uint32 *num_free_relations) {
+
 	uint32 i, j, num_ideals;
 	hashtable_t h;
 	uint32 already_seen;
-	uint32 num_odd;
 	alg_prime_t *curr;
-
-	/* the return value is the total number of relations
-	   counted, which will be smaller than num_relations
-	   since only odd multiplicity relations appear, and
-	   even then only once */
+	uint32 status = 0;
 
 	/* count the multiplicity of each algebraic ideal (not
-	   just the prime to which the ideal corresponds) in
-	   rlist */
+	   just the prime to which the ideal corresponds) in rlist */
 
 	*num_free_relations = 0;
 
 	hashtable_init(&h, (uint32)WORDS_IN(alg_prime_t),
 			(uint32)WORDS_IN(ideal_t));
 
-	for (i = num_odd = 0; i < num_relations; i++) {
+	for (i = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
 		relation_lp_t rlp;
-
-		if (r->refcnt % 2 == 0)
-			continue;
 
 		find_large_ideals(r, &rlp, 0, 0);
 
@@ -229,7 +218,6 @@ static uint32 verify_alg_ideal_powers(relation_t *rlist,
 				curr->count++;
 		}
 
-		num_odd++;
 		if (r->b == 0)
 			(*num_free_relations)++;
 	}
@@ -241,14 +229,14 @@ static uint32 verify_alg_ideal_powers(relation_t *rlist,
 
 	for (i = 0; i < num_ideals; i++) {
 		if (curr->count % 2) {
-			num_odd = 0;
+			status = 1;
 			break;
 		}
 		curr = hashtable_get_next(&h, curr);
 	}
 
 	hashtable_free(&h);
-	return num_odd;
+	return status;
 }
 
 /*--------------------------------------------------------------------*/
@@ -273,7 +261,7 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 	logprintf(obj, "\n");
 	logprintf(obj, "commencing square root phase\n");
 
-	/* read in the factor base */
+	/* read in the NFS polynomials */
 
 	cpu_time = time(NULL);
 	memset(&fb, 0, sizeof(fb));
@@ -331,44 +319,28 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 	/* for each dependency */
 
 	for (i = dep_lower; i <= dep_upper; i++) {
-		uint32 k;
+
 		uint32 num_relations;
-		uint32 full_num_relations;
 		uint32 num_free_relations;
 		relation_t *rlist;
 		abpair_t *abpairs;
-		uint32 num_cycles;
-		la_col_t *cycle_list;
 		mp_t exponent;
 
 		logprintf(obj, "reading relations for dependency %u\n", i);
 
 		/* read in only the relations for dependency i */
 
-		nfs_read_cycles(obj, &fb, &num_cycles, &cycle_list, 
+		nfs_read_cycles(obj, &fb, NULL, NULL,
 				&num_relations, &rlist, 0, i);
 
-		if (num_cycles == 0)
+		if (num_relations == 0)
 			continue;
-
-		/* we don't care about the cycles that the dependency
-		   needs, only the raw count of each relation that occurs */
-
-		free_cycle_list(cycle_list, num_cycles);
 
 		/* do some sanity checking, performing increasing
 		   amounts of work as the dependency proves itself
 		   to be valid */
 
-		full_num_relations = verify_alg_ideal_powers(
-					rlist, num_relations,
-					&num_free_relations);
-		if (full_num_relations == 0) {
-			logprintf(obj, "algebraic side is not a square!\n");
-			nfs_free_relation_list(rlist, num_relations);
-			continue;
-		}
-		if (full_num_relations % 2) {
+		if (num_relations % 2) {
 			/* the number of relations in the dependency must
 			   be even, because each relation represents a
 			   degree-1 polynomial, and the product of these
@@ -378,13 +350,18 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 			nfs_free_relation_list(rlist, num_relations);
 			continue;
 		}
+		if (verify_alg_ideal_powers(rlist, 
+				num_relations, &num_free_relations) != 0) {
+			logprintf(obj, "algebraic side is not a square!\n");
+			nfs_free_relation_list(rlist, num_relations);
+			continue;
+		}
 		if (num_free_relations % 2) {
 			logprintf(obj, "number of free relations (%u) is "
 					"not even\n", num_free_relations);
 			nfs_free_relation_list(rlist, num_relations);
 			continue;
 		}
-
 		if (rat_square_root(rlist, num_relations, n, &sqrt_r) != 0) {
 			logprintf(obj, "rational side is not a square!\n");
 			nfs_free_relation_list(rlist, num_relations);
@@ -394,15 +371,11 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 		/* flatten the list of relations; each occurrence of
 		   a relation gets its own abpair_t */
 
-		abpairs = (abpair_t *)xmalloc(full_num_relations *
+		abpairs = (abpair_t *)xmalloc(num_relations *
 						sizeof(abpair_t));
-		for (j = k = 0; j < num_relations; j++) {
-			relation_t *r = rlist + j;
-			if (r->refcnt % 2) {
-				abpairs[k].a = r->a;
-				abpairs[k].b = r->b;
-				k++;
-			}
+		for (j = 0; j < num_relations; j++) {
+			abpairs[j].a = rlist[j].a;
+			abpairs[j].b = rlist[j].b;
 		}
 		nfs_free_relation_list(rlist, num_relations);
 
@@ -412,7 +385,7 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 
 		mp_clear(&sqrt_a);
 		alg_square_root(obj, &monic_alg_poly, n, &c, m1, m0, abpairs, 
-					full_num_relations, check_q, &sqrt_a);
+					num_relations, check_q, &sqrt_a);
 		if (mp_is_zero(&sqrt_a)) {
 			logprintf(obj, "algebraic square root failed\n");
 			continue;
@@ -432,14 +405,14 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 		mp_clear(&exponent);
 		exponent.nwords = 1;
 		if (!mp_is_one(&c)) {
-			exponent.val[0] = full_num_relations/ 2 + 
+			exponent.val[0] = num_relations/ 2 + 
 						fb.afb.poly.degree - 2;
 			mp_expo(&c, &exponent, n, &tmp2);
 			mp_modmul(&tmp2, &sqrt_r, n, &sqrt_r);
 		}
 
 		if (!mp_is_one(&m1->num)) {
-			exponent.val[0] = (full_num_relations -
+			exponent.val[0] = (num_relations -
 				       		num_free_relations) / 2;
 			mp_copy(&m1->num, &tmp1);
 			if (m1->sign == NEGATIVE)

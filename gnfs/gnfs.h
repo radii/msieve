@@ -275,8 +275,8 @@ typedef struct relation_t {
 	uint32 rel_index;      /* line of savefile where relation occurs */
 	uint8 num_factors_r;   /* number of rational factors */
 	uint8 num_factors_a;   /* number of algebraic factors */
-	uint16 refcnt;         /* scratch value used in postprocessing */
-	uint32 *factors;       /* list of rational+algebraic factors */
+	uint32 *factors;       /* list of factors; rational factors
+				  first, then algebraic */
 } relation_t;
 
 /* structure used to conveniently represent all of

@@ -332,16 +332,6 @@ uint32 find_large_ideals(relation_t *rel,
 }
 
 /*--------------------------------------------------------------------*/
-static int compare_uint32(const void *x, const void *y) {
-	uint32 *xx = (uint32 *)x;
-	uint32 *yy = (uint32 *)y;
-	if (*xx > *yy)
-		return 1;
-	if (*xx < *yy)
-		return -1;
-	return 0;
-}
-
 static int bsearch_relation(const void *key, const void *rel) {
 	relation_t *r = (relation_t *)rel;
 	uint32 *k = (uint32 *)key;
@@ -353,12 +343,70 @@ static int bsearch_relation(const void *key, const void *rel) {
 	return 0;
 }
 
+static void remap_relation_numbers(msieve_obj *obj, 
+				uint32 num_cycles, 
+				la_col_t *cycle_list, 
+				uint32 num_relations,
+				relation_t *rlist) {
+	uint32 i, j;
+
+	/* walk through the list of cycles and convert
+	   each occurence of a line number in the savefile
+	   to an offset in the relation array */
+
+	for (i = 0; i < num_cycles; i++) {
+		la_col_t *c = cycle_list + i;
+
+		for (j = 0; j < c->cycle.num_relations; j++) {
+
+			/* since relations were read in order of increasing
+			   relation index (= savefile line number), use 
+			   binary search to locate relation j for this
+			   cycle, then save a pointer to it */
+
+			relation_t *rptr = (relation_t *)bsearch(
+						c->cycle.list + j,
+						rlist,
+						(size_t)num_relations,
+						sizeof(relation_t),
+						bsearch_relation);
+			if (rptr == NULL) {
+				/* this cycle is corrupt somehow */
+				logprintf(obj, "error: cannot locate "
+						"relation %u\n", 
+						c->cycle.list[j]);
+				exit(-1);
+			}
+			else {
+				c->cycle.list[j] = rptr - rlist;
+			}
+		}
+	}
+}
+
+/*--------------------------------------------------------------------*/
+static int compare_uint32(const void *x, const void *y) {
+	uint32 *xx = (uint32 *)x;
+	uint32 *yy = (uint32 *)y;
+	if (*xx > *yy)
+		return 1;
+	if (*xx < *yy)
+		return -1;
+	return 0;
+}
+
+typedef struct {
+	uint32 relidx;
+	uint32 count;
+} relcount_t;
+
 static void nfs_get_cycle_relations(msieve_obj *obj, 
 				factor_base_t *fb, uint32 num_cycles, 
 				la_col_t *cycle_list, 
 				uint32 *num_relations_out,
 				relation_t **rlist_out,
-				uint32 compress) {
+				uint32 compress,
+				uint32 dependency) {
 	uint32 i, j;
 	char buf[LINE_BUF_SIZE];
 	relation_t *rlist;
@@ -366,14 +414,17 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 
 	hashtable_t unique_relidx;
 	uint32 num_unique_relidx;
-	uint32 *relidx_list, *entry;
+	uint32 *relidx_list;
+	relcount_t *entry;
 
 	uint32 tmp_factors[TEMP_FACTOR_LIST_SIZE];
 	relation_t tmp_relation;
 
 	tmp_relation.factors = tmp_factors;
 
-	hashtable_init(&unique_relidx, (uint32)1, 0);
+	hashtable_init(&unique_relidx, 
+			(uint32)WORDS_IN(relcount_t), 
+			(uint32)1);
 
 	/* fill the hashtable */
 
@@ -383,22 +434,35 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 		uint32 *list = c->cycle.list;
 
 		for (j = 0; j < num_relations; j++) {
-			hashtable_find(&unique_relidx, list + j, NULL, NULL);
+			uint32 already_seen;
+			entry = (relcount_t *)hashtable_find(
+						&unique_relidx, list + j, 
+						NULL, &already_seen);
+			if (!already_seen)
+				entry->count = 1;
+			else
+				entry->count++;
 		}
 	}
 
 	/* convert the internal list of hashtable entries into
-	   a list of 32-bit relation numbers */
+	   a list of 32-bit relation numbers. If reading in just
+	   the relations in one dependency, squeeze out relations
+	   that appear an even number of times */
 
 	hashtable_close(&unique_relidx);
 	num_unique_relidx = hashtable_get_num(&unique_relidx);
-	entry = (uint32 *)hashtable_get_first(&unique_relidx);
+	entry = (relcount_t *)hashtable_get_first(&unique_relidx);
 	relidx_list = unique_relidx.match_array;
 
-	for (i = 0; i < num_unique_relidx; i++) {
-		relidx_list[i] = *entry;
-		entry = (uint32 *)hashtable_get_next(&unique_relidx, entry);
+	for (i = j = 0; i < num_unique_relidx; i++) {
+		if (dependency == 0 || entry->count % 2 != 0)
+			relidx_list[j++] = entry->relidx;
+
+		entry = (relcount_t *)hashtable_get_next(
+					&unique_relidx, entry);
 	}
+	num_unique_relidx = j;
 
 	/* sort the list in order of increasing relation number */
 
@@ -454,7 +518,6 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 
 			*r = tmp_relation;
 			r->rel_index = i;
-			r->refcnt = 0;
 			r->factors = (uint32 *)xmalloc((num_r + num_a) * 
 							sizeof(uint32));
 			memcpy(r->factors, tmp_relation.factors,
@@ -468,38 +531,6 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 	logprintf(obj, "read %u relations\n", j);
 	savefile_close(savefile);
 	hashtable_free(&unique_relidx);
-
-	/* walk through the list of cycles and convert
-	   relation indices to relation pointers */
-
-	for (i = 0; i < num_cycles; i++) {
-		la_col_t *c = cycle_list + i;
-
-		for (j = 0; j < c->cycle.num_relations; j++) {
-
-			/* since relations were read in order of increasing
-			   relation index (= savefile line number), use 
-			   binary search to locate relation j for this
-			   cycle, then save a pointer to it */
-
-			relation_t *rptr = (relation_t *)bsearch(
-						c->cycle.list + j,
-						rlist,
-						(size_t)num_unique_relidx,
-						sizeof(relation_t),
-						bsearch_relation);
-			if (rptr == NULL) {
-				/* this cycle is corrupt somehow */
-				logprintf(obj, "error: cannot locate "
-						"relation %u\n", 
-						c->cycle.list[j]);
-				exit(-1);
-			}
-			else {
-				c->cycle.list[j] = rptr - rlist;
-			}
-		}
-	}
 	*rlist_out = rlist;
 }
 
@@ -513,7 +544,6 @@ void nfs_read_cycles(msieve_obj *obj,
 			uint32 compress,
 			uint32 dependency) {
 
-	uint32 i, j;
 	uint32 num_cycles;
 	uint32 num_relations;
 	la_col_t *cycle_list;
@@ -532,7 +562,7 @@ void nfs_read_cycles(msieve_obj *obj,
 		return;
 	}
 
-	/* give up if caller doesn't want the relations as well */
+	/* finish if caller doesn't want the relations as well */
 
 	if (fb == NULL || num_relations_out == NULL || rlist_out == NULL) {
 		*num_cycles_out = num_cycles;
@@ -541,26 +571,30 @@ void nfs_read_cycles(msieve_obj *obj,
 	}
 
 	/* now read the list of relations needed by the
-	   list of cycles, and convert relation numbers
-	   to relation pointers */
+	   list of cycles */
 
 	nfs_get_cycle_relations(obj, fb, num_cycles, cycle_list, 
-				&num_relations, &rlist, compress);
+				&num_relations, &rlist, compress,
+				dependency);
 
-	/* count the number of times each relation is referenced */
-
-	for (i = 0; i < num_cycles; i++) {
-		la_col_t *c = cycle_list + i;
-		for (j = 0; j < c->cycle.num_relations; j++) {
-			relation_t *r = rlist + c->cycle.list[j];
-			r->refcnt++;
-		}
-	}
-
-	*num_cycles_out = num_cycles;
-	*cycle_list_out = cycle_list;
 	*num_relations_out = num_relations;
 	*rlist_out = rlist;
+
+	/* if both the cycles and relations are wanted by 
+	   callers, then modify the cycles to point to the
+	   relations in memory and not on disk */
+
+	if (num_cycles_out != NULL && cycle_list_out != NULL) {
+
+		remap_relation_numbers(obj, num_cycles, cycle_list,
+					num_relations, rlist);
+
+		*num_cycles_out = num_cycles;
+		*cycle_list_out = cycle_list;
+	}
+	else {
+		free_cycle_list(cycle_list, num_cycles);
+	}
 }
 
 /*--------------------------------------------------------------------*/
