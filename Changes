@@ -1,6 +1,7 @@
 Version 1.43:
 	- Made the GMP library mandatory
 	- Removed the arbitrary precision math library, replaced with GMP
+	- Added 64-bit modmul operations to all builds
 	- Added checks that the input NFS number corresponds to the input
 		NFS polynomials (thanks Tom Womack)
 	- Modified the initialization for the NFS square root to be

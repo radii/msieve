@@ -666,7 +666,7 @@ uint32 mp_rjustify(mp_t *a, mp_t *res) {
 }
 
 /*---------------------------------------------------------------*/
-void mp_divrem_core(big_mp_t *num, mp_t *denom, 
+static void mp_divrem_core(big_mp_t *num, mp_t *denom, 
 			mp_t *quot, mp_t *rem) {
 
 	int32 i, j, k;
@@ -902,6 +902,161 @@ void mp_modmul(mp_t *a, mp_t *b, mp_t *n, mp_t *res) {
 
 	mp_mod((mp_t *)&prod, n, res);
 }
+
+/*---------------------------------------------------------------*/
+#if !defined(GCC_ASM64A) && !(defined(_MSC_VER) && defined(_WIN64))
+
+static uint64 mp_mod_2(uint32 num[4], uint64 p) {
+
+	int32 i, k;
+	uint32 shift, comp_shift;
+	uint32 high_denom, low_denom;
+	uint32 nacc[5];
+	uint32 dacc[2];
+
+	for (i = 4; i; i--) {
+		if (num[i-1] > 0)
+			break;
+	}
+
+	high_denom = (uint32)(p >> 32);
+
+#if defined(GCC_ASM32X)
+	ASM_G("bsrl %1, %0": "=r"(shift) : "rm"(high_denom) : "cc");
+	shift = 31 - shift;
+#else
+	comp_shift = 0x80000000;
+	shift = 0;
+	if ((high_denom >> 16) == 0) {
+		comp_shift = 0x8000;
+		shift = 16;
+	}
+
+	while ( !(high_denom & comp_shift) ) {
+		shift++;
+		comp_shift >>= 1;
+	}
+#endif
+	comp_shift = 32 - shift;
+	p <<= shift;
+	high_denom = dacc[1] = (uint32)(p >> 32);
+	low_denom = dacc[0] = (uint32)p;
+
+	if (shift) {
+		for (k = i; k > 1; k--) {
+			nacc[k-1] = num[k-1] << shift |
+					num[k-2] >> comp_shift;
+		}
+		nacc[0] = num[0] << shift;
+		nacc[i] = num[i-1] >> comp_shift;
+	}
+	else {
+		memcpy(nacc, num, i * sizeof(uint32));
+		nacc[i] = 0;
+	}
+
+	while (i + 1 > 2) {
+		uint32 q, r;
+		uint32 high_num = nacc[i];
+		uint32 low_num = nacc[i-1];
+		uint32 check = nacc[i-2];
+
+		if (high_num == high_denom) {
+
+			/* the quotient will be 2^32, and must
+			   always get corrected */
+
+			q = 0xffffffff;
+		}
+		else {
+
+#if defined(GCC_ASM32X)
+			q = low_num;
+			r = high_num;
+			ASM_G("divl %2"
+				: "+a"(q),"+d"(r)
+				: "rm"(high_denom) : "cc");
+#else
+			uint64 acc = (uint64)high_num << 32 | (uint64)low_num;
+			q = (uint32)(acc / high_denom);
+			r = (uint32)(acc % high_denom);
+#endif
+			while ((uint64)low_denom * (uint64)q >
+				(((uint64)r << 32) | check)) {
+				q--;
+				r += high_denom;
+				if (r < high_denom)
+					break;
+			}
+		}
+
+		if (mp_submul_1(dacc, q, 2, nacc + i - 2) 
+							!= high_num) {
+			uint32 carry = 0;
+			for (q--, k = 0; k < 2; k++) {
+				uint32 sum = nacc[i-2+k] + carry;
+				carry = (sum < nacc[i-2+k]);
+				nacc[i-2+k] = sum + dacc[k];
+				carry += (nacc[i-2+k] < sum);
+			}
+		}
+
+		nacc[i--] = 0;
+	}
+
+	if (shift) {
+		uint32 res0 = nacc[0] >> shift | nacc[1] << comp_shift;
+		uint32 res1 = nacc[1] >> shift;
+		return (uint64)res1 << 32 | res0;
+	}
+	else {
+		return (uint64)nacc[1] << 32 | nacc[1];
+	}
+}
+
+uint64 mp_modmul_2(uint64 a, uint64 b, uint64 p) {
+
+	uint64 prod;
+	uint32 num[4];
+	uint32 a0, a1;
+	uint32 b0, b1;
+
+	a1 = (uint32)(a >> 32);
+	a0 = (uint32)a;
+	b1 = (uint32)(b >> 32);
+	b0 = (uint32)b;
+	if ((a1 | b1) == 0) {
+		if ((uint32)(p >> 32) == 0) {
+			return mp_modmul_1(a0, b0, (uint32)p);
+		}
+		else {
+			prod = (uint64)a0 * (uint64)b0;
+			return prod % p;
+		}
+	}
+
+	prod = (uint64)a0 * (uint64)b0;
+	num[0] = (uint32)prod;
+	prod = (prod >> 32) + 
+		(uint64)a0 * (uint64)b1;
+	num[1] = (uint32)prod;
+	num[2] = (uint32)(prod >> 32);
+
+	prod = (uint64)a1 * (uint64)b0 +
+		(uint64)num[1];
+	num[1] = (uint32)prod;
+	prod = (prod >> 32) + 
+		(uint64)a1 * (uint64)b1 +
+		(uint64)num[2];
+	num[2] = (uint32)prod;
+	num[3] = (uint32)(prod >> 32);
+
+	if ((uint32)(p >> 32) == 0)
+		return mp_mod_1_core(num, 4, (uint32)p);
+	else
+		return mp_mod_2(num, p);
+}
+#endif /* !defined(GCC_ASM64A) && !(defined(_MSC_VER) && defined(_WIN64)) */
 
 /*---------------------------------------------------------------*/
 uint32 mp_iroot(mp_t *a, uint32 root, mp_t *res) {

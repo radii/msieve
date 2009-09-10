@@ -203,12 +203,6 @@ sieve_lattice_p64_q64(uint32 p, uint32 num_ppoly,
 	uint64 q2 = (uint64)q * (uint64)q;
 	uint64 inv = mp_modinv_2(q2 % p2, p2);
 
-#if !defined(GCC_ASM64A)
-	uint64_2gmp(inv, L->inv);
-	uint64_2gmp(p2, L->p2);
-	uint64_2gmp(q2, L->q2);
-#endif
-
 	for (i = 0; i < num_ppoly; i++) {
 
 		uint32 which_poly = p_index[i].which_poly;
@@ -230,49 +224,16 @@ sieve_lattice_p64_q64(uint32 p, uint32 num_ppoly,
 			for (k = 0; k < num_proots; k++) {
 				uint64 tmp = mp_modsub_2(pr[k], qrj, p2);
 
-#if defined(GCC_ASM64A)		/*-----------------------------------*/
-				ASM_G("mulq %1        \n\t"
-				      "divq %2        \n\t"
-				      "movq %%rdx, %0 \n\t"
-				      : "+a"(tmp)
-				      : "g"(inv), "g"(p2)
-				      : "%rdx", "cc");
+				tmp = mp_modmul_2(tmp, inv, p2);
 
 				if (tmp < lattice_size ||
 				    tmp >= p2 - lattice_size) {
 
-					uint64_2gmp(qr[j], L->qr);
 					uint64_2gmp(tmp, L->tmp);
+					uint64_2gmp(q2, L->q2);
 
 					if (tmp > p2 - lattice_size) {
-						mpz_sub_ui(L->tmp, L->tmp, 
-								(mp_limb_t)p2);
-					}
-					mpz_addmul_ui(L->qr, L->tmp, 
-							(mp_limb_t)q2);
-					handle_collision(poly, which_poly,
-						       	p, q, L->qr);
-				}
-#else				/*-----------------------------------*/
-
-	#if defined(_MSC_VER) && defined(_WIN64)
-				uint64 mul_mod_64(uint64, uint64, uint64);
-
-				tmp = mul_mod_64(tmp, inv, p2);
-	#else
-				uint64_2gmp(tmp, L->tmp);
-				mpz_mul(L->tmp, L->tmp, L->inv);
-				mpz_tdiv_r(L->tmp, L->tmp, L->p2);
-				tmp = gmp2uint64(L->tmp);
-	#endif
-
-				if (tmp < lattice_size ||
-				    tmp >= p2 - lattice_size) {
-
-	#if defined(_MSC_VER) && defined(_WIN64)
-					uint64_2gmp(tmp, L->tmp);
-	#endif
-					if (tmp > p2 - lattice_size) {
+						uint64_2gmp(p2, L->p2);
 						mpz_sub(L->tmp, L->tmp, L->p2);
 					}
 					uint64_2gmp(qr[j], L->qr);
@@ -280,7 +241,6 @@ sieve_lattice_p64_q64(uint32 p, uint32 num_ppoly,
 					handle_collision(poly, which_poly,
 						       	p, q, L->qr);
 				}
-#endif				/*-----------------------------------*/
 			}
 		}
 	}

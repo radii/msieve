@@ -204,6 +204,33 @@ static INLINE uint32 mp_modmul_1(uint32 a, uint32 b, uint32 n) {
 	return mp_mod64(acc, n);
 }
 
+#if defined(GCC_ASM64A)		/*-----------------------------------*/
+
+static INLINE uint64 mp_modmul_2(uint64 a, uint64 b, uint64 n) {
+	uint64 res = a;
+	ASM_G("mulq %1        \n\t"
+	      "divq %2        \n\t"
+	      "movq %%rdx, %0 \n\t"
+		: "+a"(res)
+		: "g"(b), "g"(n)
+		: "%rdx", "cc");
+	return res;
+}
+
+#elif defined(_MSC_VER) && defined(_WIN64) /*-------------------------*/
+
+uint64 mul_mod_64(uint64, uint64, uint64);
+
+static INLINE uint64 mp_modmul_2(uint64 a, uint64 b, uint64 n) {
+	return mul_mod_64(a, b, n);
+}
+
+#else  /*-------------------------------------------------------------*/
+
+uint64 mp_modmul_2(uint64 a, uint64 b, uint64 n);
+
+#endif
+
 	/* General-purpose division routines. mp_divrem
 	   divides num by denom, putting the quotient in
 	   quot (if not NULL) and the remainder in rem
