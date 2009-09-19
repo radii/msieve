@@ -984,9 +984,9 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	}
 
 	if (dump_interval) {
-		next_dump = dim_solved + dump_interval;
+		next_dump = (dim_solved / dump_interval + 1) * dump_interval;
 		check_interval = 10000;
-		next_check = dim_solved + check_interval;
+		next_check = (dim_solved / check_interval + 1) * check_interval;
 	}
 
 	/* perform the iteration */
@@ -1102,7 +1102,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 				}
 			}
 			/* check passed */
-			next_check = dim_solved + check_interval;
+			next_check = (dim_solved / check_interval + 1) * check_interval;
 			memcpy(v0, vnext, n * sizeof(uint64));
 		}
 
@@ -1221,7 +1221,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 				dump_lanczos_state(obj, x, vt_v0, v, v0, 
 						   vt_a_v, vt_a2_v, winv, n, 
 						   dim_solved, iter, s, dim1);
-				next_dump = dim_solved + dump_interval;
+				next_dump = (dim_solved / dump_interval + 1) * dump_interval;
 			}
 			if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
 				break;
