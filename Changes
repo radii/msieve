@@ -1,6 +1,9 @@
 Version 1.43:
 	- Made the GMP library mandatory
 	- Removed the arbitrary precision math library, replaced with GMP
+	- Modified the NFS relation handling code to allow 63-bit 'a' 
+		values and 48-bit prime factors. The code now also performs
+		runlength-encoding on the list of prime factors
 	- Added 64-bit modmul operations to all builds
 	- Modified the NFS relation reading code to ignore relations that
 		would not participate in dependencies anyway. This has the
