@@ -210,11 +210,11 @@ int32 read_factor_base(msieve_obj *obj, mp_t *n,
 		else if (strstr(buf, "SALPMAX"))
 			params->afb_lp_size = value;
 		else if (strstr(buf, "SMIN"))
-			params->sieve_begin = (int64)atof(tmp);
+			params->sieve_begin = strtoll(tmp, NULL, 10);
 		else if (strstr(buf, "SMAX"))
-			params->sieve_end = (int64)atof(tmp);
+			params->sieve_end = strtoll(tmp, NULL, 10);
 		else if (strstr(buf, "SLINE")) {
-			int64 sieve_size = (int64)atof(tmp);
+			int64 sieve_size = strtoll(tmp, NULL, 10);
 			params->sieve_begin = -sieve_size;
 			params->sieve_end = sieve_size;
 		}
