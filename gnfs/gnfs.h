@@ -266,8 +266,44 @@ typedef union {
 	uint32 blob[2];
 } ideal_t;
 
+/* factors of relations are stored in a runlength-
+   encoded format; 7 bits of each byte are used
+   to store the factor, with the top bit set to
+   1 if the corresponding byte is the most significant
+   for the factor */
+
+static INLINE uint32 compress_p(uint8 *array, 
+				uint32 p, uint32 offset) {
+	do {
+		array[offset++] = p & 0x7f;
+		p >>= 7;
+	} while (p != 0);
+
+	array[offset - 1] |= 0x80;
+	return offset;
+}
+
+static INLINE uint32 decompress_p(uint8 *array, uint32 *offset_in) {
+
+	uint32 offset = *offset_in;
+	uint8 next_byte = array[offset++];
+	uint32 p = next_byte & 0x7f;
+	uint32 shift = 7;
+
+	while (!(next_byte & 0x80)) {
+		next_byte = array[offset++];
+		p |= (next_byte & 0x7f) << shift;
+		shift += 7;
+	} 
+	
+	*offset_in = offset;
+	return p;
+}
+
 /* canonical representation of a relation, used in
    the NFS postprocessing phase */
+
+#define COMPRESSED_P_MAX_SIZE 256
 
 typedef struct relation_t {
 	int64 a;               /* coordinates of relation; free relations */
@@ -275,8 +311,8 @@ typedef struct relation_t {
 	uint32 rel_index;      /* line of savefile where relation occurs */
 	uint8 num_factors_r;   /* number of rational factors */
 	uint8 num_factors_a;   /* number of algebraic factors */
-	uint32 *factors;       /* list of factors; rational factors
-				  first, then algebraic */
+	uint8 *factors;       /* compressed list of factors; rational 
+				 factors first, then algebraic */
 } relation_t;
 
 /* structure used to conveniently represent all of
@@ -296,14 +332,15 @@ typedef struct {
 } relation_lp_t;
 
 /* convert a line of text into a relation_t, return 0
-   if conversion succeeds. The arrays pointed to within
-   'r' should have at least TEMP_FACTOR_LIST_SIZE entries.
-   If 'compress' is nonzero then store only one instance 
-   of any factors, and only if the factor occurs in r 
-   an odd number of times */
+   if conversion succeeds. The array for factos pointed 
+   to within 'r' should have at least COMPRESSED_P_MAX_SIZE 
+   bytes. If 'compress' is nonzero then store only one 
+   instance of any factors, and only if the factor occurs 
+   in r an odd number of times */
 
 int32 nfs_read_relation(char *buf, factor_base_t *fb, 
-			relation_t *r, uint32 compress);
+			relation_t *r, uint32 *array_size_out,
+			uint32 compress);
 
 /* given a relation, find and list all of the rational
    ideals > filtmin_r and all of the algebraic ideals 

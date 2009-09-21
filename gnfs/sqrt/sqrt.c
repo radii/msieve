@@ -123,6 +123,7 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 	uint32 i, j, num_primes;
 	hashtable_t h;
 	uint32 already_seen;
+	uint32 array_size;
 	mp_t base, exponent, tmp;
 	uint32 status = 0;
 	rat_prime_t *curr;
@@ -135,10 +136,10 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 	for (i = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
 
-		for (j = 0; j < r->num_factors_r; j++) {
-			curr = (rat_prime_t *)hashtable_find(&h, 
-						r->factors + j, NULL,
-						&already_seen);
+		for (j = array_size = 0; j < r->num_factors_r; j++) {
+			uint32 p = decompress_p(r->factors, &array_size);
+			curr = (rat_prime_t *)hashtable_find(&h, &p, NULL,
+							    &already_seen);
 			if (!already_seen)
 				curr->count = 1;
 			else

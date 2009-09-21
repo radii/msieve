@@ -17,14 +17,15 @@ $Id$
 
 /*--------------------------------------------------------------------*/
 static uint32 divide_factor_out(mp_t *polyval, uint32 p, 
-				uint32 *factors, uint32 *num_factors,
-				uint32 compress) {
+				uint8 *factors, uint32 *array_size_in,
+				uint32 *num_factors, uint32 compress) {
 
 	/* read the rational factors. Note that the following
 	   will work whether a given factor appears only once
 	   or whether its full multiplicity is in the relation */
 
 	uint32 i = *num_factors;
+	uint32 array_size = *array_size_in;
 	uint32 multiplicity = 0;
 
 	while (mp_mod_1(polyval, p) == 0) {
@@ -35,20 +36,25 @@ static uint32 divide_factor_out(mp_t *polyval, uint32 p,
 		return 1;
 
 	if (compress) {
-		if (multiplicity & 1)
-			factors[i++] = p;
+		if (multiplicity & 1) {
+			array_size = compress_p(factors, p, array_size);
+			i++;
+		}
 	}
 	else if (multiplicity) {
+		i += multiplicity;
 		while (multiplicity--)
-			factors[i++] = p;
+			array_size = compress_p(factors, p, array_size);
 	}
 	*num_factors = i;
+	*array_size_in = array_size;
 	return 0;
 }
 
 /*--------------------------------------------------------------------*/
 int32 nfs_read_relation(char *buf, factor_base_t *fb, 
-			relation_t *r, uint32 compress) {
+			relation_t *r, uint32 *array_size_out,
+			uint32 compress) {
 
 	/* note that only the polynomials within the factor
 	   base need to be initialized */
@@ -60,7 +66,8 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	signed_mp_t polyval;
 	uint32 num_factors_r;
 	uint32 num_factors_a;
-	uint32 *factors = r->factors;
+	uint32 array_size = 0;
+	uint8 *factors = r->factors;
 
 	/* read the relation coordinates */
 
@@ -93,17 +100,18 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 						p, &high_coeff, 0);
 		if (num_roots != fb->rfb.poly.degree || high_coeff == 0)
 			return -3;
-		factors[num_factors_r++] = p;
+		array_size = compress_p(factors, p, array_size);
 
 		num_roots = poly_get_zeros(roots, &fb->afb.poly,
 						p, &high_coeff, 0);
 		if (num_roots != fb->afb.poly.degree || high_coeff == 0)
 			return -4;
 		for (i = 0; i < num_roots; i++)
-			factors[num_factors_r + i] = roots[i];
+			array_size = compress_p(factors, roots[i], array_size);
 
-		r->num_factors_r = num_factors_r;
+		r->num_factors_r = 1;
 		r->num_factors_a = num_roots;
+		*array_size_out = array_size;
 		return 0;
 	}
 
@@ -122,8 +130,10 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	eval_poly(&polyval, a, b, &fb->rfb.poly);
 	if (mp_is_zero(&polyval.num))
 		return -6;
-	if (polyval.sign == NEGATIVE)
-		factors[num_factors_r++] = 0;
+	if (polyval.sign == NEGATIVE) {
+		array_size = compress_p(factors, 0, array_size);
+		num_factors_r++;
+	}
 
 	/* read the rational factors (possibly an empty list) */
 
@@ -131,7 +141,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 		do {
 			p = strtoul(tmp + 1, &next_field, 16);
 			if (p > 1 && divide_factor_out(&polyval.num, p, 
-						factors, 
+						factors, &array_size,
 						&num_factors_r, compress)) {
 				return -8;
 			}
@@ -146,12 +156,12 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 		return -9;
 
 	/* if there are rational factors still to be accounted
-	   for, assume they are small and find them by brute force */
+	   for, assume they are small and find them by trial division */
 
 	for (i = p = 0; !mp_is_one(&polyval.num) && p < 1000; i++) {
 
 		p += prime_delta[i];
-		if (divide_factor_out(&polyval.num, p, factors,
+		if (divide_factor_out(&polyval.num, p, factors, &array_size,
 					&num_factors_r, compress)) {
 			return -10;
 		}
@@ -170,7 +180,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 		do {
 			p = strtoul(tmp + 1, &next_field, 16);
 			if (p > 1 && divide_factor_out(&polyval.num, p, 
-						factors + num_factors_r, 
+						factors, &array_size,
 						&num_factors_a, compress)) {
 				return -13;
 			}
@@ -179,13 +189,13 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	}
 
 	/* if there are algebraic factors still to be accounted
-	   for, assume they are small and find them by brute force */
+	   for, assume they are small and find them by trial division */
 
 	for (i = p = 0; !mp_is_one(&polyval.num) && p < 1000; i++) {
 
 		p += prime_delta[i];
 		if (divide_factor_out(&polyval.num, p,
-					factors + num_factors_r, 
+					factors, &array_size,
 					&num_factors_a, compress)) {
 			return -14;
 		}
@@ -196,6 +206,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	
 	r->num_factors_r = num_factors_r;
 	r->num_factors_a = num_factors_a;
+	*array_size_out = array_size;
 	return 0;
 }
 
@@ -205,16 +216,18 @@ uint32 find_large_ideals(relation_t *rel,
 			uint32 filtmin_r, uint32 filtmin_a) {
 	uint32 i;
 	uint32 num_ideals = 0;
+	uint32 array_size = 0;
 	uint32 num_factors_r;
 	int64 a = rel->a;
 	uint32 b = rel->b;
+	uint32 p;
 
 	out->gf2_factors = 0;
 
 	/* handle free relations */
 
 	if (b == 0) {
-		uint32 p = rel->factors[0];
+		p = decompress_p(rel->factors, &array_size);
 
 		if (p > filtmin_r) {
 			ideal_t *ideal = out->ideal_list + num_ideals;
@@ -231,7 +244,8 @@ uint32 find_large_ideals(relation_t *rel,
 			for (i = 0; i < rel->num_factors_a; i++) {
 				ideal_t *ideal = out->ideal_list + 
 							num_ideals + i;
-				ideal->i.r = rel->factors[i + 1];
+				ideal->i.r = decompress_p(rel->factors,
+							&array_size);
 				ideal->i.compressed_p = (p - 1) / 2;
 				ideal->i.rat_or_alg = ALGEBRAIC_IDEAL;
 			}
@@ -250,7 +264,7 @@ uint32 find_large_ideals(relation_t *rel,
 	num_factors_r = rel->num_factors_r;
 
 	for (i = 0; i < num_factors_r; i++) {
-		uint32 p = rel->factors[i];
+		uint32 p = decompress_p(rel->factors, &array_size);
 
 		/* if processing all the ideals, make up a
 		   separate unique entry for rational factors of -1 */
@@ -294,7 +308,7 @@ uint32 find_large_ideals(relation_t *rel,
 	/* repeat for the large algebraic ideals */
 
 	for (i = 0; i < (uint32)rel->num_factors_a; i++) {
-		uint32 p = rel->factors[num_factors_r + i];
+		uint32 p = decompress_p(rel->factors, &array_size);
 		if (p > filtmin_a) {
 			ideal_t *ideal = out->ideal_list + num_ideals;
 			uint32 bmodp;
@@ -417,7 +431,8 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 	uint32 *relidx_list;
 	relcount_t *entry;
 
-	uint32 tmp_factors[TEMP_FACTOR_LIST_SIZE];
+	uint8 tmp_factors[COMPRESSED_P_MAX_SIZE];
+	uint32 factor_size;
 	relation_t tmp_relation;
 
 	tmp_relation.factors = tmp_factors;
@@ -500,7 +515,8 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 			continue;
 		}
 
-		status = nfs_read_relation(buf, fb, &tmp_relation, compress);
+		status = nfs_read_relation(buf, fb, &tmp_relation, 
+						&factor_size, compress);
 		if (status) {
 			/* at this point, if the relation couldn't be
 			   read then the filtering stage should have
@@ -512,16 +528,14 @@ static void nfs_get_cycle_relations(msieve_obj *obj,
 		else {
 			/* save the relation */
 
-			uint32 num_r = tmp_relation.num_factors_r;
-			uint32 num_a = tmp_relation.num_factors_a;
 			relation_t *r = rlist + j++;
 
 			*r = tmp_relation;
 			r->rel_index = i;
-			r->factors = (uint32 *)xmalloc((num_r + num_a) * 
-							sizeof(uint32));
+			r->factors = (uint8 *)xmalloc(factor_size *
+							sizeof(uint8));
 			memcpy(r->factors, tmp_relation.factors,
-					(num_r + num_a) * sizeof(uint32));
+					factor_size * sizeof(uint8));
 		}
 
 		savefile_read_line(buf, sizeof(buf), savefile);

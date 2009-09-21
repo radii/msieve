@@ -180,9 +180,14 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 
 	for (i = min_qcb_ideal = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
-		uint32 *factors_a = r->factors + r->num_factors_r;
-		for (j = 0; j < r->num_factors_a; j++)
-			min_qcb_ideal = MAX(min_qcb_ideal, factors_a[j]);
+		uint32 num_r = r->num_factors_r;
+		uint32 num_a = r->num_factors_a;
+		uint32 array_size = 0;
+		for (j = 0; j < num_r + num_a; j++) {
+			uint32 p = decompress_p(r->factors, &array_size);
+			if (j >= num_r)
+				min_qcb_ideal = MAX(min_qcb_ideal, p);
+		}
 	}
 	min_qcb_ideal = MIN(min_qcb_ideal, (uint32)(-1) - 50000);
 
@@ -459,6 +464,7 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 	}
 	for (i = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
+		/* this is an upper bound */
 		mem_use += (r->num_factors_r + r->num_factors_a) *
 				sizeof(uint32);
 	}

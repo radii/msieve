@@ -35,7 +35,8 @@ void nfs_write_lp_file(msieve_obj *obj, factor_base_t *fb,
 	uint32 curr_relation;
 	uint32 num_relations;
 	hashtable_t unique_ideals;
-	uint32 tmp_factors[TEMP_FACTOR_LIST_SIZE];
+	uint8 tmp_factors[COMPRESSED_P_MAX_SIZE];
+	uint32 tmp_factor_size;
 	relation_t tmp_relation;
 	relation_ideal_t packed_ideal;
 	uint32 have_skip_list = (pass == 0);
@@ -102,7 +103,8 @@ void nfs_write_lp_file(msieve_obj *obj, factor_base_t *fb,
 
 		/* read it in */
 
-		status = nfs_read_relation(buf, fb, &tmp_relation, 1);
+		status = nfs_read_relation(buf, fb, &tmp_relation, 
+						&tmp_factor_size, 1);
 
 		if (status == 0) {
 			relation_lp_t tmp_ideal;
