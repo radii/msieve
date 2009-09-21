@@ -619,7 +619,11 @@ void filter_merge_full(msieve_obj *obj, merge_t *merge, uint32 min_cycles) {
 	logprintf(obj, "found %u cycles, need %u\n", 
 				num_cycles, target_cycles);
 
-	if(num_cycles < 0.8 * target_cycles) exit(0);
+	if (num_cycles < 0.8 * target_cycles) {
+		logprintf(obj, "too few cycles, matrix probably "
+				"cannot build\n");
+		exit(-1);
+	}
 
 	qsort(relset_array, (size_t)num_cycles, 
 			sizeof(relation_set_t), compare_relsets);
