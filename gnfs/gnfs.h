@@ -254,16 +254,15 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
    values of this structure. 
    
    Every ideal has a prime p and root r. To save space
-   but still allow 32-bit p we store (p-1)/2 (thanks to
+   but still allow 48-bit p we store (p-1)/2 (thanks to
    Alex Kruppa for this trick) */
 
-typedef union {
-	struct {
-		uint32 compressed_p : 31;  /* (p - 1) / 2 */
-		uint32 rat_or_alg : 1;     /* RATIONAL_IDEAL, ALGEBRAIC_IDEAL */
-		uint32 r;                  /* root for ideal */
-	} i;
-	uint32 blob[2];
+typedef struct {
+	uint32 p_lo;  		/* (p - 1) / 2 (low 32 bits) */
+	uint32 r_lo;            /* root for ideal (low 32 bits) */
+	uint16 p_hi : 15;       /* (p - 1) / 2 (high 16 bits) */
+	uint16 rat_or_alg : 1;  /* RATIONAL_IDEAL, ALGEBRAIC_IDEAL */
+	uint16 r_hi;            /* root for ideal (high 16 bits) */
 } ideal_t;
 
 /* factors of relations are stored in a runlength-
@@ -273,7 +272,7 @@ typedef union {
    for the factor */
 
 static INLINE uint32 compress_p(uint8 *array, 
-				uint32 p, uint32 offset) {
+				uint64 p, uint32 offset) {
 	do {
 		array[offset++] = p & 0x7f;
 		p >>= 7;
@@ -283,11 +282,11 @@ static INLINE uint32 compress_p(uint8 *array,
 	return offset;
 }
 
-static INLINE uint32 decompress_p(uint8 *array, uint32 *offset_in) {
+static INLINE uint64 decompress_p(uint8 *array, uint32 *offset_in) {
 
 	uint32 offset = *offset_in;
 	uint8 next_byte = array[offset++];
-	uint32 p = next_byte & 0x7f;
+	uint64 p = next_byte & 0x7f;
 	uint32 shift = 7;
 
 	while (!(next_byte & 0x80)) {

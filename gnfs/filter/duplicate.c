@@ -406,12 +406,15 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 			uint32 num_a = tmp_rel.num_factors_a;
 
 			for (i = array_size = 0; i < num_r + num_a; i++) {
-				uint32 p = decompress_p(tmp_rel.factors, 
+				uint64 p = decompress_p(tmp_rel.factors, 
 							&array_size);
 
 				/* add the factors of tmp_rel to the 
-				   counts of primes */
+				   counts of (32-bit) primes */
 		   
+				if (p >= ((uint64)1 << 32))
+					continue;
+
 				prime_bins[p / BIN_SIZE]++;
 
 				/* schedule the adding of a free relation

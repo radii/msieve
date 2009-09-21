@@ -102,6 +102,9 @@ extern "C" {
 	#define INLINE __inline
 	#define getpid _getpid
 
+	int64 strtoll(char *nptr, char **endptr, int base);
+	uint64 strtoull(char *nptr, char **endptr, int base);
+
 #elif !defined(RS6K)
 	#define INLINE inline
 

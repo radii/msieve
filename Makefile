@@ -97,6 +97,7 @@ COMMON_SRCS = \
 	common/prime_delta.c \
 	common/prime_sieve.c \
 	common/savefile.c \
+	common/strtoll.c \
 	common/util.c
 
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)

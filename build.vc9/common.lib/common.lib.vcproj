@@ -387,6 +387,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\common\strtoll.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\common\filter\singleton.c"
 				>
 			</File>

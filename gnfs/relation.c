@@ -16,7 +16,7 @@ $Id$
 #include "gnfs.h"
 
 /*--------------------------------------------------------------------*/
-static uint32 divide_factor_out(mp_t *polyval, uint32 p, 
+static uint32 divide_factor_out(mp_t *polyval, uint64 p, 
 				uint8 *factors, uint32 *array_size_in,
 				uint32 *num_factors, uint32 compress) {
 
@@ -28,9 +28,28 @@ static uint32 divide_factor_out(mp_t *polyval, uint32 p,
 	uint32 array_size = *array_size_in;
 	uint32 multiplicity = 0;
 
-	while (mp_mod_1(polyval, p) == 0) {
-		mp_divrem_1(polyval, p, polyval);
-		multiplicity++;
+	if (p < ((uint64)1 << 32)) {
+		while (mp_mod_1(polyval, p) == 0) {
+			mp_divrem_1(polyval, p, polyval);
+			multiplicity++;
+		}
+	}
+	else {
+		mp_t q, r, den;
+
+		mp_clear(&den);
+		den.nwords = 2;
+		den.val[0] = (uint32)p;
+		den.val[1] = (uint32)(p >> 32);
+
+		while (1) {
+			mp_divrem(polyval, &den, &q, &r);
+			if (mp_is_zero(&q) || !mp_is_zero(&r))
+				break;
+
+			mp_copy(&q, polyval);
+			multiplicity++;
+		}
 	}
 	if (i + multiplicity >= TEMP_FACTOR_LIST_SIZE)
 		return 1;
@@ -59,7 +78,8 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	/* note that only the polynomials within the factor
 	   base need to be initialized */
 
-	uint32 i, p;
+	uint32 i; 
+	uint64 p;
 	int64 a, atmp;
 	uint32 b;
 	char *tmp, *next_field;
@@ -71,7 +91,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 
 	/* read the relation coordinates */
 
-	a = (int64)strtod(buf, &next_field);
+	a = strtoll(buf, &next_field, 10);
 	tmp = next_field;
 	if (tmp[0] != ',' || !isdigit(tmp[1]))
 		return -1;
@@ -92,22 +112,27 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 		uint32 roots[MAX_POLY_DEGREE];
 		uint32 high_coeff, num_roots;
 
-		p = (uint32)a;
-		if (p == 0)
+		/* note that the finite field rootfinder must
+		   be given p < 2^32 */
+
+		p = (uint64)a;
+		if (p == 0 || p >= ((uint64)1 << 32))
 			return -2;
 
 		num_roots = poly_get_zeros(roots, &fb->rfb.poly,
-						p, &high_coeff, 0);
+						(uint32)p, &high_coeff, 0);
 		if (num_roots != fb->rfb.poly.degree || high_coeff == 0)
 			return -3;
 		array_size = compress_p(factors, p, array_size);
 
 		num_roots = poly_get_zeros(roots, &fb->afb.poly,
-						p, &high_coeff, 0);
+						(uint32)p, &high_coeff, 0);
 		if (num_roots != fb->afb.poly.degree || high_coeff == 0)
 			return -4;
-		for (i = 0; i < num_roots; i++)
-			array_size = compress_p(factors, roots[i], array_size);
+		for (i = 0; i < num_roots; i++) {
+			array_size = compress_p(factors, (uint64)roots[i], 
+						array_size);
+		}
 
 		r->num_factors_r = 1;
 		r->num_factors_a = num_roots;
@@ -139,7 +164,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 
 	if (isxdigit(tmp[1])) {
 		do {
-			p = strtoul(tmp + 1, &next_field, 16);
+			p = strtoull(tmp + 1, &next_field, 16);
 			if (p > 1 && divide_factor_out(&polyval.num, p, 
 						factors, &array_size,
 						&num_factors_r, compress)) {
@@ -161,8 +186,8 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	for (i = p = 0; !mp_is_one(&polyval.num) && p < 1000; i++) {
 
 		p += prime_delta[i];
-		if (divide_factor_out(&polyval.num, p, factors, &array_size,
-					&num_factors_r, compress)) {
+		if (divide_factor_out(&polyval.num, (uint32)p, factors, 
+				&array_size, &num_factors_r, compress)) {
 			return -10;
 		}
 	}
@@ -178,7 +203,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 
 	if (isxdigit(tmp[1])) {
 		do {
-			p = strtoul(tmp + 1, &next_field, 16);
+			p = strtoull(tmp + 1, &next_field, 16);
 			if (p > 1 && divide_factor_out(&polyval.num, p, 
 						factors, &array_size,
 						&num_factors_a, compress)) {
@@ -194,9 +219,8 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	for (i = p = 0; !mp_is_one(&polyval.num) && p < 1000; i++) {
 
 		p += prime_delta[i];
-		if (divide_factor_out(&polyval.num, p,
-					factors, &array_size,
-					&num_factors_a, compress)) {
+		if (divide_factor_out(&polyval.num, (uint32)p, factors, 
+				&array_size, &num_factors_a, compress)) {
 			return -14;
 		}
 	}
@@ -220,20 +244,23 @@ uint32 find_large_ideals(relation_t *rel,
 	uint32 num_factors_r;
 	int64 a = rel->a;
 	uint32 b = rel->b;
-	uint32 p;
 
 	out->gf2_factors = 0;
 
 	/* handle free relations */
 
 	if (b == 0) {
-		p = decompress_p(rel->factors, &array_size);
+		uint64 p = decompress_p(rel->factors, &array_size);
+		uint64 compressed_p = (p - 1) / 2;
 
 		if (p > filtmin_r) {
 			ideal_t *ideal = out->ideal_list + num_ideals;
-			ideal->i.r = p;
-			ideal->i.compressed_p = (p - 1) / 2;
-			ideal->i.rat_or_alg = RATIONAL_IDEAL;
+
+			ideal->p_lo = (uint32)compressed_p;
+			ideal->p_hi = (uint32)(compressed_p >> 32);
+			ideal->rat_or_alg = RATIONAL_IDEAL;
+			ideal->r_lo = (uint32)p;
+			ideal->r_hi = (uint32)(p >> 32);
 			num_ideals++;
 		}
 		else if (p > MAX_PACKED_PRIME) {
@@ -244,10 +271,14 @@ uint32 find_large_ideals(relation_t *rel,
 			for (i = 0; i < rel->num_factors_a; i++) {
 				ideal_t *ideal = out->ideal_list + 
 							num_ideals + i;
-				ideal->i.r = decompress_p(rel->factors,
+				uint64 root = decompress_p(rel->factors,
 							&array_size);
-				ideal->i.compressed_p = (p - 1) / 2;
-				ideal->i.rat_or_alg = ALGEBRAIC_IDEAL;
+
+				ideal->p_lo = (uint32)compressed_p;
+				ideal->p_hi = (uint32)(compressed_p >> 32);
+				ideal->rat_or_alg = ALGEBRAIC_IDEAL;
+				ideal->r_lo = (uint32)root;
+				ideal->r_hi = (uint32)(root >> 32);
 			}
 			num_ideals += rel->num_factors_a;
 		}
@@ -264,16 +295,19 @@ uint32 find_large_ideals(relation_t *rel,
 	num_factors_r = rel->num_factors_r;
 
 	for (i = 0; i < num_factors_r; i++) {
-		uint32 p = decompress_p(rel->factors, &array_size);
+		uint64 p = decompress_p(rel->factors, &array_size);
+		uint64 compressed_p = (p - 1) / 2;
 
 		/* if processing all the ideals, make up a
 		   separate unique entry for rational factors of -1 */
 
 		if (p == 0 && filtmin_r == 0) {
 			ideal_t *ideal = out->ideal_list + num_ideals;
-			ideal->i.compressed_p = 0x7fffffff;
-			ideal->i.rat_or_alg = RATIONAL_IDEAL;
-			ideal->i.r = (uint32)(-1);
+			ideal->p_lo = (uint32)(-1);
+			ideal->p_hi = 0x7fff;
+			ideal->rat_or_alg = RATIONAL_IDEAL;
+			ideal->r_lo = (uint32)(-1);
+			ideal->r_hi = 0xffff;
 			num_ideals++;
 			continue;
 		}
@@ -289,9 +323,11 @@ uint32 find_large_ideals(relation_t *rel,
 			if (num_ideals >= TEMP_FACTOR_LIST_SIZE)
 				return TEMP_FACTOR_LIST_SIZE + 1;
 
-			ideal->i.compressed_p = (p - 1) / 2;
-			ideal->i.rat_or_alg = RATIONAL_IDEAL;
-			ideal->i.r = p;
+			ideal->p_lo = (uint32)compressed_p;
+			ideal->p_hi = (uint32)(compressed_p >> 32);
+			ideal->rat_or_alg = RATIONAL_IDEAL;
+			ideal->r_lo = (uint32)p;
+			ideal->r_hi = (uint32)(p >> 32);
 			num_ideals++;
 		}
 		else if (p > MAX_PACKED_PRIME) {
@@ -308,7 +344,9 @@ uint32 find_large_ideals(relation_t *rel,
 	/* repeat for the large algebraic ideals */
 
 	for (i = 0; i < (uint32)rel->num_factors_a; i++) {
-		uint32 p = decompress_p(rel->factors, &array_size);
+		uint64 p = decompress_p(rel->factors, &array_size);
+		uint64 compressed_p = (p - 1) / 2;
+
 		if (p > filtmin_a) {
 			ideal_t *ideal = out->ideal_list + num_ideals;
 			uint32 bmodp;
@@ -320,20 +358,32 @@ uint32 find_large_ideals(relation_t *rel,
 
 			bmodp = b % p;
 			if (bmodp == 0) {
-				ideal->i.r = p;
+				ideal->r_lo = (uint32)p;
+				ideal->r_hi = (uint32)(p >> 32);
 			}
 			else {
-				uint32 root;
+				uint64 root;
 				int64 mapped_a = a % (int64)p;
 				if (mapped_a < 0)
 					mapped_a += p;
-				root = (uint32)mapped_a;
-				root = mp_modmul_1(root, 
-						mp_modinv_1(bmodp, p), p);
-				ideal->i.r = root;
+
+				root = (uint64)mapped_a;
+				if (p < ((uint64)1 << 32)) {
+					root = mp_modmul_1((uint32)root, 
+						    mp_modinv_1(bmodp, 
+						    	(uint32)p), (uint32)p);
+				}
+				else {
+					root = mp_modmul_2(root, 
+						    mp_modinv_2(bmodp, p), p);
+				}
+				ideal->r_lo = (uint32)root;
+				ideal->r_hi = (uint32)(root >> 32);
+
 			}
-			ideal->i.compressed_p = (p - 1) / 2;
-			ideal->i.rat_or_alg = ALGEBRAIC_IDEAL;
+			ideal->p_lo = (uint32)compressed_p;
+			ideal->p_hi = (uint32)(compressed_p >> 32);
+			ideal->rat_or_alg = ALGEBRAIC_IDEAL;
 			num_ideals++;
 		}
 		else if (p > MAX_PACKED_PRIME) {

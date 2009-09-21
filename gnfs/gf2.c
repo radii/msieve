@@ -38,6 +38,9 @@ $Id$
 #endif
 
 /*------------------------------------------------------------------*/
+static const uint64 ideal_minus_one = 
+			((uint64)0x7fff << 32 | (uint32)(-1));
+
 static int compare_ideals(const void *x, const void *y) {
 	
 	/* used to determine the ordering of two ideals.
@@ -49,31 +52,34 @@ static int compare_ideals(const void *x, const void *y) {
 
 	ideal_t *k = (ideal_t *)x;
 	ideal_t *t = (ideal_t *)y;
+	uint64 p_k = (uint64)k->p_hi << 32 | k->p_lo;
+	uint64 p_t = (uint64)t->p_hi << 32 | t->p_lo;
+	uint64 r_k, r_t;
 
-	if (k->i.compressed_p == 0x7fffffff ||
-	    t->i.compressed_p == 0x7fffffff) {
-		if (k->i.compressed_p == 0x7fffffff &&
-		    t->i.compressed_p != 0x7fffffff)
+	if (p_k == ideal_minus_one || p_t == ideal_minus_one) {
+		if (p_k == ideal_minus_one && p_t != ideal_minus_one)
 			return -1;
-		else if (k->i.compressed_p != 0x7fffffff &&
-		         t->i.compressed_p == 0x7fffffff)
+		if (p_k != ideal_minus_one && p_t == ideal_minus_one)
 			return 1;
 		return 0;
 	}
 
-	if (k->i.compressed_p < t->i.compressed_p)
+	if (p_k < p_t)
 		return -1;
-	if (k->i.compressed_p > t->i.compressed_p)
+	if (p_k > p_t)
 		return 1;
 		
-	if (k->i.r < t->i.r)
+	r_k = (uint64)k->r_hi << 32 | k->r_lo;
+	r_t = (uint64)t->r_hi << 32 | t->r_lo;
+
+	if (r_k < r_t)
 		return -1;
-	if (k->i.r > t->i.r)
+	if (r_k > r_t)
 		return 1;
 
-	if (k->i.rat_or_alg < t->i.rat_or_alg)
+	if (k->rat_or_alg < t->rat_or_alg)
 		return -1;
-	if (k->i.rat_or_alg > t->i.rat_or_alg)
+	if (k->rat_or_alg > t->rat_or_alg)
 		return 1;
 		
 	return 0;
@@ -100,9 +106,11 @@ static ideal_t *fill_small_ideals(factor_base_t *fb,
 
 	/* fill in the rational ideal of -1 */
 
-	small_ideals[0].i.rat_or_alg = RATIONAL_IDEAL;
-	small_ideals[0].i.compressed_p = 0x7fffffff;
-	small_ideals[0].i.r = (uint32)(-1);
+	small_ideals[0].rat_or_alg = RATIONAL_IDEAL;
+	small_ideals[0].p_lo = (uint32)(-1);
+	small_ideals[0].p_hi = 0x7fff;
+	small_ideals[0].r_lo = (uint32)(-1);
+	small_ideals[0].r_hi = 0xffff;
 	num_ideals = 1;
 
 	/* for each small prime */
@@ -139,15 +147,19 @@ static ideal_t *fill_small_ideals(factor_base_t *fb,
 			break;
 
 		if (num_roots_r > 0) {
-			small_ideals[num_ideals].i.rat_or_alg = RATIONAL_IDEAL;
-			small_ideals[num_ideals].i.compressed_p = (p - 1) / 2;
-			small_ideals[num_ideals].i.r = p;
+			small_ideals[num_ideals].rat_or_alg = RATIONAL_IDEAL;
+			small_ideals[num_ideals].p_lo = (p - 1) / 2;
+			small_ideals[num_ideals].p_hi = 0;
+			small_ideals[num_ideals].r_lo = p;
+			small_ideals[num_ideals].r_hi = 0;
 			num_ideals++;
 		}
 		for (j = 0; j < num_roots_a; j++) {
-			small_ideals[num_ideals].i.rat_or_alg = ALGEBRAIC_IDEAL;
-			small_ideals[num_ideals].i.compressed_p = (p - 1) / 2;
-			small_ideals[num_ideals].i.r = roots_a[j];
+			small_ideals[num_ideals].rat_or_alg = ALGEBRAIC_IDEAL;
+			small_ideals[num_ideals].p_lo = (p - 1) / 2;
+			small_ideals[num_ideals].p_hi = 0;
+			small_ideals[num_ideals].r_lo = roots_a[j];
+			small_ideals[num_ideals].r_hi = 0;
 			num_ideals++;
 		}
 	}
@@ -184,9 +196,9 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 		uint32 num_a = r->num_factors_a;
 		uint32 array_size = 0;
 		for (j = 0; j < num_r + num_a; j++) {
-			uint32 p = decompress_p(r->factors, &array_size);
-			if (j >= num_r)
-				min_qcb_ideal = MAX(min_qcb_ideal, p);
+			uint64 p = decompress_p(r->factors, &array_size);
+			if (j >= num_r && p < ((uint64)1 << 32))
+				min_qcb_ideal = MAX(min_qcb_ideal, (uint32)p);
 		}
 	}
 	min_qcb_ideal = MIN(min_qcb_ideal, (uint32)(-1) - 50000);
@@ -376,7 +388,7 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 	max_small_ideal = 0;
 	if (num_small_ideals > 0) {
 		max_small_ideal = small_ideals[
-					num_small_ideals - 1].i.compressed_p;
+					num_small_ideals - 1].p_lo;
 	}
 
 	hashtable_init(&unique_ideals, (uint32)WORDS_IN(ideal_t), 0);
@@ -408,9 +420,9 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 
 		for (j = k = 0; j < num_merged; j++) {
 			ideal_t *ideal = merged_ideals + j;
-			uint32 p = ideal->i.compressed_p;
+			uint64 p = (uint64)ideal->p_hi << 32 | ideal->p_lo;
 
-			if (max_small_ideal > 0 && (p == 0x7fffffff || 
+			if (max_small_ideal > 0 && (p == ideal_minus_one || 
 					p <= max_small_ideal) ) {
 				/* dense ideal; store in compressed format */
 				ideal_t *loc = (ideal_t *)bsearch(ideal, 
@@ -421,9 +433,8 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 				uint32 idx = QCB_SIZE + 1 +
 						(loc - small_ideals);
 				if (loc == NULL) {
-					printf("error: unexpected dense ideal "
-						"(%08x,%08x) found\n",
-						ideal->blob[0], ideal->blob[1]);
+					printf("error: unexpected dense "
+						"ideal found\n");
 					exit(-1);
 				}
 				dense_rows[idx / 32] |= 1 << (idx % 32);

@@ -114,8 +114,8 @@ static void eval_poly_derivative(mp_poly_t *poly,
 
 /*--------------------------------------------------------------------*/
 typedef struct {
-	uint32 p;
-	uint32 count;
+	uint64 p;
+	uint64 count;
 } rat_prime_t;
 
 static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
@@ -131,13 +131,14 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 	/* count up the number of times each prime factor in
 	   rlist occurs */
 
-	hashtable_init(&h, (uint32)WORDS_IN(rat_prime_t), 1);
+	hashtable_init(&h, (uint32)WORDS_IN(rat_prime_t), 
+				(uint32)WORDS_IN(uint64));
 
 	for (i = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
 
 		for (j = array_size = 0; j < r->num_factors_r; j++) {
-			uint32 p = decompress_p(r->factors, &array_size);
+			uint64 p = decompress_p(r->factors, &array_size);
 			curr = (rat_prime_t *)hashtable_find(&h, &p, NULL,
 							    &already_seen);
 			if (!already_seen)
@@ -150,20 +151,44 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 	/* verify all such counts are even, and form the 
 	   rational square root */
 
-	mp_clear(&base); base.nwords = 1;
-	mp_clear(&exponent); exponent.nwords = 1;
+	mp_clear(&base);
+	mp_clear(&exponent);
 	mp_clear(sqrt_r); sqrt_r->nwords = sqrt_r->val[0] = 1;
 	num_primes = hashtable_get_num(&h);
 	curr = hashtable_get_first(&h);
 
 	for (i = 0; i < num_primes; i++) {
-		if (curr->count % 2) {
+		uint64 p = curr->p;
+		uint64 count = curr->count;
+
+		if (count % 2) {
 			status = 1;
 			break;
 		}
-		if (curr->p && curr->count) {
-			base.val[0] = curr->p;
-			exponent.val[0] = curr->count / 2;
+		if (p > 0 && count > 0) {
+			if (p < ((uint64)1 << 32)) {
+				base.val[0] = (uint32)p;
+				base.val[1] = 0;
+				base.nwords = 1;
+			}
+			else {
+				base.val[0] = (uint32)p;
+				base.val[1] = (uint32)(p >> 32);
+				base.nwords = 2;
+			}
+
+			count = count / 2;
+			if (count < ((uint64)1 << 32)) {
+				exponent.val[0] = (uint32)count;
+				exponent.val[1] = 0;
+				exponent.nwords = 1;
+			}
+			else {
+				exponent.val[0] = (uint32)count;
+				exponent.val[1] = (uint32)(count >> 32);
+				exponent.nwords = 2;
+			}
+
 			mp_expo(&base, &exponent, n, &tmp);
 			mp_modmul(sqrt_r, &tmp, n, sqrt_r);
 		}
@@ -175,6 +200,10 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 }
 
 /*--------------------------------------------------------------------*/
+/* we will not do any computations involving the count,
+   only verifying that it is even. Thus we can get away
+   with storing only the low word of the count */
+
 typedef struct {
 	ideal_t ideal;
 	uint32 count;
@@ -207,7 +236,7 @@ static uint32 verify_alg_ideal_powers(relation_t *rlist,
 		for (j = 0; j < rlp.ideal_count; j++) {
 			ideal_t *curr_ideal = rlp.ideal_list + j;
 
-			if (curr_ideal->i.rat_or_alg == RATIONAL_IDEAL)
+			if (curr_ideal->rat_or_alg == RATIONAL_IDEAL)
 				continue;
 
 			curr = (alg_prime_t *)hashtable_find(&h, curr_ideal, 
