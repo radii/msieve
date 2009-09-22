@@ -50,7 +50,7 @@ strtoull(const char *string, char **endptr, int base) {
 		p++;
 		negative = 1;
 	} 
-	else if (*p == '+')
+    else if (*p == '+') {
 		p++;
 	}
 
@@ -157,7 +157,7 @@ strtoull(const char *string, char **endptr, int base) {
 			if ( result < shifted )
 				goto overflow;
 
-			anyDigits = 1;
+			anydigits = 1;
 			p++;
 		}
 	}
