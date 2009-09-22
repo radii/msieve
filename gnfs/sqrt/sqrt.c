@@ -166,28 +166,18 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 			break;
 		}
 		if (p > 0 && count > 0) {
-			if (p < ((uint64)1 << 32)) {
-				base.val[0] = (uint32)p;
-				base.val[1] = 0;
+			base.val[0] = (uint32)p;
+			base.val[1] = (uint32)(p >> 32);
+			base.nwords = 2;
+			if (p < ((uint64)1 << 32))
 				base.nwords = 1;
-			}
-			else {
-				base.val[0] = (uint32)p;
-				base.val[1] = (uint32)(p >> 32);
-				base.nwords = 2;
-			}
 
 			count = count / 2;
-			if (count < ((uint64)1 << 32)) {
-				exponent.val[0] = (uint32)count;
-				exponent.val[1] = 0;
+			exponent.val[0] = (uint32)count;
+			exponent.val[1] = (uint32)(count >> 32);
+			exponent.nwords = 2;
+			if (count < ((uint64)1 << 32))
 				exponent.nwords = 1;
-			}
-			else {
-				exponent.val[0] = (uint32)count;
-				exponent.val[1] = (uint32)(count >> 32);
-				exponent.nwords = 2;
-			}
 
 			mp_expo(&base, &exponent, n, &tmp);
 			mp_modmul(sqrt_r, &tmp, n, sqrt_r);

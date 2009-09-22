@@ -38,8 +38,7 @@ $Id$
 #endif
 
 /*------------------------------------------------------------------*/
-static const uint64 ideal_minus_one = 
-			((uint64)0x7fff << 32 | (uint32)(-1));
+#define IDEAL_MINUS_ONE  ((uint64)0x7fff << 32 | (uint32)(-1))
 
 static int compare_ideals(const void *x, const void *y) {
 	
@@ -56,10 +55,10 @@ static int compare_ideals(const void *x, const void *y) {
 	uint64 p_t = (uint64)t->p_hi << 32 | t->p_lo;
 	uint64 r_k, r_t;
 
-	if (p_k == ideal_minus_one || p_t == ideal_minus_one) {
-		if (p_k == ideal_minus_one && p_t != ideal_minus_one)
+	if (p_k == IDEAL_MINUS_ONE || p_t == IDEAL_MINUS_ONE) {
+		if (p_k == IDEAL_MINUS_ONE && p_t != IDEAL_MINUS_ONE)
 			return -1;
-		if (p_k != ideal_minus_one && p_t == ideal_minus_one)
+		if (p_k != IDEAL_MINUS_ONE && p_t == IDEAL_MINUS_ONE)
 			return 1;
 		return 0;
 	}
@@ -422,7 +421,7 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 			ideal_t *ideal = merged_ideals + j;
 			uint64 p = (uint64)ideal->p_hi << 32 | ideal->p_lo;
 
-			if (max_small_ideal > 0 && (p == ideal_minus_one || 
+			if (max_small_ideal > 0 && (p == IDEAL_MINUS_ONE || 
 					p <= max_small_ideal) ) {
 				/* dense ideal; store in compressed format */
 				ideal_t *loc = (ideal_t *)bsearch(ideal, 
