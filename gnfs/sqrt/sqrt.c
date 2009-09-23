@@ -169,14 +169,14 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 			base.val[0] = (uint32)p;
 			base.val[1] = (uint32)(p >> 32);
 			base.nwords = 2;
-			if (p < ((uint64)1 << 32))
+			if (base.val[1] == 0)
 				base.nwords = 1;
 
 			count = count / 2;
 			exponent.val[0] = (uint32)count;
 			exponent.val[1] = (uint32)(count >> 32);
 			exponent.nwords = 2;
-			if (count < ((uint64)1 << 32))
+			if (exponent.val[1] == 0)
 				exponent.nwords = 1;
 
 			mp_expo(&base, &exponent, n, &tmp);
