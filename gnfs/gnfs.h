@@ -291,7 +291,7 @@ static INLINE uint64 decompress_p(uint8 *array, uint32 *offset_in) {
 
 	while (!(next_byte & 0x80)) {
 		next_byte = array[offset++];
-		p |= (next_byte & 0x7f) << shift;
+		p |= ((uint64)(next_byte & 0x7f)) << shift;
 		shift += 7;
 	} 
 	
