@@ -39,7 +39,7 @@ void get_random_seeds(uint32 *seed1, uint32 *seed2) {
 	   should have two unique, non-correlated seeds
 	   chosen for it */
 
-#ifndef WIN32
+#if !defined(WIN32) && !defined(_WIN64)
 
 	FILE *rand_device = fopen("/dev/urandom", "r");
 
