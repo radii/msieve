@@ -14,7 +14,7 @@ $Id$
 
 #include "stage2.h"
 
-#if 0
+#if 1
 #define CHECK
 #endif
 
@@ -269,7 +269,7 @@ poly_stage2_run(poly_stage2_t *data, mpz_t high_coeff, mpz_t p,
 			data->gmp_N, degree) != 1)
 		goto finished;
 
-	printf("%le %le\n", pol_norm, data->max_norm);
+//	printf("%le %le\n", pol_norm, data->max_norm);
 #endif
 	if (pol_norm > data->max_norm)
 		goto finished;

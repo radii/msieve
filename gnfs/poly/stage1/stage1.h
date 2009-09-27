@@ -21,6 +21,10 @@ $Id$
 extern "C" {
 #endif
 
+#if MAX_POLY_DEGREE < 6
+#error "supported poly degree must be at least 6"
+#endif
+
 #define MULTIPLIER 60	/* 2*2*3*5 */
 
 /*-----------------------------------------------------------------------*/
@@ -42,27 +46,14 @@ void stage1_bounds_update(bounds_t *bounds, double N,
 
 /*-----------------------------------------------------------------------*/
 
-/* data for one polynomial */
-
 typedef struct {
+
+	uint32 degree;
+
 	mpz_t high_coeff; 
+	mpz_t N; 
 	mpz_t trans_N;
 	mpz_t trans_m0;
-	double coeff_max;
-	double p_size_max;
-
-	double sieve_size;
-} curr_poly_t;
-
-/* data for a batch of polynomials */
-
-#define POLY_BATCH_SIZE 50
-
-typedef struct {
-	uint32 num_poly;
-	curr_poly_t batch[POLY_BATCH_SIZE];
-
-	mpz_t N; 
 	mpz_t m0; 
 	mpz_t p;
 	mpz_t tmp1;
@@ -71,57 +62,36 @@ typedef struct {
 	mpz_t tmp4;
 	mpz_t tmp5;
 
-	uint32 degree;
+	double coeff_max;
+	double p_size_max;
+	double sieve_size;
+
 	stage1_callback_t callback;
 	void *callback_data;
-} poly_batch_t;
+} poly_search_t;
 
-void poly_batch_init(poly_batch_t *poly, poly_stage1_t *data);
-void poly_batch_free(poly_batch_t *poly);
-
-/*-----------------------------------------------------------------------*/
-typedef struct {
-	uint16 which_poly;
-	uint32 start_offset;
-} index_t;
-
-typedef struct {
-	uint32 p;
-	uint16 num_poly;
-	uint16 num_roots;
-	uint32 index_start_offset;
-} p_entry_t;
-
-typedef struct {
-	uint32 num_entries;
-	uint32 num_small_entries;
-	uint32 num_entries_alloc;
-	p_entry_t *entries;
-
-	uint32 num_index;
-	uint32 num_index_alloc;
-	index_t *index;
-
-	uint32 num_roots;
-	uint32 num_roots_alloc;
-	uint64 *roots;
-} p_batch_t;
-
-void p_batch_init(p_batch_t *pbatch);
-void p_batch_free(p_batch_t *pbatch);
-void p_batch_reset(p_batch_t *pbatch);
-void p_batch_add(p_batch_t *pbatch, uint64 p, uint32 poly_idx,
-			uint32 num_roots, mpz_t *roots);
+void poly_search_init(poly_search_t *poly, poly_stage1_t *data);
+void poly_search_free(poly_search_t *poly);
 
 /*-----------------------------------------------------------------------*/
-#define MAX_P_FACTORS 6
+
+/* Rational leading coeffs of NFS polynomials are assumed 
+   to be the product of two groups of factors p; each group 
+   can be up to 64 bits in size and the product of (powers 
+   of) up to MAX_P_FACTORS distinct primes */
+
+#define MAX_P_FACTORS 4
+
+#define MAX_ROOTS 8
+
+/*-----------------------------------------------------------------------*/
 
 typedef struct {
 	uint32 p;
 	uint32 r;
 	uint8 log_p;
-	uint8 max_roots;
-	uint32 root_offsets[POLY_BATCH_SIZE + 1];
+	uint8 num_roots;
+	uint32 roots[MAX_POLY_DEGREE];
 } sieve_prime_t;
 
 typedef struct {
@@ -131,45 +101,48 @@ typedef struct {
 } sieve_prime_list_t;
 
 typedef struct {
-	uint8 *sieve_block;
-	uint64 base;
-	uint32 curr_offset;
 
+	uint32 degree;
+	uint64 p_min, p_max;
+	uint32 num_roots_min;
+	uint32 num_roots_max;
+
+	uint32 allow_prime_p;
+	prime_sieve_t prime_sieve;
+	uint64 next_prime_p;
+
+	uint8 *sieve_block;
+	uint32 curr_offset;
 	sieve_prime_list_t good_primes;
 	sieve_prime_list_t bad_primes;
+	uint64 next_composite_p;
 
-	uint32 num_small_roots;
-	uint32 num_small_roots_alloc;
-	uint32 *small_roots;
-
-	uint32 max_roots;
-	mpz_t *roots;
-
-	mpz_t p, p2, nmodp2, m0, tmp1, tmp2;
-
-	mpz_t accum[MAX_P_FACTORS + 1];
-
+	mpz_t p, p2, m0, nmodp2, tmp1, tmp2;
+	mpz_t accum[MAX_POLY_DEGREE + 1];
+	mpz_t roots[MAX_ROOTS];
 } sieve_fb_t;
 
-void sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
+void sieve_fb_init(sieve_fb_t *s, poly_search_t *poly,
 			uint32 factor_min, uint32 factor_max);
 
 void sieve_fb_free(sieve_fb_t *s);
 
-void sieve_fb_reset(sieve_fb_t *s, uint64 base);
+void sieve_fb_reset(sieve_fb_t *s, uint64 p_min, uint64 p_max,
+			uint32 num_roots_min, uint32 num_roots_max);
 
-uint64 sieve_fb_next(sieve_fb_t *s, poly_batch_t *poly, 
-			p_batch_t *pbatch, uint64 limit,
-			uint32 num_roots_min);
+typedef void (*root_callback)(uint64 p, uint32 num_roots,
+				mpz_t *roots, void *extra);
+
+uint64 sieve_fb_next(sieve_fb_t *s, 
+			poly_search_t *poly, 
+			root_callback callback,
+			void *extra);
 
 /*-----------------------------------------------------------------------*/
 
 /* main search routines */
 
-#define MAX_P_BITS 32
-#define MAX_P ((uint64)1 << MAX_P_BITS)
-
-void sieve_lattice(msieve_obj *obj, poly_batch_t *poly, 
+void sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 			uint32 small_fb_max, uint32 large_fb_min, 
 			uint32 large_fb_max, uint32 deadline);
 

@@ -17,13 +17,15 @@ $Id$
 #define SIEVE_SIZE 16384
 #define LOG_SCALE 3.5
 
-#if 0
+#if 1
 #define CHECK
 #endif
 
-#if MAX_P_FACTORS > 6
+#if MAX_P_FACTORS > 4
 #error "too many factors"
 #endif
+
+#define PRIME_P_LIMIT 0xfffff000
 
 /*------------------------------------------------------------------------*/
 static uint32
@@ -46,23 +48,22 @@ sieve_fb_free(sieve_fb_t *s)
 {
 	uint32 i;
 
+	free_prime_sieve(&s->prime_sieve);
+
 	free(s->sieve_block);
 	free(s->good_primes.primes);
 	free(s->bad_primes.primes);
-	free(s->small_roots);
-
-	for (i = 0; i < s->max_roots; i++)
-		mpz_init(s->roots[i]);
-	free(s->roots);
-
+	
 	mpz_clear(s->p);
 	mpz_clear(s->p2);
-	mpz_clear(s->nmodp2);
 	mpz_clear(s->m0);
+	mpz_clear(s->nmodp2);
 	mpz_clear(s->tmp1);
 	mpz_clear(s->tmp2);
-	for (i = 0; i < MAX_P_FACTORS + 1; i++)
+	for (i = 0; i <= MAX_POLY_DEGREE; i++)
 		mpz_clear(s->accum[i]);
+	for (i = 0; i < MAX_ROOTS; i++)
+		mpz_clear(s->roots[i]);
 }
 
 /*------------------------------------------------------------------------*/
@@ -83,53 +84,69 @@ sieve_add_prime(sieve_prime_list_t *list, uint32 p, uint32 logval)
 }
 
 /*------------------------------------------------------------------------*/
-void
-sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
-		uint32 factor_min, uint32 factor_max)
+static uint32
+get_prime_roots(poly_search_t *poly, uint32 p, uint32 *roots)
 {
-	uint32 i, j, k;
 	mp_poly_t tmp_poly;
-	prime_sieve_t prime_sieve;
-	uint32 num_squarefree;
-	uint32 max_roots;
+	mp_t *low_coeff;
+	uint32 high_coeff;
 	uint32 degree = poly->degree;
 
-	memset(s, 0, sizeof(sieve_fb_t));
+	memset(&tmp_poly, 0, sizeof(mp_poly_t));
+	tmp_poly.degree = degree;
+	tmp_poly.coeff[degree].num.nwords = 1;
+	tmp_poly.coeff[degree].num.val[0] = p - 1;
+
+	if (mp_gcd_1(p, (uint32)mpz_tdiv_ui(
+			poly->high_coeff, (mp_limb_t)p)) > 1)
+		return 0;
+
+	low_coeff = &tmp_poly.coeff[0].num;
+	low_coeff->val[0] = mpz_tdiv_ui(poly->trans_N, (mp_limb_t)p);
+	if (low_coeff->val[0])
+		low_coeff->nwords = 1;
+
+	return poly_get_zeros(roots, &tmp_poly, 
+				p, &high_coeff, 0);
+}
+
+/*------------------------------------------------------------------------*/
+void
+sieve_fb_init(sieve_fb_t *s, poly_search_t *poly,
+		uint32 factor_min, uint32 factor_max)
+{
+	uint32 i;
+	prime_sieve_t prime_sieve;
+	uint32 num_squarefree;
 
 	if (factor_max <= factor_min)
 		return;
 
-	for (i = 1, max_roots = degree; i < MAX_P_FACTORS; i++)
-		max_roots *= degree;
+	memset(s, 0, sizeof(sieve_fb_t));
 
-	s->max_roots = max_roots;
-	s->roots = (mpz_t *)xmalloc(max_roots * sizeof(mpz_t));
-	for (i = 0; i < max_roots; i++)
-		mpz_init(s->roots[i]);
 	mpz_init(s->p);
 	mpz_init(s->p2);
-	mpz_init(s->nmodp2);
 	mpz_init(s->m0);
+	mpz_init(s->nmodp2);
 	mpz_init(s->tmp1);
 	mpz_init(s->tmp2);
-	for (i = 0; i < MAX_P_FACTORS + 1; i++)
+	for (i = 0; i <= MAX_POLY_DEGREE; i++)
 		mpz_init(s->accum[i]);
+	for (i = 0; i < MAX_ROOTS; i++)
+		mpz_init(s->roots[i]);
 
 	s->sieve_block = (uint8 *)xmalloc(SIEVE_SIZE * sizeof(uint8));
+	s->degree = poly->degree;
 	s->good_primes.num_primes = 0;
 	s->good_primes.num_primes_alloc = 500;
 	s->good_primes.primes = (sieve_prime_t *)xmalloc(
 					s->good_primes.num_primes_alloc * 
 					sizeof(sieve_prime_t));
 	s->bad_primes.num_primes = 0;
-	s->bad_primes.num_primes_alloc = 10;
+	s->bad_primes.num_primes_alloc = 100;
 	s->bad_primes.primes = (sieve_prime_t *)xmalloc(
 					s->bad_primes.num_primes_alloc * 
 					sizeof(sieve_prime_t));
-	s->num_small_roots = 0;
-	s->num_small_roots_alloc = 1000;
-	s->small_roots = (uint32 *)xmalloc(s->num_small_roots_alloc * 
-						sizeof(uint32));
 
 	init_prime_sieve(&prime_sieve, 2, factor_max);
 
@@ -144,9 +161,24 @@ sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
 			continue;
 		}
 		else {
-			uint32 logval = (uint32)(LOG_SCALE * log((double)p) / 
+			uint32 roots[MAX_POLY_DEGREE];
+			uint32 num_roots = get_prime_roots(poly, p, roots);
+
+			if (num_roots > 0) {
+				uint32 logval = (uint32)(LOG_SCALE * 
+							log((double)p) / 
 							M_LN2 + 0.5);
-			sieve_add_prime(&s->good_primes, p, logval);
+				sieve_prime_t *sp;
+
+				sieve_add_prime(&s->good_primes, p, logval);
+
+				sp = s->good_primes.primes +
+				     s->good_primes.num_primes - 1;
+				sp->num_roots = num_roots;
+				for (i = 0; i < num_roots; i++)
+					sp->roots[i] = roots[i];
+
+			}
 		}
 	}
 
@@ -171,64 +203,6 @@ sieve_fb_init(sieve_fb_t *s, poly_batch_t *poly,
 			}
 		}
 	}
-
-	memset(&tmp_poly, 0, sizeof(mp_poly_t));
-	tmp_poly.degree = degree;
-	tmp_poly.coeff[degree].num.nwords = 1;
-
-	for (i = 0; i < num_squarefree; i++) {
-
-		sieve_prime_t *curr_p = s->good_primes.primes + i;
-		uint32 p = curr_p->p;
-
-		curr_p->max_roots = 0;
-		tmp_poly.coeff[degree].num.val[0] = p - 1;
-
-		for (j = 0; j < poly->num_poly; j++) {
-
-			uint32 roots[MAX_POLY_DEGREE];
-			uint32 high_coeff;
-			uint32 num_roots = 0; 
-			curr_poly_t *curr_poly = poly->batch + j;
-
-			if (mp_gcd_1(p, (uint32)mpz_tdiv_ui(
-					curr_poly->high_coeff, 
-					(mp_limb_t)p)) == 1) {
-
-				mp_t *low_coeff = &tmp_poly.coeff[0].num;
-				low_coeff->val[0] = mpz_tdiv_ui(
-							curr_poly->trans_N, 
-							(mp_limb_t)p);
-				if (low_coeff->val[0])
-					low_coeff->nwords = 1;
-
-				num_roots = poly_get_zeros(roots, &tmp_poly, 
-							p, &high_coeff, 0);
-			}
-
-			curr_p->root_offsets[j] = s->num_small_roots;
-			if (num_roots == 0)
-				continue;
-
-			curr_p->max_roots = MAX(curr_p->max_roots, num_roots);
-
-			if (s->num_small_roots + num_roots >= 
-					s->num_small_roots_alloc) {
-				s->num_small_roots_alloc = 2 * 
-						(s->num_small_roots + 
-						 num_roots);
-				s->small_roots = (uint32 *)xrealloc(
-						s->small_roots,
-						s->num_small_roots_alloc *
-						sizeof(uint32));
-			}
-			for (k = 0; k < num_roots; k++)
-				s->small_roots[s->num_small_roots+k] = roots[k];
-			s->num_small_roots += k;
-		}
-
-		curr_p->root_offsets[j] = s->num_small_roots;
-	}
 }
 
 /*------------------------------------------------------------------------*/
@@ -237,7 +211,7 @@ sieve_run(sieve_fb_t *s)
 {
 	uint32 i;
 	double cutoff = floor(LOG_SCALE * 
-			log((double)s->base) / M_LN2 + 0.5);
+			log((double)s->p_min) / M_LN2 + 0.5);
 	uint8 *sieve_block = s->sieve_block;
 	uint32 num_good_primes = s->good_primes.num_primes;
 	uint32 num_bad_primes = s->bad_primes.num_primes;
@@ -276,22 +250,39 @@ sieve_run(sieve_fb_t *s)
 
 /*------------------------------------------------------------------------*/
 void 
-sieve_fb_reset(sieve_fb_t *s, uint64 base)
+sieve_fb_reset(sieve_fb_t *s, uint64 p_min, uint64 p_max,
+		uint32 num_roots_min, uint32 num_roots_max)
 {
 	uint32 i;
 	sieve_prime_list_t *list;
 
-	if (base % 2)
-		base--;
-	s->base = base;
+	if (p_min % 2)
+		p_min--;
+	s->p_min = p_min;
+	s->p_max = p_max;
+	s->next_prime_p = 0;
+	s->next_composite_p = 0;
 	s->curr_offset = 0;
+	s->num_roots_min = num_roots_min;
+	s->num_roots_max = num_roots_max;
 
+	free_prime_sieve(&s->prime_sieve);
+	if (p_min >= PRIME_P_LIMIT ||
+	    num_roots_min > s->degree) {
+		s->allow_prime_p = 0;
+	}
+	else {
+		s->allow_prime_p = 1;
+		init_prime_sieve(&s->prime_sieve, (uint32)p_min,
+				MIN(p_max, PRIME_P_LIMIT));
+	}
+	
 	list = &s->good_primes;
 	for (i = 0; i < list->num_primes; i++) {
 
 		sieve_prime_t *curr = list->primes + i;
 		uint32 p = curr->p;
-		uint32 rem = p - base % p;
+		uint32 rem = p - p_min % p;
 
 		if (rem != p && rem % 2 == 0)
 			rem += p;
@@ -303,7 +294,7 @@ sieve_fb_reset(sieve_fb_t *s, uint64 base)
 
 		sieve_prime_t *curr = list->primes + i;
 		uint32 p = curr->p;
-		uint32 rem = p - base % p;
+		uint32 rem = p - p_min % p;
 
 		if (rem != p && rem % 2 == 0)
 			rem += p;
@@ -315,16 +306,16 @@ sieve_fb_reset(sieve_fb_t *s, uint64 base)
 
 /*------------------------------------------------------------------------*/
 static uint32 
-lift_roots(sieve_fb_t *s, curr_poly_t *curr, 
-		uint64 p, uint32 num_roots,
-		uint32 degree)
+lift_roots(sieve_fb_t *s, poly_search_t *poly, 
+		uint64 p, uint32 num_roots)
 {
 	uint32 i;
+	uint32 degree = s->degree;
 
 	uint64_2gmp(p, s->p);
 	mpz_mul(s->p2, s->p, s->p);
-	mpz_tdiv_r(s->nmodp2, curr->trans_N, s->p2);
-	mpz_tdiv_r(s->m0, curr->trans_m0, s->p2);
+	mpz_tdiv_r(s->nmodp2, poly->trans_N, s->p2);
+	mpz_tdiv_r(s->m0, poly->trans_m0, s->p2);
 
 	for (i = 0; i < num_roots; i++) {
 
@@ -345,7 +336,7 @@ lift_roots(sieve_fb_t *s, curr_poly_t *curr,
 		if (mpz_cmp_ui(s->roots[i], (mp_limb_t)0) < 0)
 			mpz_add(s->roots[i], s->roots[i], s->p2);
 #ifdef CHECK
-		mpz_add(s->tmp1, curr->trans_m0, s->roots[i]);
+		mpz_add(s->tmp1, poly->trans_m0, s->roots[i]);
 		mpz_tdiv_r(s->tmp1, s->tmp1, s->p2);
 		mpz_powm_ui(s->tmp1, s->tmp1, (mp_limb_t)degree, s->p2);
 		if (mpz_cmp(s->tmp1, s->nmodp2) != 0) {
@@ -362,36 +353,26 @@ lift_roots(sieve_fb_t *s, curr_poly_t *curr,
 
 /*------------------------------------------------------------------------*/
 static uint32 
-find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
-		uint32 which_poly, uint64 p, 
-		uint32 num_factors, uint32 *factors)
+get_composite_roots_core(sieve_fb_t *s, poly_search_t *poly,
+			uint64 p, uint32 num_factors, 
+			uint32 *factors)
 {
-	uint32 i, j, k, i0, i1, i2, i3, i4, i5;
+	uint32 i, j, k, i0, i1, i2, i3;
 	uint32 crt_p[MAX_P_FACTORS];
 	uint32 num_roots[MAX_P_FACTORS];
 	uint64 prod[MAX_P_FACTORS];
 	uint32 roots[MAX_P_FACTORS][MAX_POLY_DEGREE];
-	curr_poly_t *curr = poly->batch + which_poly;
 	sieve_prime_t *primes = s->good_primes.primes;
-	uint32 degree = poly->degree;
-
-	for (i = 0; i < num_factors; i++) {
-		sieve_prime_t *sp = primes + factors[i];
-		uint32 *offset = sp->root_offsets + which_poly;
-
-		if (offset[0] == offset[1])
-			return 0;
-	}
+	uint32 degree = s->degree;
 
 	for (i = j = 0; j < MAX_P_FACTORS && i < num_factors; i++, j++) {
 		sieve_prime_t *sp = primes + factors[i];
 		uint32 power_limit = (uint32)(-1) / sp->p;
-		uint32 *offset = sp->root_offsets + which_poly;
 
 		crt_p[j] = sp->p;
-		num_roots[j] = offset[1] - offset[0];
+		num_roots[j] = sp->num_roots;
 		for (k = 0; k < num_roots[j]; k++) {
-			roots[j][k] = s->small_roots[offset[0] + k];
+			roots[j][k] = sp->roots[k];
 		}
 
 		while (i < num_factors - 1 && factors[i] == factors[i+1]) {
@@ -402,7 +383,7 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 				return 0;
 
 			new_power = crt_p[j] * sp->p;
-			nmodp = mpz_tdiv_ui(curr->trans_N, 
+			nmodp = mpz_tdiv_ui(poly->trans_N, 
 						(mp_limb_t)new_power);
 
 			for (k = 0; k < num_roots[j]; k++) {
@@ -422,7 +403,7 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 		for (i = 0; i < num_roots[0]; i++)
 			mpz_set_ui(s->roots[i], (mp_limb_t)roots[0][i]);
 
-		return lift_roots(s, curr, p, num_roots[0], degree);
+		return num_roots[0];
 	}
 
 	for (i = 0; i < num_factors; i++) {
@@ -433,19 +414,8 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 	mpz_set_ui(s->accum[i], (mp_limb_t)0);
 	uint64_2gmp(p, s->p);
 
-	i0 = i1 = i2 = i3 = i4 = i5 = i = 0;
+	i0 = i1 = i2 = i3 = i = 0;
 	switch (num_factors) {
-	case 6:
-		for (i5 = num_roots[5] - 1; (int32)i5 >= 0; i5--) {
-			uint64_2gmp(prod[5], s->accum[5]);
-			mpz_mul_ui(s->accum[5], s->accum[5], 
-						(mp_limb_t)roots[5][i5]);
-	case 5:
-		for (i4 = num_roots[4] - 1; (int32)i4 >= 0; i4--) {
-			uint64_2gmp(prod[4], s->accum[4]);
-			mpz_mul_ui(s->accum[4], s->accum[4], 
-						(mp_limb_t)roots[4][i4]);
-			mpz_add(s->accum[4], s->accum[4], s->accum[5]);
 	case 4:
 		for (i3 = num_roots[3] - 1; (int32)i3 >= 0; i3--) {
 			uint64_2gmp(prod[3], s->accum[3]);
@@ -473,30 +443,55 @@ find_composite_roots(sieve_fb_t *s, poly_batch_t *poly,
 
 			mpz_tdiv_r(s->accum[0], s->accum[0], s->p);
 			mpz_set(s->roots[i++], s->accum[0]);
-		}}}}}}
+		}}}}
 	}
 
-	return lift_roots(s, curr, p, i, degree);
+	return i;
 }
 
 /*------------------------------------------------------------------------*/
 #define MAX_FACTORS 20
 
-uint64
-sieve_fb_next(sieve_fb_t *s, poly_batch_t *poly,
-		p_batch_t *pbatch, uint64 limit,
-		uint32 num_roots_min)
+static uint32
+get_composite_roots(sieve_fb_t *s, poly_search_t *poly, uint64 p)
 {
 	uint32 i, j;
-	uint64 p, psave;
+	uint64 psave = p;
 	uint32 factors[MAX_FACTORS];
-	uint8 *sieve_block = s->sieve_block;
 	sieve_prime_t *primes = s->good_primes.primes;
 	uint32 num_primes = s->good_primes.num_primes;
-	uint32 curr_offset;
-	uint32 done;
+	uint32 num_roots;
 
+	for (i = j = 0, num_roots = 1; i < num_primes; i++) {
+		uint32 x = primes[i].p;
+		if (p % x == 0) {
+			num_roots *= primes[i].num_roots;
+			do {
+				p /= x;
+				factors[j++] = i;
+			} while (p % x == 0);
+
+			if (p < x)
+				break;
+		}
+	}
+
+	if (p > 1 ||
+	    num_roots < s->num_roots_min ||
+	    num_roots > s->num_roots_max) {
+		return 0;
+	}
+
+	return get_composite_roots_core(s, poly, psave, j, factors);
+}
+
+/*------------------------------------------------------------------------*/
+static uint64
+get_next_composite(sieve_fb_t *s)
+{
 	while (1) {
+		uint32 curr_offset;
+		uint8 *sieve_block = s->sieve_block;
 
 		for (curr_offset = s->curr_offset; 
 				curr_offset < SIEVE_SIZE; curr_offset++) {
@@ -504,61 +499,70 @@ sieve_fb_next(sieve_fb_t *s, poly_batch_t *poly,
 			if (!(sieve_block[curr_offset] & 0x80)) 
 				continue;
 
-			psave = p = s->base + (2 * curr_offset + 1);
-
-			if (p > limit) {
-				s->curr_offset = curr_offset;
-				return p;
-			}
-
-			for (i = j = 0; i < num_primes; i++) {
-				uint32 x = primes[i].p;
-				if (p % x == 0) {
-					do {
-						p /= x;
-						factors[j++] = i;
-					} while (p % x == 0);
-
-					if (p < x)
-						break;
-				}
-			}
-			if (p > 1)
-				continue;
-
-			if (num_roots_min > 1) {
-				uint32 num_roots = 1;
-				for (i = 0; i < j; i++) {
-					sieve_prime_t *sp = primes + factors[i];
-					num_roots *= sp->max_roots;
-				}
-				if (num_roots < num_roots_min)
-					continue;
-			}
-
-			for (i = done = 0; i < poly->num_poly; i++) {
-
-				uint32 num_lifted = find_composite_roots(s, 
-						poly, i, psave, j, factors);
-
-				if (num_lifted) {
-					p_batch_add(pbatch, psave, i,
-							num_lifted, s->roots);
-					done = 1;
-				}
-			}
-			if (done) {
-				s->curr_offset = curr_offset+1;
-				return psave;
-			}
+			s->curr_offset = curr_offset+1;
+			return s->p_min + (2 * curr_offset + 1);
 		}
 
 		sieve_run(s);
-		s->base += 2 * SIEVE_SIZE;
+		s->p_min += 2 * SIEVE_SIZE;
 		s->curr_offset = curr_offset = 0;
-		if (s->base > limit)
-			return s->base;
+		if (s->p_min > s->p_max)
+			break;
 	}
 
-	return s->base;
+	return s->p_min;
 }
+
+/*------------------------------------------------------------------------*/
+uint64
+sieve_fb_next(sieve_fb_t *s, poly_search_t *poly,
+		root_callback callback, void *extra)
+{
+	uint32 i;
+	uint64 p;
+	uint32 num_roots;
+
+	while (1) {
+		if (s->allow_prime_p && s->next_prime_p == 0) {
+			s->next_prime_p = get_next_prime(&s->prime_sieve);
+
+			if (s->next_prime_p >= PRIME_P_LIMIT)
+				s->allow_prime_p = 0;
+		}
+
+		if (s->next_composite_p == 0)
+			s->next_composite_p = get_next_composite(s);
+
+		if (s->allow_prime_p &&
+		    s->next_prime_p < s->next_composite_p) {
+
+			uint32 roots[MAX_POLY_DEGREE];
+
+			p = s->next_prime_p;
+			s->next_prime_p = 0;
+			num_roots = get_prime_roots(poly, (uint32)p, roots);
+			for (i = 0; i < num_roots; i++)
+				mpz_set_ui(s->roots[i], (mp_limb_t)roots[i]);
+		}
+		else {
+			p = s->next_composite_p;
+			s->next_composite_p = 0;
+			if (s->next_prime_p == p)
+				s->next_prime_p = 0;
+
+			num_roots = get_composite_roots(s, poly, p);
+		}
+
+		if (p > s->p_max)
+			break;
+
+		if (num_roots > 0) {
+			lift_roots(s, poly, p, num_roots);
+			callback(p, num_roots, s->roots, extra);
+			break;
+		}
+	}
+
+	return p;
+}
+
