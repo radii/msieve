@@ -1010,7 +1010,7 @@ static uint64 mp_mod_2(uint32 num[4], uint64 p) {
 		return (uint64)res1 << 32 | res0;
 	}
 	else {
-		return (uint64)nacc[1] << 32 | nacc[1];
+		return (uint64)nacc[1] << 32 | nacc[0];
 	}
 }
 
