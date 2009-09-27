@@ -22,7 +22,7 @@ extern "C" {
 #endif
 
 /* Basic multiple-precision arithmetic implementation. Precision
-   is hardwired not to exceed ~275 digits. Numbers are stored in 
+   is hardwired not to exceed ~300 digits. Numbers are stored in 
    two's-complement binary form, in little-endian word order.
    All inputs and results are assumed positive, and the high-order 
    words that are not in use must be zero for all input operands.
@@ -32,7 +32,7 @@ extern "C" {
    no support in C for 128-bit data types, so that 64x64 multiplies
    and 128/64 divides would need assembly language support */
 
-#define MAX_MP_WORDS 29
+#define MAX_MP_WORDS 30
 
 #define MP_RADIX 4294967296.0
 
