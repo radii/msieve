@@ -16,6 +16,7 @@ Version 1.43:
 	- Removed now-unused double-double code
 	- Reset the number of relations and ideals properly when reading
 		LP relations with increasing max weight (thanks Greg Childers)
+	- Increased the input size limit to ~300 digits
 	- Adjusted the library link order in the makefile
 	- Added float.h for unix builds (thanks Christian Cornelssen)
 
