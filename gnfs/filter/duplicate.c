@@ -147,7 +147,7 @@ static uint32 purge_duplicates_pass2(msieve_obj *obj,
 		/* determine if the (a,b) coordinates of the
 		   relation collide in the table of bits */
 
-		a = (int64)strtod(buf, &next_field);
+		a = strtoll(buf, &next_field, 10);
 		b = strtoul(next_field + 1, NULL, 10);
 		key[0] = (uint32)a;
 		key[1] = ((a >> 32) & 0x1f) | (b << 5);
