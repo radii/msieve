@@ -1359,8 +1359,8 @@ uint64 * block_lanczos(msieve_obj *obj, uint32 nrows,
 	dump_interval = 0;
 	if (ncols > 1000000) {
 
-		if (ncols > 4000000)
-			dump_interval = 100000;
+		if (ncols > 4000000)   /* ~ once an hour */
+			dump_interval = 10000 * (int)rint(5.0e7 / ncols);
 		else if (ncols > 2000000)
 			dump_interval = 250000;
 		else
