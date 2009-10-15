@@ -32,9 +32,9 @@ extern "C" {
    degree 7 is so huge (thousands of digits) that there's 
    no point in allowing for the degree to exceed 5. 
    However, we allow degree 7 for anyone who wants 
-   to experiment */
+   to experiment, and 8 for the desperados */
 
-#define MAX_POLY_DEGREE 7
+#define MAX_POLY_DEGREE 8
 
 /* representation of polynomials with multiple-
    precision coefficients. For polynomial p(x),

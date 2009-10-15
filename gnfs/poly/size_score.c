@@ -15,8 +15,8 @@ $Id$
 #include <polyroot.h>
 #include "poly.h"
 
-#if MAX_POLY_DEGREE > 7
-#error "polynomial degree > 7 not supported"
+#if MAX_POLY_DEGREE > 8
+#error "polynomial degree > 8 not supported"
 #endif
 
 typedef struct {
@@ -86,7 +86,7 @@ static double get_polyval(ddpoly_t *poly, double x, double h) {
 	double off;
 	double hpow;
 	dd_t *p = poly->coeff;
-	double p0, p1, p2, p3, p4, p5, p6, p7;
+	double p0, p1, p2, p3, p4, p5, p6, p7, p8;
 
 	switch (poly->degree) {
 	case 0:
@@ -215,6 +215,37 @@ static double get_polyval(ddpoly_t *poly, double x, double h) {
  		hpow *= h;
  		off += hpow * p7;
  		break;
+	case 8:
+		p0 = p[0].hi;
+		p1 = p[1].hi;
+		p2 = p[2].hi;
+		p3 = p[3].hi;
+		p4 = p[4].hi;
+		p5 = p[5].hi;
+		p6 = p[6].hi;
+		p7 = p[7].hi;
+		p8 = p[8].hi;
+
+		base = (((((((p8*x+p7)*x+p6)*x+p5)*x+p4)*x+p3)*x+p2)*x+p1)*x+p0;
+		hpow = h;
+		off = hpow * (((((((8*p8*x+7*p7)*x+6*p6)*x+5*p5)*x+4*p4)*x+
+						3*p3)*x+2*p2)*x+p1);
+		hpow *= h;
+		off += hpow * ((((((28*p8*x+21*p7)*x+15*p6)*x+10*p5)*x+
+						6*p4)*x+3*p3)*x+p2);
+		hpow *= h;
+		off += hpow * (((((56*p8*x+35*p7)*x+20*p6)*x+10*p5)*x+4*p4)*x+p3);
+		hpow *= h;
+		off += hpow * ((((70*p8*x+35*p7)*x+15*p6)*x+5*p5)*x+p4);
+		hpow *= h;
+		off += hpow * (((56*p8*x+21*p7)*x+6*p6)*x+p5);
+		hpow *= h;
+		off += hpow * ((28*p8*x+7*p7)*x+p6);
+		hpow *= h;
+		off += hpow * (8*p8*x+p7);
+		hpow *= h;
+		off += hpow * p8;
+		break;
 	default:
 		base = off = 0;
 		break;
