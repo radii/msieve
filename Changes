@@ -5,13 +5,17 @@ Version 1.43:
 		values and 48-bit prime factors. The code now also performs
 		runlength-encoding on the list of prime factors
 	- Added 64-bit modmul operations to all builds
-	- Modified the NFS relation reading code to ignore relations that
-		would not participate in dependencies anyway. This has the
-		side effect of simplifiying the NFS square root a bit
 	- Added checks that the input NFS number corresponds to the input
 		NFS polynomials (thanks Tom Womack)
-	- Modified the initialization for the NFS square root to be
-		a little more robust (thanks andi47)
+	- NFS square root changes:
+		- Optimized the brute force square root code, especially
+		  when dealing with degree > 6 (thanks Serge Batalov)
+		- Modified the NFS relation reading code to ignore 
+		  relations that would not participate in dependencies anyway.
+		  This also makes the NFS square root a bit simpler
+		- Modified the initialization to be a little more 
+		  robust (thanks andi47)
+	- Add support for degree 8 NFS polynomials (thanks Serge Batalov)
 	- Deleted the ancient unskewed NFS polynomial selector
 	- Removed now-unused double-double code
 	- Reset the number of relations and ideals properly when reading

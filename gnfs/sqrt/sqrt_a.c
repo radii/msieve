@@ -401,8 +401,10 @@ static uint32 get_initial_inv_sqrt(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 				logprintf(obj, "warning: no irreducible prime "
 					"found, switching to small primes\n");
 				start_q = 50;
-				if (mp_alg_poly->degree > 6) start_q = 12;
-			/* for octics, even mod 13 worked and was resonably fast */
+				/* for octics, even mod 13 works and 
+				   is resonably fast */
+				if (mp_alg_poly->degree > 6) 
+					start_q = 12;
 				continue;
 			}
 		}

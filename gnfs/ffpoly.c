@@ -1010,9 +1010,11 @@ uint32 inv_sqrt_mod_q(mp_poly_t *res, mp_poly_t *s_in, mp_poly_t *f_in,
 
 	/* if no inverse square root was found and q is small enough,
 	   attempt to find an inverse square root by brute force,
-	   trying all q^d elements of the finite field
+	   trying all q^d elements of the finite field.
+
+	   We can save half the time by avoiding polynomials that 
+	   are the negative of polynomials already searched */
 	  
-	   Avert your eyes from the pain that is Duff's Device! ... well, it's gone! */
 
 	 if (i == NUM_ISQRT_RETRIES && q < 150) {
 		uint32 c0, c1, c2, c3, c4, c5, c6, c7;
@@ -1020,40 +1022,52 @@ uint32 inv_sqrt_mod_q(mp_poly_t *res, mp_poly_t *s_in, mp_poly_t *f_in,
  
 		for (i = 0; i < f->degree; i++)
 			start[i] = q - 1;
-		for (i = f->degree; i < MAX_POLY_DEGREE; i++)
+		for (; i < MAX_POLY_DEGREE; i++)
 			start[i] = 0;
-		start[y1->degree = 7] /= 2;
+		y1->degree = 7;
+		start[y1->degree] /= 2;
 	
 		for (c7 = start[7]; (int32)c7 >= 0; c7--) {
-				y1->coef[7] = c7;
-				if(c7 == 0                   ) start[--y1->degree] /= 2;
-		  for (c6 = start[6]; (int32)c6 >= 0; c6--) {
-				y1->coef[6] = c6;
-				if(c6 == 0 && y1->degree == 6) start[--y1->degree] /= 2; 
-#if 0
-				fprintf(stderr,"\r {%d,%d,...} mod %d \r", c7, c6, q);
-#endif
-		    for (c5 = start[5]; (int32)c5 >= 0; c5--) {
-				y1->coef[5] = c5;
-				if(c5 == 0 && y1->degree == 5) start[--y1->degree] /= 2; 
-		      for (c4 = start[4]; (int32)c4 >= 0; c4--) {
-				y1->coef[4] = c4;
-				if(c4 == 0 && y1->degree == 4) start[--y1->degree] /= 2; 
-		        for (c3 = start[3]; (int32)c3 >= 0; c3--) {
-				y1->coef[3] = c3;
-				if(c3 == 0 && y1->degree == 3) start[--y1->degree] /= 2; 
-		          for (c2 = start[2]; (int32)c2 >= 0; c2--) {
-				y1->coef[2] = c2;
-				if(c2 == 0 && y1->degree == 2) start[--y1->degree] /= 2; 
-		            for (c1 = start[1]; (int32)c1 >= 0; c1--) {
-				y1->coef[1] = c1;
-				if(c1 == 0 && y1->degree == 1) start[--y1->degree] /= 2;
-		              for (c0 = start[0]; (int32)c0 >= 0; c0--) {
-				y1->coef[0] = c0;
-				poly_modmul(y0, y1, y1, f, q);
-				poly_modmul(y0, y0, s, f, q);
-				if (y0->degree == 0 && y0->coef[0] == 1)
-					goto finished;
+			y1->coef[7] = c7;
+			if (c7 == 0) 
+				start[--y1->degree] /= 2;
+
+		for (c6 = start[6]; (int32)c6 >= 0; c6--) {
+			y1->coef[6] = c6;
+			if (c6 == 0 && y1->degree == 6) 
+				start[--y1->degree] /= 2; 
+
+		for (c5 = start[5]; (int32)c5 >= 0; c5--) {
+			y1->coef[5] = c5;
+			if (c5 == 0 && y1->degree == 5) 
+				start[--y1->degree] /= 2; 
+
+		for (c4 = start[4]; (int32)c4 >= 0; c4--) {
+			y1->coef[4] = c4;
+			if (c4 == 0 && y1->degree == 4) 
+				start[--y1->degree] /= 2; 
+
+		for (c3 = start[3]; (int32)c3 >= 0; c3--) {
+			y1->coef[3] = c3;
+			if (c3 == 0 && y1->degree == 3) 
+				start[--y1->degree] /= 2; 
+
+		for (c2 = start[2]; (int32)c2 >= 0; c2--) {
+			y1->coef[2] = c2;
+			if (c2 == 0 && y1->degree == 2) 
+				start[--y1->degree] /= 2; 
+
+		for (c1 = start[1]; (int32)c1 >= 0; c1--) {
+			y1->coef[1] = c1;
+			if (c1 == 0 && y1->degree == 1) 
+				start[--y1->degree] /= 2;
+
+		for (c0 = start[0]; (int32)c0 >= 0; c0--) {
+			y1->coef[0] = c0;
+			poly_modmul(y0, y1, y1, f, q);
+			poly_modmul(y0, y0, s, f, q);
+			if (y0->degree == 0 && y0->coef[0] == 1)
+				goto finished;
 		}}}}}}}}
 	}
 
