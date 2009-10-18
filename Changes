@@ -1,4 +1,5 @@
 Version 1.44:
+	- Modified NFS poly selection to avoid saving nonexistent polynomials
 
 
 Version 1.43: 10/18/09

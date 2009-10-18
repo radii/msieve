@@ -272,9 +272,11 @@ int32 find_poly(msieve_obj *obj, mp_t *n) {
 	/* save the best polynomial */
 
 	logprintf(obj, "polynomial selection complete\n");
-	write_poly(obj, n, &config.heap[0]->rpoly,
-			&config.heap[0]->apoly,
-			config.heap[0]->skewness);
+	if (config.heap[0]->rpoly.degree > 0) {
+		write_poly(obj, n, &config.heap[0]->rpoly,
+				&config.heap[0]->apoly,
+				config.heap[0]->skewness);
+	}
 	poly_config_free(&config);
 
 	return 0;
