@@ -1,4 +1,4 @@
-Version 1.43:
+Version 1.43: 10/18/09
 	- Made the GMP library mandatory
 	- Removed the arbitrary precision math library, replaced with GMP
 	- Modified the NFS relation handling code to allow 63-bit 'a' 
