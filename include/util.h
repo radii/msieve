@@ -104,7 +104,15 @@ extern "C" {
 
 	int64 strtoll(const char *nptr, char **endptr, int base);
 	uint64 strtoull(const char *nptr, char **endptr, int base);
-
+    __inline double rint(double x)
+    {
+     double i, r = modf(x, &i);
+     if(r < 0.0)
+     {
+      r += 1; i -= 1;
+     }
+        return (r > 0.5 || r == 0.5 && ((int)i & 1) ? i + 1.0 : i);
+    }
 #elif !defined(RS6K)
 	#define INLINE inline
 
