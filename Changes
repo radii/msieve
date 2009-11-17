@@ -1,5 +1,7 @@
 Version 1.44:
 	- Modified NFS poly selection to avoid saving nonexistent polynomials
+	- Fixed a bug in the relation readin code that caused crashes when 
+		initializing empty dependencies (thanks Jeff Gilchrist)
 
 
 Version 1.43: 10/18/09

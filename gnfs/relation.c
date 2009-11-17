@@ -619,10 +619,17 @@ void nfs_read_cycles(msieve_obj *obj,
 
 	if (num_cycles == 0) {
 		free(cycle_list);
-		*num_cycles_out = 0;
-		*cycle_list_out = NULL;
-		*num_relations_out = 0;
-		*rlist_out = NULL;
+		if (num_cycles_out != NULL)
+			*num_cycles_out = 0;
+
+		if (cycle_list_out != NULL)
+			*cycle_list_out = NULL;
+
+		if (num_relations_out != NULL)
+			*num_relations_out = 0;
+
+		if (rlist_out != NULL)
+			*rlist_out = NULL;
 		return;
 	}
 
