@@ -34,6 +34,7 @@ static const poly_param_t prebuilt_params_deg4[] = {
 
 	/* determined by experiment */
 
+	{ 80, 1.00E+013, 2.00E+013, 1.00E-007},
 	{ 85, 1.00E+014, 4.00E+013, 6.50E-008},
 	{ 90, 1.00E+015, 5.00E+014, 3.80E-008},
 	{ 95, 1.00E+016, 1.00E+015, 1.50E-008},

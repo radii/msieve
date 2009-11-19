@@ -1,7 +1,9 @@
 Version 1.44:
 	- Modified NFS poly selection to avoid saving nonexistent polynomials
-	- Fixed a bug in the relation readin code that caused crashes when 
+	- Fixed a bug in the relation reading code that caused crashes when 
 		initializing empty dependencies (thanks Jeff Gilchrist)
+	- Allowed NFS poly selection and sieving for inputs down to 80 digits
+		(thanks andi47)
 
 
 Version 1.43: 10/18/09

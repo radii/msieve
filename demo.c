@@ -108,7 +108,7 @@ void print_usage(char *progname) {
 		 " quadratic sieve options:\n"
 		 "   -c        client: only perform sieving\n\n"
 		 " number field sieve options:\n"
-		 "   -n        use the number field sieve (85+ digits only;\n"
+		 "   -n        use the number field sieve (80+ digits only;\n"
 		 "             performs all NFS tasks in order)\n"
 	         "   -nf <name> read from / write to NFS factor base file\n"
 		 "             <name> instead of the default %s\n"

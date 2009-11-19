@@ -232,7 +232,7 @@ uint32 factor_mpqs(msieve_obj *obj, mp_t *n, factor_list_t *factor_list);
 
 uint32 factor_gnfs(msieve_obj *obj, mp_t *n, factor_list_t *factor_list);
 
-#define MIN_NFS_BITS 277
+#define MIN_NFS_BITS 264
 
 /*--------------LINEAR ALGEBRA RELATED DECLARATIONS ---------------------*/
 
