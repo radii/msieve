@@ -622,7 +622,7 @@ void filter_merge_full(msieve_obj *obj, merge_t *merge, uint32 min_cycles) {
 	if (num_cycles < 0.8 * target_cycles) {
 		logprintf(obj, "too few cycles, matrix probably "
 				"cannot build\n");
-		exit(-1);
+		exit(0); /* a non-zero exit code aborts factMsieve.pl */
 	}
 
 	qsort(relset_array, (size_t)num_cycles, 
