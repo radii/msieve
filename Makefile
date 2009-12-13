@@ -12,30 +12,24 @@
 #  $Id$
 # --------------------------------------------------------------------
 
-# xlc on AIX; note that apparently a 64-bit binary crashes
-# CC = xlc -D_FILE_OFFSET_BITS=64
-# OPT_FLAGS = -O2 -DNDEBUG
-# MACHINE_FLAGS = -DRS6K -qmaxmem=8192 -q32
-
-# gcc on Apple G5; for 64-bit mode, add '-m64'
-# CC = gcc -D_FILE_OFFSET_BITS=64
-# OPT_FLAGS = -O3 -mcpu=970 -mtune=970 \
-#		-fomit-frame-pointer -DNDEBUG
-# OPT_FLAGS = -O3 -mcpu=7450 -mtune=7450 \
-#		-fomit-frame-pointer -DNDEBUG
-# WARN_FLAGS = -Wall -W -Wconversion
-
 # gcc with basic optimization (-march flag could
 # get overridden by architecture-specific builds)
 CC = gcc -D_FILE_OFFSET_BITS=64
-WARN_FLAGS = -Wall -W -Wconversion
 WARN_FLAGS = -Wall -W
 OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
 #OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
 
-CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) -I. -Iinclude -Ignfs/poly
+CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) \
+		-I. -Iinclude -Ignfs -Ignfs/poly
+
+# Note to MinGW users: the library does not use pthreads calls in
+# win32 or win64, so it's safe to pull libpthread into the link line.
+# Of course this does mean you have to install the minGW pthreads bundle...
+
+LIBS = -lgmp -lm -lpthread
 
 # tweak the compile flags
+
 ifeq ($(ECM),1)
 	CFLAGS += -DHAVE_GMP_ECM
 	LIBS += -lecm
@@ -43,11 +37,17 @@ endif
 ifeq ($(WIN32_3GB),1)
 	LDFLAGS += -Wl,--large-address-aware
 endif
+ifeq ($(CUDA),1)
+	# these environment variables are set in windows
+	# but not in linux; attempt to sample them anyway
+	CUDA_INC_DIR = $(shell echo $$CUDA_INC_PATH)
+	CUDA_LIB_DIR = $(shell echo $$CUDA_LIB_PATH)
+	CFLAGS += -I"$(CUDA_INC_DIR)" -DHAVE_CUDA
 
-# Note to MinGW users: the library does not use pthread calls in
-# win32 or win64, so it's safe to pull libpthread into the link line.
-# Of course this does mean you have to install the minGW pthreads bundle...
-LIBS += -lgmp -lm -lpthread
+	# Also, the CUDA driver library has a different name in linux
+	LIBS += "$(CUDA_LIB_DIR)/cuda.lib"
+	# LIBS += -lcuda
+endif
 
 #---------------------------------- Generic file lists -------------------
 
@@ -58,6 +58,7 @@ COMMON_HDR = \
 	common/filter/merge_util.h \
 	include/batch_factor.h \
 	include/common.h \
+	include/cuda_xface.h \
 	include/dd.h \
 	include/ddcomplex.h \
 	include/gmp_xface.h \
@@ -86,6 +87,7 @@ COMMON_SRCS = \
 	common/smallfact/squfof.c \
 	common/smallfact/tinyqs.c \
 	common/batch_factor.c \
+	common/cuda_xface.c \
 	common/dickman.c \
 	common/driver.c \
 	common/expr_eval.c \
@@ -142,17 +144,37 @@ QS_CORE_OBJS_X86_64 = \
 	mpqs/sieve_core_core_64_32k.qo \
 	mpqs/sieve_core_k8_64_64k.qo
 
+#---------------------------------- GPU file lists -------------------------
+
+GPU_OBJS = \
+	stage1_core_deg4_64.ptx \
+	stage1_core_deg5_128.ptx \
+	stage1_core_deg5_64.ptx \
+	stage1_core_deg5_96.ptx \
+	stage1_core_deg6_128.ptx \
+	stage1_core_deg6_96.ptx
+
 #---------------------------------- NFS file lists -------------------------
 
 NFS_HDR = \
 	gnfs/filter/filter.h \
 	gnfs/poly/poly.h \
 	gnfs/poly/poly_skew.h \
-	gnfs/poly/stage1/stage1.h \
 	gnfs/poly/stage2/stage2.h \
 	gnfs/sieve/sieve.h \
 	gnfs/sqrt/sqrt.h \
 	gnfs/gnfs.h
+
+NFS_GPU_HDR = \
+	gnfs/poly/stage1_gpu/stage1.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg4_64.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg5_128.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg5_64.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg5_96.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg6_128.h
+
+NFS_NOGPU_HDR = \
+	gnfs/poly/stage1/stage1.h
 
 NFS_SRCS = \
 	gnfs/poly/poly.c \
@@ -160,9 +182,6 @@ NFS_SRCS = \
 	gnfs/poly/polyutil.c \
 	gnfs/poly/root_score.c \
 	gnfs/poly/size_score.c \
-	gnfs/poly/stage1/stage1.c \
-	gnfs/poly/stage1/stage1_roots.c \
-	gnfs/poly/stage1/stage1_sieve.c \
 	gnfs/poly/stage2/optimize.c \
 	gnfs/poly/stage2/root_sieve.c \
 	gnfs/poly/stage2/stage2.c \
@@ -181,6 +200,36 @@ NFS_SRCS = \
 
 NFS_OBJS = $(NFS_SRCS:.c=.no)
 
+NFS_GPU_SRCS = \
+	gnfs/poly/stage1_gpu/stage1.c \
+	gnfs/poly/stage1_gpu/stage1_roots.c \
+	gnfs/poly/stage1_gpu/stage1_sieve.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg4_64.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg5_128.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg5_64.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg5_96.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg6_128.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg6_96.c
+
+NFS_GPU_OBJS = $(NFS_GPU_SRCS:.c=.no)
+
+NFS_NOGPU_SRCS = \
+	gnfs/poly/stage1/stage1.c \
+	gnfs/poly/stage1/stage1_roots.c \
+	gnfs/poly/stage1/stage1_sieve.c
+
+NFS_NOGPU_OBJS = $(NFS_NOGPU_SRCS:.c=.no)
+
+ifeq ($(CUDA),1)
+	NFS_HDR += $(NFS_GPU_HDR)
+	NFS_SRCS += $(NFS_GPU_SRCS)
+	NFS_OBJS += $(NFS_GPU_OBJS) $(GPU_OBJS)
+else
+	NFS_HDR += $(NFS_NOGPU_HDR)
+	NFS_SRCS += $(NFS_NOGPU_SRCS)
+	NFS_OBJS += $(NFS_NOGPU_OBJS)
+endif
+
 #---------------------------------- make targets -------------------------
 
 all:
@@ -189,6 +238,7 @@ all:
 	@echo "x86_64    64-bit Intel/AMD systems (required if gcc used)"
 	@echo "generic   portable code"
 	@echo "add 'ECM=1' if GMP-ECM is available (enables ECM)"
+	@echo "add 'CUDA=1' for Nvidia graphics card support"
 
 x86: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) \
 		$(QS_CORE_OBJS_X86) $(NFS_OBJS)
@@ -221,7 +271,8 @@ generic: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) $(NFS_OBJS)
 clean:
 	rm -f msieve msieve.exe libmsieve.a $(COMMON_OBJS) 	\
 		$(QS_OBJS) $(QS_CORE_OBJS) $(QS_CORE_OBJS_X86) \
-		$(QS_CORE_OBJS_X86_64) $(NFS_OBJS)
+		$(QS_CORE_OBJS_X86_64) $(NFS_OBJS) \
+		$(NFS_GPU_OBJS) $(NFS_NOGPU_OBJS) $(GPU_OBJS)
 
 #----------------------------------------- build rules ----------------------
 
@@ -304,3 +355,29 @@ mpqs/sieve_core_k8_64_64k.qo: mpqs/sieve_core.c $(COMMON_HDR) $(QS_HDR)
 
 %.no: %.c $(COMMON_HDR) $(NFS_HDR)
 	$(CC) $(CFLAGS) -Ignfs -c -o $@ $<
+
+# GPU build rules
+
+stage1_core_deg4_64.ptx: gnfs/poly/stage1_gpu/stage1_core_deg4_64.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg4_64.h
+	nvcc -ptx -o $@ $<
+
+stage1_core_deg5_128.ptx: gnfs/poly/stage1_gpu/stage1_core_deg5_128.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg5_128.h
+	nvcc -ptx -o $@ $<
+
+stage1_core_deg5_64.ptx: gnfs/poly/stage1_gpu/stage1_core_deg5_64.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg5_64.h
+	nvcc -ptx -o $@ $<
+
+stage1_core_deg5_96.ptx: gnfs/poly/stage1_gpu/stage1_core_deg5_96.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg5_96.h
+	nvcc -ptx -o $@ $<
+
+stage1_core_deg6_128.ptx: gnfs/poly/stage1_gpu/stage1_core_deg6_128.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg6_128.h
+	nvcc -ptx -o $@ $<
+
+stage1_core_deg6_96.ptx: gnfs/poly/stage1_gpu/stage1_core_deg6_96.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg6_96.h
+	nvcc -ptx -o $@ $<

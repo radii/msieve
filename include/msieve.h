@@ -127,6 +127,8 @@ typedef struct {
 
 	uint32 mem_mb;            /* megabytes usable for NFS filtering */
 
+	uint32 which_gpu;         /* ordinal ID of GPU to use */
+
 	char mp_sprintf_buf[32 * MAX_MP_WORDS+1]; /* scratch space for 
 						printing big integers */
 } msieve_obj;
@@ -145,7 +147,8 @@ msieve_obj * msieve_obj_new(char *input_integer,
 			    uint32 cache_size1,
 			    uint32 cache_size2,
 			    uint32 num_threads,
-			    uint32 mem_mb);
+			    uint32 mem_mb,
+			    uint32 which_gpu);
 
 msieve_obj * msieve_obj_free(msieve_obj *obj);
 

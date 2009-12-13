@@ -1,5 +1,16 @@
 Version 1.44:
-	- Modified NFS poly selection to avoid saving nonexistent polynomials
+	- NFS poly selection changes:
+		- Added a branch that uses Nvidia GPU code. This makes stage 1
+		  run enormously faster (my medium-end GPU is 35x faster than
+		  one core of my medium-end CPU). The GPU branch also contains
+		  root generation code that is critically needed to search for
+		  degree-6 polynomials. Hopefully in future releases the
+		  GPU and CPU code will be more tightly integrated (thanks
+		  to many folks at Mersenneforum for helping to test this)
+		- Modified the main driver to avoid saving nonexistent 
+		  polynomials
+		- Modified the main driver to use stricter bounds for 
+		  accepting polynomials
 	- Fixed a bug in the relation reading code that caused crashes when 
 		initializing empty dependencies (thanks Jeff Gilchrist)
 	- Allowed NFS poly selection and sieving for inputs down to 80 digits

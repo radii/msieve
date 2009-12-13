@@ -102,6 +102,9 @@ void print_usage(char *progname) {
 		 "   -p        run at idle priority\n"
 	         "   -v        verbose: write log information to screen\n"
 		 "             as well as to logfile\n"
+#ifdef HAVE_CUDA
+		 "   -g <num>  use GPU <num>, 0 <= num < (GPUs-1)>\n"
+#endif
 	         "   -t <num>  use at most <num> threads\n\n"
 		 " elliptic curve options:\n"
 		 "   -e        perform 'deep' ECM, seek factors > 15 digits\n\n"
@@ -145,7 +148,8 @@ void factor_integer(char *buf, uint32 flags,
 		    uint32 cache_size1,
 		    uint32 cache_size2,
 		    uint32 num_threads,
-		    uint32 mem_mb) {
+		    uint32 mem_mb,
+		    uint32 which_gpu) {
 	
 	char *int_start, *last;
 	msieve_obj *obj;
@@ -172,7 +176,7 @@ void factor_integer(char *buf, uint32 flags,
 					*seed1, *seed2, max_relations,
 					nfs_lower, nfs_upper, cpu,
 					cache_size1, cache_size2,
-					num_threads, mem_mb);
+					num_threads, mem_mb, which_gpu);
 	if (g_curr_factorization == NULL) {
 		printf("factoring initialization failed\n");
 		return;
@@ -274,6 +278,7 @@ int main(int argc, char **argv) {
 	uint32 cache_size2; 
 	uint32 num_threads = 0;
 	uint32 mem_mb = 0;
+	uint32 which_gpu = 0;
 		
 	get_cache_sizes(&cache_size1, &cache_size2);
 	cpu = get_cpu_type();
@@ -427,7 +432,18 @@ int main(int argc, char **argv) {
 					return -1;
 				}
 				break;
-					
+#ifdef HAVE_CUDA					
+			case 'g':
+				if (i + 1 < argc && isdigit(argv[i+1][0])) {
+					which_gpu = atol(argv[i+1]);
+					i += 2;
+				}
+				else {
+					print_usage(argv[0]);
+					return -1;
+				}
+				break;
+#endif					
 			case 'c':
 				flags |= MSIEVE_FLAG_SKIP_QS_CYCLES;
 				i++;
@@ -476,7 +492,7 @@ int main(int argc, char **argv) {
 				max_relations, 
 				nfs_lower, nfs_upper, cpu,
 				cache_size1, cache_size2,
-				num_threads, mem_mb);
+				num_threads, mem_mb, which_gpu);
 	}
 	else if (manual_mode) {
 		while (1) {
@@ -490,7 +506,7 @@ int main(int argc, char **argv) {
 					max_relations, 
 					nfs_lower, nfs_upper, cpu,
 					cache_size1, cache_size2,
-					num_threads, mem_mb);
+					num_threads, mem_mb, which_gpu);
 			if (feof(stdin))
 				break;
 		}
@@ -511,7 +527,7 @@ int main(int argc, char **argv) {
 					max_relations, 
 					nfs_lower, nfs_upper, cpu,
 					cache_size1, cache_size2,
-					num_threads, mem_mb);
+					num_threads, mem_mb, which_gpu);
 			if (feof(infile))
 				break;
 		}
