@@ -38,8 +38,8 @@ static const poly_param_t prebuilt_params_deg4[] = {
 	{ 85, 1.00E+014, 4.00E+013, 6.50E-008},
 	{ 90, 1.00E+015, 5.00E+014, 3.80E-008},
 	{ 95, 1.00E+016, 1.00E+015, 1.50E-008},
-	{100, 3.10E+017, 4.00E+016, 8.30E-009},
-	{105, 1.00E+018, 2.00E+017, 4.00E-009},
+	{100, 3.10E+017, 4.00E+015, 8.30E-009},
+	{105, 1.00E+018, 1.00E+016, 4.00E-009},
 };
 
 static const poly_param_t prebuilt_params_deg5[] = {
@@ -109,9 +109,9 @@ static const poly_param_t prebuilt_params_deg5[] = {
 	{165, 8.00E+024, 2.00E+023, 2.50E-013},
 	{170, 5.00E+025, 1.58E+024, 1.20E-013},
 
-	/* irresponsibly interpolated by Serge Batalov */
+	/* contributed by Serge Batalov */
 
-	{175, 3.00E+026, 1.00E+025, 6.00E-014}, /* not 1.00E-013 ! */
+	{175, 3.00E+026, 1.00E+025, 6.00E-014},
 	{180, 1.80E+027, 5.36E+025, 2.50E-014},
 	{185, 1.00E+028, 3.12E+026, 1.00E-014},
 	{190, 6.00E+028, 1.82E+027, 4.00E-015},
@@ -119,10 +119,13 @@ static const poly_param_t prebuilt_params_deg5[] = {
 
 static const poly_param_t prebuilt_params_deg6[] = {
 
-	/* complete guesses */
-
 	{140, 2.34E+017, 5.00E+018, 1.7e-012},
 	{141, 2.34E+017, 5.00E+018, 1.7e-012},
+
+	/* contributed by Paul Leyland */
+
+ 	{200, 1.00E+026, 1.00E+030, 8.0e-018},
+ 	{205, 1.00E+027, 1.00E+031, 6.0e-019},
 };
 
 /*--------------------------------------------------------------------*/
