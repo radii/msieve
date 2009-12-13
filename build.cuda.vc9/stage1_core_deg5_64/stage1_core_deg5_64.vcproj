@@ -38,7 +38,7 @@
 			<Tool
 				Name="CUDA Build Rule"
 				NvccCompilation="4"
-				compileout="3"
+				compileout="2"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -117,7 +117,7 @@
 			<Tool
 				Name="CUDA Build Rule"
 				NvccCompilation="4"
-				compileout="3"
+				compileout="2"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -198,7 +198,7 @@
 			<Tool
 				Name="CUDA Build Rule"
 				NvccCompilation="4"
-				compileout="3"
+				compileout="2"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
