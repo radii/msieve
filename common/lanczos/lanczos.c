@@ -1364,7 +1364,8 @@ uint64 * block_lanczos(msieve_obj *obj, uint32 nrows,
 	dump_interval = 0;
 	if (ncols > 1000000) {
 		if (ncols > 2000000) /* ~ once an hour */
-			dump_interval = 10000 * (50000000 / ncols + 1);
+			dump_interval = 10000 * ((12500000 *
+				packed_matrix.num_threads) / ncols + 1);
 		else
 			dump_interval = 500000;
 		obj->flags |= MSIEVE_FLAG_SIEVING_IN_PROGRESS;
