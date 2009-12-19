@@ -7,6 +7,8 @@ Version 1.44:
 		  degree-6 polynomials. Hopefully in future releases the
 		  GPU and CPU code will be more tightly integrated (thanks
 		  to many folks at Mersenneforum for helping to test this)
+		- Force the bounds checking for degree 4 to be more strict
+		  than degree 5 or 6 (thanks Jayson King)
 		- Modified the main driver to avoid saving nonexistent 
 		  polynomials
 		- Modified the main driver to use stricter bounds for 

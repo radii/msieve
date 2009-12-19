@@ -14,15 +14,12 @@ $Id$
 
 #include "stage1.h"
 
-#if 1
-#define CHECK
-#endif
-
 /* structures for storing arithmetic progressions. Rational
    leading coeffs of NFS polynomials are assumed to be the 
-   product of two groups of factors p, each of size at most 32
-   bits (32 bits is enough for 512-bit factorizations), and 
-   candidates must satisfy a condition modulo p^2 */
+   product of two groups of factors p, each of size at most 64
+   bits (32 bits is the maximum for degree 4, and is enough 
+   for 512-bit factorizations using degree 5), and candidates 
+   must satisfy a condition modulo p^2 */
 
 #define MAX_P ((uint64)(-1))
 
@@ -55,7 +52,7 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 	mpz_sub(poly->tmp3, poly->tmp3, c->mp_sieve_size);
 	mpz_add(poly->m0, c->trans_m0, poly->tmp3);
 
-#ifdef CHECK
+	/* check */
 	gmp_printf("poly %2u p %.0lf q %.0lf coeff %Zd\n", 
 			which_poly, (double)p, (double)q, poly->p);
 
@@ -65,9 +62,8 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 	mpz_tdiv_r(poly->tmp3, poly->tmp1, poly->tmp2);
 	if (mpz_cmp_ui(poly->tmp3, (mp_limb_t)0)) {
 		printf("crap\n");
-	return;//	exit(-1);
+		return;
 	}
-#endif
 
 	mpz_mul_ui(poly->tmp1, c->high_coeff, (mp_limb_t)poly->degree);
 	mpz_tdiv_qr(poly->m0, poly->tmp2, poly->m0, poly->tmp1);
@@ -115,7 +111,9 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 	middle_poly = poly->batch + poly->num_poly / 2;
 	last_poly = poly->batch + poly->num_poly - 1;
 
-	if (middle_poly->p_size_max >= (double)MAX_P * MAX_P) {
+	if (poly->degree == 4 && 
+	    middle_poly->p_size_max >= MAX_P ||
+	    middle_poly->p_size_max >= (double)MAX_P * MAX_P) {
 		printf("error: rational leading coefficient is "
 			"too large at %le (%0.3f bits)\n",
 	 		 middle_poly->p_size_max, 
