@@ -215,7 +215,7 @@ typedef struct {
 /* lower-level sieve routines */
 
 uint32
-sieve_lattice_gpu_deg4_64(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_gpu_deg46_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
 		uint32 large_p_min, uint32 large_p_max,

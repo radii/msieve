@@ -13,7 +13,7 @@ $Id$
 --------------------------------------------------------------------*/
 
 #include "stage1.h"
-#include "stage1_core_deg4_64.h"
+#include "stage1_core_deg46_64.h"
 
 #define HOST_BATCH_SIZE 50000
 
@@ -27,7 +27,7 @@ typedef struct {
 	uint64 *roots[MAX_ROOTS];
 } q_soa_var_t;
 
-#define MAX_P_SOA_ARRAYS 2
+#define MAX_P_SOA_ARRAYS 7
 
 typedef struct {
 	uint32 num_arrays;
@@ -36,14 +36,26 @@ typedef struct {
 } q_soa_array_t;
 
 static void
-q_soa_array_init(q_soa_array_t *s)
+q_soa_array_init(q_soa_array_t *s, uint32 degree)
 {
 	uint32 i, j;
 	memset(s, 0, sizeof(q_soa_array_t));
 
-	s->num_arrays = 2;
-	s->soa[0].num_roots = 8;
-	s->soa[1].num_roots = 4;
+	if (degree == 4) {
+		s->num_arrays = 2;
+		s->soa[0].num_roots = 8;
+		s->soa[1].num_roots = 4;
+	}
+	else {  /* degree 6 */
+		s->num_arrays = 7;
+		s->soa[6].num_roots = 16;
+		s->soa[5].num_roots = 24;
+		s->soa[4].num_roots = 32;
+		s->soa[3].num_roots = 36;
+		s->soa[2].num_roots = 48;
+		s->soa[1].num_roots = 64;
+		s->soa[0].num_roots = 72;
+	}
 
 	for (i = 0; i < s->num_arrays; i++) {
 		q_soa_var_t *soa = s->soa + i;
@@ -393,7 +405,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 /*------------------------------------------------------------------------*/
 uint32
-sieve_lattice_gpu_deg4_64(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_gpu_deg46_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
 		uint32 large_p_min, uint32 large_p_max,
@@ -405,7 +417,8 @@ sieve_lattice_gpu_deg4_64(msieve_obj *obj, lattice_fb_t *L,
 	p_packed_var_t * p_array;
 	q_soa_array_t * q_array;
 	uint32 degree = L->poly->degree;
-
+	uint32 p_min_roots, p_max_roots;
+	uint32 q_min_roots, q_max_roots;
 	uint32 threads_per_block;
 
 	L->q_marshall = (q_soa_t *)xmalloc(sizeof(q_soa_t));
@@ -414,7 +427,7 @@ sieve_lattice_gpu_deg4_64(msieve_obj *obj, lattice_fb_t *L,
 	p_array = L->p_array = (p_packed_var_t *)xmalloc(
 					sizeof(p_packed_var_t));
 	p_packed_init(p_array);
-	q_soa_array_init(q_array);
+	q_soa_array_init(q_array, degree);
 
 	CUDA_TRY(cuMemAlloc(&L->gpu_q_array, sizeof(q_soa_t)))
 
@@ -436,9 +449,23 @@ sieve_lattice_gpu_deg4_64(msieve_obj *obj, lattice_fb_t *L,
 			small_p_min, small_p_max,
 			large_p_min, large_p_max);
 
+	if (degree == 4) {
+		p_min_roots = 4;
+		p_max_roots = 8;
+		q_min_roots = 4;
+		q_max_roots = 128;
+	}
+	else {
+		p_min_roots = 12;
+		p_max_roots = 36;
+		q_min_roots = 16;
+		q_max_roots = 128;
+	}
+
 	min_large = large_p_min;
 	sieve_fb_reset(sieve_small, (uint64)large_p_min, 
-			(uint64)large_p_max, 4, 8);
+			(uint64)large_p_max, q_min_roots, 
+			q_max_roots);
 
 	while (min_large < large_p_max) {
 
@@ -455,7 +482,7 @@ sieve_lattice_gpu_deg4_64(msieve_obj *obj, lattice_fb_t *L,
 		min_small = small_p_min;
 		sieve_fb_reset(sieve_large, 
 				(uint64)small_p_min, (uint64)small_p_max,
-				degree, MAX_ROOTS);
+				p_min_roots, p_max_roots);
 
 		while (min_small <= small_p_max) {
 

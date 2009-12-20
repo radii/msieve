@@ -336,7 +336,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 								curr_packed);
 				} while (++num_p_done < p_array->num_p);
 
-#if 1
+#if 0
 				printf("qroots %u qnum %u pnum %u pwords %u\n",
 						num_qroots, curr_num_q,
 						curr_num_p, packed_words);

@@ -181,7 +181,7 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	switch (poly->degree) {
 	case 4:
 		CUDA_TRY(cuModuleLoad(&gpu_module64, 
-				"stage1_core_deg4_64.ptx"))
+				"stage1_core_deg46_64.ptx"))
 		break;
 
 	case 5:
@@ -195,6 +195,8 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 		break;
 
 	case 6:
+		CUDA_TRY(cuModuleLoad(&gpu_module64, 
+				"stage1_core_deg46_64.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module96, 
 				"stage1_core_deg6_96.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module128, 

@@ -111,8 +111,8 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 	middle_poly = poly->batch + poly->num_poly / 2;
 	last_poly = poly->batch + poly->num_poly - 1;
 
-	if (poly->degree == 4 && 
-	    middle_poly->p_size_max >= MAX_P ||
+	if ((poly->degree == 4 && 
+	    middle_poly->p_size_max >= MAX_P) ||
 	    middle_poly->p_size_max >= (double)MAX_P * MAX_P) {
 		printf("error: rational leading coefficient is "
 			"too large at %le (%0.3f bits)\n",
@@ -156,6 +156,9 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		else
 			p_scale = 1.1;
 
+		CUDA_TRY(cuModuleGetFunction(&gpu_kernel64, 
+				gpu_module64, 
+				"sieve_kernel_64"))
 		CUDA_TRY(cuModuleGetFunction(&gpu_kernel96, 
 				gpu_module96, 
 				"sieve_kernel_96"))
@@ -200,7 +203,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		if (degree == 4) {
 			CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
 					NULL, gpu_module64, "pbatch"))
-			done = sieve_lattice_gpu_deg4_64(obj, &L,
+			done = sieve_lattice_gpu_deg46_64(obj, &L,
 				&sieve_small, &sieve_large,
 				(uint32)small_p_min, 
 				(uint32)small_p_max,
@@ -234,7 +237,18 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 			}
 		}
 		else {	/* degree 6 */
-			if (large_p_max < ((uint64)1 << 48)) {
+			if (large_p_max < ((uint64)1 << 32)) {
+				CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
+						NULL, gpu_module64, "pbatch"))
+				done = sieve_lattice_gpu_deg46_64(obj, &L,
+					&sieve_small, &sieve_large,
+					(uint32)small_p_min, 
+					(uint32)small_p_max,
+					(uint32)large_p_min, 
+					(uint32)large_p_max,
+					gpu_info, gpu_kernel64);
+			}
+			else if (large_p_max < ((uint64)1 << 48)) {
 				CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
 						NULL, gpu_module96, "pbatch"))
 				done = sieve_lattice_gpu_deg6_96(obj, &L,

@@ -147,7 +147,7 @@ QS_CORE_OBJS_X86_64 = \
 #---------------------------------- GPU file lists -------------------------
 
 GPU_OBJS = \
-	stage1_core_deg4_64.ptx \
+	stage1_core_deg46_64.ptx \
 	stage1_core_deg5_128.ptx \
 	stage1_core_deg5_64.ptx \
 	stage1_core_deg5_96.ptx \
@@ -167,10 +167,11 @@ NFS_HDR = \
 
 NFS_GPU_HDR = \
 	gnfs/poly/stage1_gpu/stage1.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg4_64.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg46_64.h \
 	gnfs/poly/stage1_gpu/stage1_core_deg5_128.h \
 	gnfs/poly/stage1_gpu/stage1_core_deg5_64.h \
 	gnfs/poly/stage1_gpu/stage1_core_deg5_96.h \
+	gnfs/poly/stage1_gpu/stage1_core_deg6_96.h \
 	gnfs/poly/stage1_gpu/stage1_core_deg6_128.h
 
 NFS_NOGPU_HDR = \
@@ -204,7 +205,7 @@ NFS_GPU_SRCS = \
 	gnfs/poly/stage1_gpu/stage1.c \
 	gnfs/poly/stage1_gpu/stage1_roots.c \
 	gnfs/poly/stage1_gpu/stage1_sieve.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg4_64.c \
+	gnfs/poly/stage1_gpu/stage1_sieve_deg46_64.c \
 	gnfs/poly/stage1_gpu/stage1_sieve_deg5_128.c \
 	gnfs/poly/stage1_gpu/stage1_sieve_deg5_64.c \
 	gnfs/poly/stage1_gpu/stage1_sieve_deg5_96.c \
@@ -358,8 +359,8 @@ mpqs/sieve_core_k8_64_64k.qo: mpqs/sieve_core.c $(COMMON_HDR) $(QS_HDR)
 
 # GPU build rules
 
-stage1_core_deg4_64.ptx: gnfs/poly/stage1_gpu/stage1_core_deg4_64.cu  \
-			gnfs/poly/stage1_gpu/stage1_core_deg4_64.h
+stage1_core_deg46_64.ptx: gnfs/poly/stage1_gpu/stage1_core_deg46_64.cu  \
+			gnfs/poly/stage1_gpu/stage1_core_deg46_64.h
 	nvcc -ptx -o $@ $<
 
 stage1_core_deg5_128.ptx: gnfs/poly/stage1_gpu/stage1_core_deg5_128.cu  \
