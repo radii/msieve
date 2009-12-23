@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="stage1_core_deg4_64"
+	Name="stage1_core_deg46_64"
 	ProjectGUID="{6CFF3196-7771-4507-A637-0739E1F35D01}"
-	RootNamespace="stage1_core_deg4_64"
+	RootNamespace="stage1_core_deg46_64"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="196613"
 	>
@@ -356,7 +356,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg4_64.cu"
+				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg46_64.cu"
 				>
 			</File>
 		</Filter>
@@ -366,7 +366,7 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg4_64.h"
+				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg46_64.h"
 				>
 			</File>
 		</Filter>

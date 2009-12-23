@@ -559,7 +559,7 @@
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg4_64.c"
+						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg46_64.c"
 						>
 					</File>
 					<File
@@ -695,7 +695,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg4_64.h"
+				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg46_64.h"
 				>
 			</File>
 			<File
