@@ -100,16 +100,16 @@ init_sieve(curr_poly_t *c, root_sieve_t *rs,
 static void
 compute_line_size(double max_norm, double *dbl_a, uint32 deg,
 		  double dbl_p, double dbl_d, 
-		  int64 last_xmin_in, int64 last_xmax_in,
-		  int64 *xmin, int64 *xmax)
+		  double last_xmin_in, double last_xmax_in,
+		  double *xmin, double *xmax)
 {
 	uint32 i;
 	double v0;
 	dpoly_t apoly;
 	double new_xlate, new_skewness;
 	double x0, x1, offset;
-	double last_xmin = (double)last_xmin_in;
-	double last_xmax = (double)last_xmax_in;
+	double last_xmin = last_xmin_in;
+	double last_xmax = last_xmax_in;
 
 	apoly.degree = deg;
 	for (i = 0; i <= deg; i++)
@@ -118,7 +118,9 @@ compute_line_size(double max_norm, double *dbl_a, uint32 deg,
 	apoly.coeff[1] = dbl_a[1] + dbl_p * last_xmin;
 	apoly.coeff[0] = dbl_a[0] - dbl_d * last_xmin;
 	v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-	offset = 10000;
+	offset = 1e-6 * fabs(last_xmin);
+	offset = MAX(offset, 10000.0);
+
 	if (v0 > max_norm) {
 		x0 = last_xmin;
 		x1 = last_xmin + offset;
@@ -152,7 +154,7 @@ compute_line_size(double max_norm, double *dbl_a, uint32 deg,
 		}
 	}
 
-	while (x1 - x0 > 500) {
+	while (x1 - x0 > 500 && x1 - x0 > 1e-6 * fabs(x0)) {
 		double xx = (x0 + x1) / 2;
 		apoly.coeff[1] = dbl_a[1] + dbl_p * xx;
 		apoly.coeff[0] = dbl_a[0] - dbl_d * xx;
@@ -162,12 +164,14 @@ compute_line_size(double max_norm, double *dbl_a, uint32 deg,
 		else
 			x1 = xx;
 	}
-	*xmin = (int64)x0;
+	*xmin = x0;
 
 	apoly.coeff[1] = dbl_a[1] + dbl_p * last_xmax;
 	apoly.coeff[0] = dbl_a[0] - dbl_d * last_xmax;
 	v0 = optimize_basic(&apoly, &new_skewness, &new_xlate);
-	offset = 10000;
+	offset = 1e-6 * fabs(last_xmax);
+	offset = MAX(offset, 10000.0);
+
 	if (v0 > max_norm) {
 		x0 = last_xmax - offset;
 		x1 = last_xmax;
@@ -201,7 +205,7 @@ compute_line_size(double max_norm, double *dbl_a, uint32 deg,
 		}
 	}
 
-	while (x1 - x0 > 500) {
+	while (x1 - x0 > 500 && x1 - x0 > 1e-6 * fabs(x0)) {
 		double xx = (x0 + x1) / 2;
 		apoly.coeff[1] = dbl_a[1] + dbl_p * xx;
 		apoly.coeff[0] = dbl_a[0] - dbl_d * xx;
@@ -211,7 +215,7 @@ compute_line_size(double max_norm, double *dbl_a, uint32 deg,
 		else
 			x0 = xx;
 	}
-	*xmax = (double)x1;
+	*xmax = x1;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -834,8 +838,8 @@ root_sieve_xy(root_sieve_t *rs, double max_norm,
 {
 	double a1 = a[1];
         double a2 = a[2];
-	int64 xmin = -10000;
-	int64 xmax = 10000;
+	double xmin = -10000;
+	double xmax = 10000;
 	uint32 lines_done = 0;
 
 	while (1) {
@@ -844,11 +848,11 @@ root_sieve_xy(root_sieve_t *rs, double max_norm,
 		compute_line_size(max_norm, a, deg, p, d, 
 				  xmin, xmax, &xmin, &xmax);
 
-//		printf("%d %.0lf %.0lf\n", y0, (double)xmin, (double)xmax);
-		if (xmax - xmin < 1000)
+//		printf("%d %lf %.lf\n", y0, xmin, xmax);
+		if (xmax - xmin < 1000.0)
 			break;
 
-		root_sieve_x(rs, xmin, xmax, y0);
+		root_sieve_x(rs, (int64)xmin, (int64)xmax, y0);
 		y0 += y_inc;
 		lines_done++;
 	}
