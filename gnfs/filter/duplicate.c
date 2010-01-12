@@ -357,6 +357,10 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 			continue;
 		}
 
+		if (curr_relation % 10000000 == 0) {
+			printf("read %uM relations\n", curr_relation / 1000000);
+		} /* there are no more errors -6/-11 to see progress */
+
 		/* relation is good; find the value to which it
 		   hashes. Note that only the bottom 35 bits of 'a'
 		   and the bottom 29 bits of 'b' figure into the hash,
