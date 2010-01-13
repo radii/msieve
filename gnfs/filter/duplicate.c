@@ -357,7 +357,7 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 			continue;
 		}
 
-		if (curr_relation % 10000000 == 0) {
+		if (curr_relation > 0 && (curr_relation % 10000000 == 0)) {
 			printf("read %uM relations\n", curr_relation / 1000000);
 		} /* there are no more errors -6/-11 to see progress */
 
