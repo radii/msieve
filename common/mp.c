@@ -441,21 +441,23 @@ static uint32 mp_submul_1(uint32 *a, uint32 b,
 
 #if defined(GCC_ASM32A)
 	ASM_G(
-	    "negl %5			\n\t"
+	    "leal (%2,%0,4), %2         \n\t"
+	    "leal (%3,%0,4), %3         \n\t"
+	    "negl %0			\n\t"
 	    "jz 1f			\n\t"
 	    "0:				\n\t"
-	    "movl (%2,%5,4), %%eax	\n\t"
+	    "movl (%2,%0,4), %%eax	\n\t"
 	    "mull %4			\n\t"
 	    "addl %1, %%eax		\n\t"
 	    "adcl $0, %%edx		\n\t"
-	    "subl %%eax, (%3,%5,4)	\n\t"
+	    "subl %%eax, (%3,%0,4)	\n\t"
 	    "movl %%edx, %1		\n\t"
 	    "adcl $0, %1		\n\t"
 	    "addl $1, %0		\n\t"
 	    "jnz 0b			\n\t"
 	    "1:				\n\t"
-	    : "+r"(words), "+r"(carry)
-	    : "r"(a + words), "r"(x + words), "g"(b)
+	    : "+r"(words), "+r"(carry), "+r"(a), "+r"(x)
+	    : "g"(b)
 	    : "%eax", "%edx", "cc", "memory");
 
 #elif defined(MSC_ASM32A)
@@ -512,14 +514,14 @@ void mp_mul_1(mp_t *a, uint32 b, mp_t *x) {
 
 #if defined(GCC_ASM32A)
 	ASM_G(
-	    "negl %5			\n\t"
+	    "negl %0			\n\t"
 	    "jz 1f			\n\t"
 	    "0:				\n\t"
-	    "movl (%2,%5,4), %%eax	\n\t"
+	    "movl (%2,%0,4), %%eax	\n\t"
 	    "mull %4			\n\t"
 	    "addl %1, %%eax		\n\t"
 	    "adcl $0, %%edx		\n\t"
-	    "movl %%eax, (%3,%5,4)	\n\t"
+	    "movl %%eax, (%3,%0,4)	\n\t"
 	    "movl %%edx, %1		\n\t"
 	    "addl $1, %5		\n\t"
 	    "jnz 0b			\n\t"
@@ -742,7 +744,7 @@ static void mp_divrem_core(big_mp_t *num, mp_t *denom,
 #else
 			uint64 acc = (uint64)high_num << 32 | (uint64)low_num;
 			q = (uint32)(acc / high_denom);
-			r = (uint32)(acc % high_denom);
+			r = (uint32)(acc - (uint64)q * high_denom);
 #endif
 			while ((uint64)low_denom * (uint64)q >
 				((uint64)r << 32) + check) {
@@ -863,8 +865,9 @@ uint32 mp_divrem_1(mp_t *num, uint32 denom, mp_t *quot) {
 		quot->val[i] = quot1;
 #else
 		uint64 acc = (uint64)rem << 32 | (uint64)num->val[i];
-		quot->val[i] = (uint32)(acc / denom);
-		rem = (uint32)(acc % denom);
+		uint32 q = (uint32)(acc / denom);
+		quot->val[i] = q;
+		rem = (uint32)(acc - (uint64)q * denom);
 #endif
 		i--;
 	}
