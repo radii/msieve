@@ -15,6 +15,8 @@ Version 1.44:
 		  accepting polynomials
 	- Fixed a bug in the relation reading code that caused crashes when 
 		initializing empty dependencies (thanks Jeff Gilchrist)
+	- Fixed a bug reading factor base files without a trailing newline 
+		(thanks Jayson King)
 	- Allowed NFS poly selection and sieving for inputs down to 80 digits
 		(thanks andi47)
 

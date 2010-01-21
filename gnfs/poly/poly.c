@@ -93,7 +93,7 @@ int32 read_poly(msieve_obj *obj, mp_t *n,
 	/* read one coefficient per line; 'R<number>' is
 	   for rational coefficients, 'A<number>' for algebraic */
 
-	while (!feof(fp) && (buf[0] == 'R' || buf[0] == 'A')) {
+	while (buf[0] == 'R' || buf[0] == 'A') {
 		signed_mp_t *read_coeff;
 		char *tmp;
 
@@ -114,7 +114,8 @@ int32 read_poly(msieve_obj *obj, mp_t *n,
 			read_coeff->sign = POSITIVE;
 		}
 		mp_str2mp(tmp, &read_coeff->num, 10);
-		fgets(buf, (int)sizeof(buf), fp);
+		if (fgets(buf, (int)sizeof(buf), fp) == NULL)
+			break;
 	}
 
 	for (i = MAX_POLY_DEGREE; i >= 0; i--) {
