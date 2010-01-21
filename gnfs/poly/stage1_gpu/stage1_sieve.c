@@ -201,6 +201,11 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		uint32 done = 1;
 
 		if (degree == 4) {
+
+			/* bounds may have grown too large */
+			if (large_p_max >= ((uint64)1 << 32))
+				break;
+
 			CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
 					NULL, gpu_module64, "pbatch"))
 			done = sieve_lattice_gpu_deg46_64(obj, &L,
