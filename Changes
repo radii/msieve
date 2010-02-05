@@ -1,4 +1,4 @@
-Version 1.44:
+Version 1.44: 2/5/10
 	- NFS poly selection changes:
 		- Added a branch that uses Nvidia GPU code. This makes stage 1
 		  run enormously faster (my medium-end GPU is 35x faster than
