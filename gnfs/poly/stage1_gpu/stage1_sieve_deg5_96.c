@@ -145,7 +145,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 		}
 
 		CUDA_TRY(cuMemcpyHtoD(L->gpu_q_array, q_marshall,
-				Q_SOA_BATCH_SIZE * (2 * sizeof(uint64) +
+				Q_SOA_BATCH_SIZE * (sizeof(uint64) +
 					3 * num_poly * sizeof(uint32))))
 		CUDA_TRY(cuParamSeti(gpu_kernel, num_q_offset, curr_num_q))
 
