@@ -22,12 +22,6 @@ OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
 CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) \
 		-I. -Iinclude -Ignfs -Ignfs/poly
 
-# Note to MinGW users: the library does not use pthreads calls in
-# win32 or win64, so it's safe to pull libpthread into the link line.
-# Of course this does mean you have to install the minGW pthreads bundle...
-
-LIBS = -lgmp -lm -lpthread
-
 # tweak the compile flags
 
 ifeq ($(ECM),1)
@@ -48,6 +42,12 @@ ifeq ($(CUDA),1)
 	LIBS += "$(CUDA_LIB_DIR)/cuda.lib"
 	# LIBS += -lcuda
 endif
+
+# Note to MinGW users: the library does not use pthreads calls in
+# win32 or win64, so it's safe to pull libpthread into the link line.
+# Of course this does mean you have to install the minGW pthreads bundle...
+
+LIBS += -lgmp -lm -lpthread
 
 #---------------------------------- Generic file lists -------------------
 
