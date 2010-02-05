@@ -556,6 +556,8 @@ sieve_kernel_128(p_soa_t *pbatch,
 				}
 			}
 
+			__syncthreads();
+
 			for (j = 0; j < curr_num_p; j++) {
 				uint32 prefetch0 = qbatch->roots[0][i];
 				uint32 prefetch1 = qbatch->roots[1][i];
