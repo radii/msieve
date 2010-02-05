@@ -354,6 +354,8 @@ sieve_kernel_64(p_soa_t *pbatch,
 				}
 			}
 
+			__syncthreads();
+
 			for (j = 0; j < curr_num_p; j++) {
 				uint64 prefetch = qbatch->roots[0][i];
 				uint32 p = pbatch_cache.p[j];
