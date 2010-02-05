@@ -43,6 +43,17 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 
 	uint64_2gmp(p, poly->tmp1);
 	uint64_2gmp(q, poly->tmp2);
+
+	mpz_gcd(poly->tmp3, poly->tmp1, c->high_coeff);
+	if (mpz_cmp_ui(poly->tmp3, 1))
+		return;
+	mpz_gcd(poly->tmp3, poly->tmp2, c->high_coeff);
+	if (mpz_cmp_ui(poly->tmp3, 1))
+		return;
+	mpz_gcd(poly->tmp3, poly->tmp1, poly->tmp2);
+	if (mpz_cmp_ui(poly->tmp3, 1))
+		return;
+
 	mpz_import(poly->tmp3, 4, -1, sizeof(uint32), 0, 0, &proot);
 	mpz_import(poly->tmp4, 4, -1, sizeof(uint32), 0, 0, &res);
 
