@@ -527,7 +527,7 @@ sieve_kernel_128(p_soa_t *pbatch,
 	found_array[my_threadid].p = 0;
 
 	for (i = my_threadid; i < end; i += num_threads) {
-		uint64 q = qbatch->p[i];
+		uint64 q = i < num_q ? qbatch->p[i] : 0;
 		uint128 q2 = wide_sqr(q);
 		uint32 q2_w = montmul_w(q2.w[0]);
 		uint128 q2_r = montmul_r(q2, q2_w);
