@@ -519,19 +519,25 @@ sieve_kernel_128(p_soa_t *pbatch,
 {
 	uint32 my_threadid;
 	uint32 num_threads;
-	uint32 i, j, k, end;
+	uint32 i, j, k, t, end;
 
 	my_threadid = blockIdx.x * blockDim.x + threadIdx.x;
 	num_threads = gridDim.x * blockDim.x;
-	end = (num_q + num_threads - 1) / num_threads * num_threads;
+	end = (num_q + num_threads - 1) / num_threads;
 	found_array[my_threadid].p = 0;
 
-	for (i = my_threadid; i < end; i += num_threads) {
-		uint64 q = i < num_q ? qbatch->p[i] : 0;
-		uint128 q2 = wide_sqr(q);
-		uint32 q2_w = montmul_w(q2.w[0]);
-		uint128 q2_r = montmul_r(q2, q2_w);
-		uint32 p_done = 0;
+	for (t = 0; t < end; t++) {
+		uint32 q2_w, p_done = 0;
+		uint64 q;
+		uint128 q2, q2_r;
+
+		i = my_threadid + t * num_threads;
+		if (i < num_q) {
+			q = qbatch->p[i];
+			q2 = wide_sqr(q);
+			q2_w = montmul_w(q2.w[0]);
+			q2_r = montmul_r(q2, q2_w);
+		}
 
 		while (p_done < num_p) {
 
