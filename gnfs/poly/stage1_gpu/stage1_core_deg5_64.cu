@@ -323,13 +323,14 @@ sieve_kernel_64(p_soa_t *pbatch,
 {
 	uint32 my_threadid;
 	uint32 num_threads;
-	uint32 i, j, k;
+	uint32 i, j, k, end;
 
 	my_threadid = blockIdx.x * blockDim.x + threadIdx.x;
 	num_threads = gridDim.x * blockDim.x;
+	end = (num_q + num_threads - 1) / num_threads * num_threads;
 	found_array[my_threadid].p = 0;
 
-	for (i = my_threadid; i < num_q; i += num_threads) {
+	for (i = my_threadid; i < end; i += num_threads) {
 		uint32 q = qbatch->p[i];
 		uint64 q2 = (uint64)q * q;
 		uint32 q2_w = montmul_w((uint32)q2);
@@ -356,7 +357,7 @@ sieve_kernel_64(p_soa_t *pbatch,
 
 			__syncthreads();
 
-			for (j = 0; j < curr_num_p; j++) {
+			for (j = 0; j < curr_num_p && i < num_q; j++) {
 				uint64 prefetch = qbatch->roots[0][i];
 				uint32 p = pbatch_cache.p[j];
 				uint64 p2 = (uint64)p * p;
