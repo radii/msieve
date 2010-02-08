@@ -187,11 +187,8 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 #endif
 
 			num_blocks = gpu_info->num_compute_units;
-			if (curr_num_q < found_array_size) {
-				num_blocks = (curr_num_q + 
-					threads_per_block - 1) /
-					threads_per_block;
-			}
+			if (curr_num_q < found_array_size)
+				num_blocks = curr_num_q / threads_per_block;
 
 			CUDA_TRY(cuLaunchGrid(gpu_kernel, 
 						num_blocks, 1))
