@@ -394,6 +394,10 @@ __shared__ p_soa_shared_t pbatch_cache;
 
 __constant__ uint96 two = {{2, 0, 0}};
 
+/* note that num_q must be a multiple of the block size
+   (we want either all threads or no threads to execute
+   the __syncthreads() call below) */
+
 __global__ void
 sieve_kernel_96(p_soa_t *pbatch, 
              uint32 num_p,
@@ -404,25 +408,21 @@ sieve_kernel_96(p_soa_t *pbatch,
 {
 	uint32 my_threadid;
 	uint32 num_threads;
-	uint32 i, j, k, t, end;
+	uint32 i, j, k;
 
 	my_threadid = blockIdx.x * blockDim.x + threadIdx.x;
 	num_threads = gridDim.x * blockDim.x;
-	end = (num_q + num_threads - 1) / num_threads;
 	found_array[my_threadid].p = 0;
 
-	for (t = 0; t < end; t++) {
+	for (i = my_threadid; i < num_q; i += num_threads) {
 		uint32 q2_w, p_done = 0;
 		uint64 q;
 		uint96 q2, q2_r;
 
-		i = my_threadid + t * num_threads;
-		if (i < num_q) {
-			q = qbatch->p[i];
-			q2 = wide_sqr(q);
-			q2_w = montmul_w(q2.w[0]);
-			q2_r = montmul_r(q2, q2_w);
-		}
+		q = qbatch->p[i];
+		q2 = wide_sqr(q);
+		q2_w = montmul_w(q2.w[0]);
+		q2_r = montmul_r(q2, q2_w);
 
 		while (p_done < num_p) {
 
@@ -448,7 +448,7 @@ sieve_kernel_96(p_soa_t *pbatch,
 
 			__syncthreads();
 
-			for (j = 0; j < curr_num_p && i < num_q; j++) {
+			for (j = 0; j < curr_num_p; j++) {
 				uint32 prefetch0 = qbatch->roots[0][i];
 				uint32 prefetch1 = qbatch->roots[1][i];
 				uint32 prefetch2 = qbatch->roots[2][i];
