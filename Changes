@@ -1,4 +1,8 @@
 Version 1.45:
+	- NFS poly selection changes:
+		- Fixed some degree 5 synchronization issues (thanks
+		  Jayson King)
+	- Cleaned up the makefile a bit
 
 
 Version 1.44: 2/5/10

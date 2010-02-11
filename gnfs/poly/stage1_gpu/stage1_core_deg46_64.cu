@@ -12,6 +12,7 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
+#include "cuda_intrinsics.h"
 #include "stage1_core_deg46_64.h"
 
 #ifdef __cplusplus
@@ -92,68 +93,58 @@ montmul(uint64 a, uint64 b,
 	uint32 b1 = (uint32)(b >> 32);
 	uint32 n0 = (uint32)n;
 	uint32 n1 = (uint32)(n >> 32);
-	uint32 acc0, acc1, acc2, nmult;
+	uint32 acc0, acc1, acc2;
+	uint32 q0, q1;
 	uint32 prod_lo, prod_hi;
-	uint64 prod;
+	uint64 r;
 
-	prod_lo = a0 * b0;
-	prod_hi = __umulhi(a0, b0);
-	acc0 = prod_lo;
-
-	prod = (uint64)prod_hi;
-	prod_lo = a1 * b0;
-	prod_hi = __umulhi(a1, b0);
-	prod += ((uint64)prod_hi << 32 | prod_lo);
-	acc1 = (uint32)prod;
-	acc2 = (uint32)(prod >> 32);
-
-	nmult = acc0 * w;
-
-	prod_lo = nmult * n0;
-	prod_hi = __umulhi(nmult, n0);
-	prod = acc0 + ((uint64)prod_hi << 32 | prod_lo);
-	prod = prod >> 32;
-
-	prod_lo = nmult * n1;
-	prod_hi = __umulhi(nmult, n1);
-	prod += (uint64)acc1 + ((uint64)prod_hi << 32 | prod_lo);
-	acc0 = (uint32)prod;
-	prod = (prod >> 32) + (uint64)acc2;
-	acc1 = (uint32)prod;
-	acc2 = (uint32)(prod >> 32);
+	acc0 = a0 * b0;
+	acc1 = __umulhi(a0, b0);
+	q0 = acc0 * w;
+	prod_lo = q0 * n0;
+	prod_hi = __umulhi(q0, n0);
+	acc0 = __uaddo(acc0, prod_lo);
+	acc1 = __uaddc(acc1, prod_hi);
+	acc2 = __uaddc(0, 0);
 
 	prod_lo = a0 * b1;
 	prod_hi = __umulhi(a0, b1);
-	prod = (uint64)acc0 + ((uint64)prod_hi << 32 | prod_lo);
-	acc0 = (uint32)prod;
-	prod = prod >> 32;
+	acc0 = __uaddo(acc1, prod_lo);
+	acc1 = __uaddc(acc2, prod_hi);
+	acc2 = __uaddc(0, 0);
+	prod_lo = a1 * b0;
+	prod_hi = __umulhi(a1, b0);
+	acc0 = __uaddo(acc0, prod_lo);
+	acc1 = __uaddc(acc1, prod_hi);
+	acc2 = __uaddc(acc2, 0);
+	prod_lo = q0 * n1;
+	prod_hi = __umulhi(q0, n1);
+	acc0 = __uaddo(acc0, prod_lo);
+	acc1 = __uaddc(acc1, prod_hi);
+	acc2 = __uaddc(acc2, 0);
+	q1 = acc0 * w;
+	prod_lo = q1 * n0;
+	prod_hi = __umulhi(q1, n0);
+	acc0 = __uaddo(acc0, prod_lo);
+	acc1 = __uaddc(acc1, prod_hi);
+	acc2 = __uaddc(acc2, 0);
 
 	prod_lo = a1 * b1;
 	prod_hi = __umulhi(a1, b1);
-	prod += (uint64)acc1 + ((uint64)prod_hi << 32 | prod_lo);
-	acc1 = (uint32)prod;
-	acc2 = (uint32)(prod >> 32) + acc2;
+	acc0 = __uaddo(acc1, prod_lo);
+	acc1 = __uaddc(acc2, prod_hi);
+	acc2 = __uaddc(0, 0);
+	prod_lo = q1 * n1;
+	prod_hi = __umulhi(q1, n1);
+	acc0 = __uaddo(acc0, prod_lo);
+	acc1 = __uaddc(acc1, prod_hi);
+	acc2 = __uaddc(acc2, 0);
 
-	nmult = acc0 * w;
-
-	prod_hi = __umulhi(nmult, n0);
-	prod_lo = nmult * n0;
-	prod = acc0 + ((uint64)prod_hi << 32 | prod_lo);
-	prod = prod >> 32;
-
-	prod_hi = __umulhi(nmult, n1);
-	prod_lo = nmult * n1;
-	prod += acc1 + ((uint64)prod_hi << 32 | prod_lo);
-	acc0 = (uint32)prod;
-	prod = (prod >> 32) + (uint64)acc2;
-	acc1 = (uint32)prod;
-	acc2 = (uint32)(prod >> 32);
-
-	prod = (uint64)acc1 << 32 | acc0;
-	if (acc2 || prod >= n)
-		return prod - n;
+	r = (uint64)acc1 << 32 | acc0;
+	if (acc2 || r >= n)
+		return r - n;
 	else
-		return prod;
+		return r;
 }
 
 /*------------------------------------------------------------------------*/
