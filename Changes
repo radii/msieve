@@ -1,5 +1,8 @@
 Version 1.45:
 	- NFS poly selection changes:
+		- Added assembly language for a small speedup
+		- Added specialized routines that make poly selection
+		  for inputs < 135 digits about 35% faster
 		- Fixed some degree 5 synchronization issues (thanks
 		  Jayson King)
 	- Cleaned up the makefile a bit

@@ -265,8 +265,9 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 void sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 			uint32 small_fb_max, uint32 large_fb_min, 
 			uint32 large_fb_max, gpu_info_t *gpu_info,
-			CUmodule gpu_module64, CUmodule gpu_module96, 
-			CUmodule gpu_module128, uint32 deadline);
+			CUmodule gpu_module48, CUmodule gpu_module64, 
+			CUmodule gpu_module96, CUmodule gpu_module128, 
+			uint32 deadline);
 
 #ifdef __cplusplus
 }

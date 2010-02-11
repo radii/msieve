@@ -147,8 +147,10 @@ QS_CORE_OBJS_X86_64 = \
 #---------------------------------- GPU file lists -------------------------
 
 GPU_OBJS = \
+	stage1_core_deg46_48.ptx \
 	stage1_core_deg46_64.ptx \
 	stage1_core_deg5_128.ptx \
+	stage1_core_deg5_48.ptx \
 	stage1_core_deg5_64.ptx \
 	stage1_core_deg5_96.ptx \
 	stage1_core_deg6_128.ptx \
@@ -358,6 +360,16 @@ mpqs/sieve_core_k8_64_64k.qo: mpqs/sieve_core.c $(COMMON_HDR) $(QS_HDR)
 	$(CC) $(CFLAGS) -Ignfs -c -o $@ $<
 
 # GPU build rules
+
+stage1_core_deg46_48.ptx: gnfs/poly/stage1_gpu/stage1_core_deg46_48.cu \
+		gnfs/poly/stage1_gpu/stage1_core_deg46_64.h \
+		gnfs/poly/stage1_gpu/cuda_intrinsics.h
+	nvcc -ptx -o $@ $<
+
+stage1_core_deg5_48.ptx: gnfs/poly/stage1_gpu/stage1_core_deg5_48.cu \
+		gnfs/poly/stage1_gpu/stage1_core_deg5_64.h \
+		gnfs/poly/stage1_gpu/cuda_intrinsics.h
+	nvcc -ptx -o $@ $<
 
 %.ptx: gnfs/poly/stage1_gpu/%.cu \
 		gnfs/poly/stage1_gpu/%.h \

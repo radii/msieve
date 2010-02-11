@@ -120,8 +120,8 @@ poly_search_free(poly_search_t *poly)
 /*------------------------------------------------------------------------*/
 static void
 search_coeffs_core(msieve_obj *obj, poly_search_t *poly, 
-			gpu_info_t *gpu_info, CUmodule
-			gpu_module64, CUmodule gpu_module96,
+			gpu_info_t *gpu_info, CUmodule gpu_module48,
+			CUmodule gpu_module64, CUmodule gpu_module96,
 			CUmodule gpu_module128, uint32 deadline)
 {
 	uint32 i, j;
@@ -152,9 +152,9 @@ search_coeffs_core(msieve_obj *obj, poly_search_t *poly,
 	}
 
 	sieve_lattice(obj, poly, 2000, 2001, 
-			100000, gpu_info, gpu_module64,
-			gpu_module96, gpu_module128,
-			num_poly * deadline);
+			100000, gpu_info, gpu_module48,
+			gpu_module64, gpu_module96, 
+			gpu_module128, num_poly * deadline);
 }
 
 /*------------------------------------------------------------------------*/
@@ -170,6 +170,7 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	uint32 deadline_per_coeff = 800;
 	uint32 batch_size = 1;
 	CUcontext gpu_context;
+	CUmodule gpu_module48 = NULL;
 	CUmodule gpu_module64 = NULL;
 	CUmodule gpu_module96 = NULL;
 	CUmodule gpu_module128 = NULL;
@@ -180,12 +181,16 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 
 	switch (poly->degree) {
 	case 4:
+		CUDA_TRY(cuModuleLoad(&gpu_module48, 
+				"stage1_core_deg46_48.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module64, 
 				"stage1_core_deg46_64.ptx"))
 		break;
 
 	case 5:
 		batch_size = POLY_BATCH_SIZE;
+		CUDA_TRY(cuModuleLoad(&gpu_module48, 
+				"stage1_core_deg5_48.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module64, 
 				"stage1_core_deg5_64.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module96, 
@@ -195,6 +200,8 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 		break;
 
 	case 6:
+		CUDA_TRY(cuModuleLoad(&gpu_module48, 
+				"stage1_core_deg46_48.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module64, 
 				"stage1_core_deg46_64.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module96, 
@@ -242,8 +249,9 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 
 			if (poly->num_poly > 0) {
 				search_coeffs_core(obj, poly, gpu_info,
-					   gpu_module64, gpu_module96,
-					   gpu_module128, deadline_per_coeff);
+					   gpu_module48, gpu_module64, 
+					   gpu_module96, gpu_module128, 
+					   deadline_per_coeff);
 			}
 			break;
 		}
@@ -257,7 +265,7 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 		c->coeff_max = bounds->coeff_max;
 
 		if (++poly->num_poly == batch_size) {
-			search_coeffs_core(obj, poly, gpu_info,
+			search_coeffs_core(obj, poly, gpu_info, gpu_module48,
 					gpu_module64, gpu_module96,
 					gpu_module128, deadline_per_coeff);
 

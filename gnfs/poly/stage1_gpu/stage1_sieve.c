@@ -101,8 +101,9 @@ void
 sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 		uint32 small_fb_max, uint32 large_fb_min, 
 		uint32 large_fb_max, gpu_info_t *gpu_info,
-		CUmodule gpu_module64, CUmodule gpu_module96,
-		CUmodule gpu_module128, uint32 deadline)
+		CUmodule gpu_module48, CUmodule gpu_module64, 
+		CUmodule gpu_module96, CUmodule gpu_module128, 
+		uint32 deadline)
 {
 	lattice_fb_t L;
 	sieve_fb_t sieve_small, sieve_large;
@@ -115,6 +116,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 	curr_poly_t *middle_poly;
 	curr_poly_t *last_poly;
 
+	CUfunction gpu_kernel48;
 	CUfunction gpu_kernel64;
 	CUfunction gpu_kernel96;
 	CUfunction gpu_kernel128;
@@ -137,6 +139,9 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 	case 4:
 		if (bits < 320)
 			p_scale = 1.3;
+		CUDA_TRY(cuModuleGetFunction(&gpu_kernel48, 
+				gpu_module48, 
+				"sieve_kernel_48"))
 		CUDA_TRY(cuModuleGetFunction(&gpu_kernel64, 
 				gpu_module64, 
 				"sieve_kernel_64"))
@@ -148,6 +153,9 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		else if (bits < 396)
 			p_scale = 1.2;
 
+		CUDA_TRY(cuModuleGetFunction(&gpu_kernel48, 
+				gpu_module48, 
+				"sieve_kernel_48"))
 		CUDA_TRY(cuModuleGetFunction(&gpu_kernel64, 
 				gpu_module64, 
 				"sieve_kernel_64"))
@@ -167,6 +175,9 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		else
 			p_scale = 1.1;
 
+		CUDA_TRY(cuModuleGetFunction(&gpu_kernel48, 
+				gpu_module48, 
+				"sieve_kernel_48"))
 		CUDA_TRY(cuModuleGetFunction(&gpu_kernel64, 
 				gpu_module64, 
 				"sieve_kernel_64"))
@@ -217,18 +228,40 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 			if (large_p_max >= ((uint64)1 << 32))
 				break;
 
-			CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
-					NULL, gpu_module64, "pbatch"))
-			done = sieve_lattice_gpu_deg46_64(obj, &L,
-				&sieve_small, &sieve_large,
-				(uint32)small_p_min, 
-				(uint32)small_p_max,
-				(uint32)large_p_min, 
-				(uint32)large_p_max,
-				gpu_info, gpu_kernel64);
+			if (large_p_max < ((uint64)1 << 24)) {
+				CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
+						NULL, gpu_module48, "pbatch"))
+				done = sieve_lattice_gpu_deg46_64(obj, &L,
+					&sieve_small, &sieve_large,
+					(uint32)small_p_min, 
+					(uint32)small_p_max,
+					(uint32)large_p_min, 
+					(uint32)large_p_max,
+					gpu_info, gpu_kernel48);
+			}
+			else {
+				CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
+						NULL, gpu_module64, "pbatch"))
+				done = sieve_lattice_gpu_deg46_64(obj, &L,
+					&sieve_small, &sieve_large,
+					(uint32)small_p_min, 
+					(uint32)small_p_max,
+					(uint32)large_p_min, 
+					(uint32)large_p_max,
+					gpu_info, gpu_kernel64);
+			}
 		}
 		else if (degree == 5) {
-			if (large_p_max < ((uint64)1 << 32)) {
+			if (large_p_max < ((uint64)1 << 24)) {
+				done = sieve_lattice_gpu_deg5_64(obj, &L,
+					&sieve_small, &sieve_large,
+					(uint32)small_p_min, 
+					(uint32)small_p_max,
+					(uint32)large_p_min, 
+					(uint32)large_p_max,
+					gpu_info, gpu_kernel48);
+			}
+			else if (large_p_max < ((uint64)1 << 32)) {
 				done = sieve_lattice_gpu_deg5_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
@@ -253,7 +286,18 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 			}
 		}
 		else {	/* degree 6 */
-			if (large_p_max < ((uint64)1 << 32)) {
+			if (large_p_max < ((uint64)1 << 24)) {
+				CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
+						NULL, gpu_module48, "pbatch"))
+				done = sieve_lattice_gpu_deg46_64(obj, &L,
+					&sieve_small, &sieve_large,
+					(uint32)small_p_min, 
+					(uint32)small_p_max,
+					(uint32)large_p_min, 
+					(uint32)large_p_max,
+					gpu_info, gpu_kernel48);
+			}
+			else if (large_p_max < ((uint64)1 << 32)) {
 				CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
 						NULL, gpu_module64, "pbatch"))
 				done = sieve_lattice_gpu_deg46_64(obj, &L,
