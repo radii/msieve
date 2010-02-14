@@ -20,17 +20,9 @@ extern "C" {
 #endif
 
 #ifdef __CUDACC__
-typedef int int32;
-typedef unsigned int uint32;
-typedef unsigned long long uint64;
-#define MAX_ROOTS 128
+	#include "cuda_intrinsics.h"
 
-/* 128-bit integers */
-
-typedef struct {
-	uint32 w[4];
-} uint128;
-
+	#define MAX_ROOTS 128
 #endif
 
 /* structure indicating a collision */

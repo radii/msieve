@@ -20,8 +20,8 @@ extern "C" {
 #endif
 
 #ifdef __CUDACC__
-	typedef unsigned int uint32;
-	typedef unsigned long long uint64;
+	#include "cuda_intrinsics.h"
+
 	#define POLY_BATCH_SIZE 40
 #endif
 

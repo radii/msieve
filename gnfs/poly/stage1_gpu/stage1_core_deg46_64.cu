@@ -12,169 +12,13 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "cuda_intrinsics.h"
 #include "stage1_core_deg46_64.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*------------------------------------------------------------------------*/
-__device__ uint64 
-modsub(uint64 a, uint64 b, uint64 p) 
-{
-	uint64 t = 0, tr;
-	tr = a - b;
-	if (tr > a)
-		t = p;
-	return tr + t;
-}
-
-/*------------------------------------------------------------------------*/
-__device__ uint32 
-modinv(uint32 a, uint32 p) {
-
-	uint32 ps1, ps2, dividend, divisor, rem, q, t;
-	uint32 parity;
-
-	q = 1; rem = a; dividend = p; divisor = a;
-	ps1 = 1; ps2 = 0; parity = 0;
-
-	while (divisor > 1) {
-		rem = dividend - divisor;
-		t = rem - divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t; t -= divisor;
-		if (rem >= divisor) { q += ps1; rem = t;
-		if (rem >= divisor) {
-			q = dividend / divisor;
-			rem = dividend - q * divisor;
-			q *= ps1;
-		} } } } } } } } }
-
-		q += ps2;
-		parity = ~parity;
-		dividend = divisor;
-		divisor = rem;
-		ps2 = ps1;
-		ps1 = q;
-	}
-	
-	if (parity == 0)
-		return ps1;
-	else
-		return p - ps1;
-}
-
-/*------------------------------------------------------------------------*/
-__device__ uint32 
-montmul_w(uint32 n) {
-
-	uint32 res = 2 + n;
-	res = res * (2 + n * res);
-	res = res * (2 + n * res);
-	res = res * (2 + n * res);
-	return res * (2 + n * res);
-}
-
-/*------------------------------------------------------------------------*/
-__device__ uint64 
-montmul(uint64 a, uint64 b,
-		uint64 n, uint32 w) {
-
-	uint32 a0 = (uint32)a;
-	uint32 a1 = (uint32)(a >> 32);
-	uint32 b0 = (uint32)b;
-	uint32 b1 = (uint32)(b >> 32);
-	uint32 n0 = (uint32)n;
-	uint32 n1 = (uint32)(n >> 32);
-	uint32 acc0, acc1, acc2;
-	uint32 q0, q1;
-	uint32 prod_lo, prod_hi;
-	uint64 r;
-
-	acc0 = a0 * b0;
-	acc1 = __umulhi(a0, b0);
-	q0 = acc0 * w;
-	prod_lo = q0 * n0;
-	prod_hi = __umulhi(q0, n0);
-	acc0 = __uaddo(acc0, prod_lo);
-	acc1 = __uaddc(acc1, prod_hi);
-	acc2 = __uaddc(0, 0);
-
-	prod_lo = a0 * b1;
-	prod_hi = __umulhi(a0, b1);
-	acc0 = __uaddo(acc1, prod_lo);
-	acc1 = __uaddc(acc2, prod_hi);
-	acc2 = __uaddc(0, 0);
-	prod_lo = a1 * b0;
-	prod_hi = __umulhi(a1, b0);
-	acc0 = __uaddo(acc0, prod_lo);
-	acc1 = __uaddc(acc1, prod_hi);
-	acc2 = __uaddc(acc2, 0);
-	prod_lo = q0 * n1;
-	prod_hi = __umulhi(q0, n1);
-	acc0 = __uaddo(acc0, prod_lo);
-	acc1 = __uaddc(acc1, prod_hi);
-	acc2 = __uaddc(acc2, 0);
-	q1 = acc0 * w;
-	prod_lo = q1 * n0;
-	prod_hi = __umulhi(q1, n0);
-	acc0 = __uaddo(acc0, prod_lo);
-	acc1 = __uaddc(acc1, prod_hi);
-	acc2 = __uaddc(acc2, 0);
-
-	prod_lo = a1 * b1;
-	prod_hi = __umulhi(a1, b1);
-	acc0 = __uaddo(acc1, prod_lo);
-	acc1 = __uaddc(acc2, prod_hi);
-	acc2 = __uaddc(0, 0);
-	prod_lo = q1 * n1;
-	prod_hi = __umulhi(q1, n1);
-	acc0 = __uaddo(acc0, prod_lo);
-	acc1 = __uaddc(acc1, prod_hi);
-	acc2 = __uaddc(acc2, 0);
-
-	r = (uint64)acc1 << 32 | acc0;
-	if (acc2 || r >= n)
-		return r - n;
-	else
-		return r;
-}
-
-/*------------------------------------------------------------------------*/
-__device__ uint64 
-montmul_r(uint64 n, uint32 w) {
-
-	uint32 shift;
-	uint32 i;
-	uint64 shifted_n;
-	uint64 res;
-
-	shift = __clzll(n);
-	shifted_n = n << shift;
-	res = -shifted_n;
-
-	for (i = 64 - shift; i < 72; i++) {
-		if (res >> 63)
-			res = res + res - shifted_n;
-		else
-			res = res + res;
-
-		if (res >= shifted_n)
-			res -= shifted_n;
-	}
-
-	res = res >> shift;
-	res = montmul(res, res, n, w);
-	res = montmul(res, res, n, w);
-	return montmul(res, res, n, w);
-}
+__constant__ uint64 pbatch[P_ARRAY_WORDS];
 
 /*------------------------------------------------------------------------*/
 __device__ p_packed_t *
@@ -185,8 +29,6 @@ p_packed_next(p_packed_t *curr)
 }
 
 /*------------------------------------------------------------------------*/
-__constant__ uint64 pbatch[P_ARRAY_WORDS];
-
 __global__ void
 sieve_kernel_64(q_soa_t *qbatch, 
              uint32 num_q,
@@ -205,25 +47,25 @@ sieve_kernel_64(q_soa_t *qbatch,
 	for (i = my_threadid; i < num_q; i += num_threads) {
 		uint32 q = qbatch->p[i];
 		uint64 q2 = (uint64)q * q;
-		uint32 q2_w = montmul_w((uint32)q2);
-		uint64 q2_r = montmul_r(q2, q2_w);
+		uint32 q2_w = montmul32_w((uint32)q2);
+		uint64 q2_r = montmul64_r(q2, q2_w);
 		p_packed_t *curr_p = (p_packed_t *)pbatch;
 		
 		for (j = 0; j < num_p; j++) {
 			uint32 p = curr_p->p;
 			uint64 p2 = (uint64)p * p;
-			uint32 pinvmodq = modinv(p, q);
+			uint32 pinvmodq = modinv32(p, q);
 
 			uint32 num_proots = curr_p->num_roots;
 			uint32 lattice_size = curr_p->lattice_size;
 			uint64 pinv, tmp;
 
 			tmp = (uint64)pinvmodq * pinvmodq;
-			tmp = montmul(tmp, q2_r, q2, q2_w);
-			pinv = montmul(p2, tmp, q2, q2_w);
-			pinv = modsub((uint64)2, pinv, q2);
-			pinv = montmul(pinv, tmp, q2, q2_w);
-			pinv = montmul(pinv, q2_r, q2, q2_w);
+			tmp = montmul64(tmp, q2_r, q2, q2_w);
+			pinv = montmul64(p2, tmp, q2, q2_w);
+			pinv = modsub64((uint64)2, pinv, q2);
+			pinv = montmul64(pinv, tmp, q2, q2_w);
+			pinv = montmul64(pinv, q2_r, q2, q2_w);
 
 			for (k = 0; k < num_qroots; k++) {
 
@@ -232,8 +74,8 @@ sieve_kernel_64(q_soa_t *qbatch,
 				for (m = 0; m < num_proots; m++) {
 
 					uint64 proot = curr_p->roots[m];
-					uint64 res = montmul(pinv, 
-							modsub(qroot, 
+					uint64 res = montmul64(pinv, 
+							modsub64(qroot, 
 								proot, q2),
 							q2, q2_w);
 
