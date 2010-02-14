@@ -152,8 +152,10 @@ GPU_OBJS = \
 	stage1_core_deg5_128.ptx \
 	stage1_core_deg5_48.ptx \
 	stage1_core_deg5_64.ptx \
+	stage1_core_deg5_72.ptx \
 	stage1_core_deg5_96.ptx \
 	stage1_core_deg6_128.ptx \
+	stage1_core_deg6_72.ptx \
 	stage1_core_deg6_96.ptx
 
 #---------------------------------- NFS file lists -------------------------
