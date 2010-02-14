@@ -46,21 +46,21 @@ sieve_kernel_64(q_soa_t *qbatch,
 
 	for (i = my_threadid; i < num_q; i += num_threads) {
 		uint32 q = qbatch->p[i];
-		uint64 q2 = (uint64)q * q;
+		uint64 q2 = wide_sqr32(q);
 		uint32 q2_w = montmul32_w((uint32)q2);
 		uint64 q2_r = montmul64_r(q2, q2_w);
 		p_packed_t *curr_p = (p_packed_t *)pbatch;
 		
 		for (j = 0; j < num_p; j++) {
 			uint32 p = curr_p->p;
-			uint64 p2 = (uint64)p * p;
+			uint64 p2 = wide_sqr32(p);
 			uint32 pinvmodq = modinv32(p, q);
 
 			uint32 num_proots = curr_p->num_roots;
 			uint32 lattice_size = curr_p->lattice_size;
 			uint64 pinv, tmp;
 
-			tmp = (uint64)pinvmodq * pinvmodq;
+			tmp = wide_sqr32(pinvmodq);
 			tmp = montmul64(tmp, q2_r, q2, q2_w);
 			pinv = montmul64(p2, tmp, q2, q2_w);
 			pinv = modsub64((uint64)2, pinv, q2);

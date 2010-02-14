@@ -127,101 +127,72 @@ cmp128(uint128 a, uint128 b)
 	return 0;
 }
 
-/*------------------------ Addition ---------------------------------*/
+/*-------------------- Addition/Subtraction --------------------------*/
 __device__ uint96
 add96(uint96 a, uint96 b)
 {
-	uint32 c;
-	uint32 acc;
 	uint96 res;
 
-	acc = a.w[0] + b.w[0];
-	res.w[0] = acc;
-	c = (acc < a.w[0]);
-
-	acc = a.w[1] + c;
-	c = (acc < a.w[1]);
-	res.w[1] = acc + b.w[1];
-	c += (res.w[1] < acc);
-
-	res.w[2] = a.w[2] + b.w[2] + c;
+	res.w[0] = __uaddo(a.w[0], b.w[0]);
+	res.w[1] = __uaddc(a.w[1], b.w[1]);
+	res.w[2] = __uaddc(a.w[2], b.w[2]);
 	return res;
 }
 
+__device__ uint96
+sub96(uint96 a, uint96 b)
+{
+	uint96 res;
+
+	res.w[0] = __usubo(a.w[0], b.w[0]);
+	res.w[1] = __usubc(a.w[1], b.w[1]);
+	res.w[2] = __usubc(a.w[2], b.w[2]);
+	return res;
+}
 
 __device__ uint128
 add128(uint128 a, uint128 b)
 {
-	uint32 c;
-	uint32 acc;
 	uint128 res;
 
-	acc = a.w[0] + b.w[0];
-	res.w[0] = acc;
-	c = (acc < a.w[0]);
-
-	acc = a.w[1] + c;
-	c = (acc < a.w[1]);
-	res.w[1] = acc + b.w[1];
-	c += (res.w[1] < acc);
-
-	acc = a.w[2] + c;
-	c = (acc < a.w[2]);
-	res.w[2] = acc + b.w[2];
-	c += (res.w[2] < acc);
-
-	res.w[3] = a.w[3] + b.w[3] + c;
+	res.w[0] = __uaddo(a.w[0], b.w[0]);
+	res.w[1] = __uaddc(a.w[1], b.w[1]);
+	res.w[2] = __uaddc(a.w[2], b.w[2]);
+	res.w[3] = __uaddc(a.w[3], b.w[3]);
 	return res;
 }
-
-/*------------------------ Subtraction ---------------------------------*/
-__device__ uint96
-sub96(uint96 a, uint96 b)
-{
-	uint32 c;
-	uint32 acc;
-	uint96 res;
-
-	acc = a.w[0] - b.w[0];
-	res.w[0] = acc;
-	c = (acc > a.w[0]);
-
-	acc = a.w[1] - c;
-	c = (acc > a.w[1]);
-	res.w[1] = acc - b.w[1];
-	c += (res.w[1] > acc);
-
-	res.w[2] = a.w[2] - b.w[2] - c;
-	return res;
-}
-
 
 __device__ uint128
 sub128(uint128 a, uint128 b)
 {
-	uint32 c;
-	uint32 acc;
 	uint128 res;
 
-	acc = a.w[0] - b.w[0];
-	res.w[0] = acc;
-	c = (acc > a.w[0]);
-
-	acc = a.w[1] - c;
-	c = (acc > a.w[1]);
-	res.w[1] = acc - b.w[1];
-	c += (res.w[1] > acc);
-
-	acc = a.w[2] - c;
-	c = (acc > a.w[2]);
-	res.w[2] = acc - b.w[2];
-	c += (res.w[2] > acc);
-
-	res.w[3] = a.w[3] - b.w[3] - c;
+	res.w[0] = __usubo(a.w[0], b.w[0]);
+	res.w[1] = __usubc(a.w[1], b.w[1]);
+	res.w[2] = __usubc(a.w[2], b.w[2]);
+	res.w[3] = __usubc(a.w[3], b.w[3]);
 	return res;
 }
 
 /*----------------- Squaring ----------------------------------------*/
+
+__device__ uint64 
+wide_sqr32(uint32 a)
+{
+	uint32 a0, a1;
+
+	asm("{ .reg .u64 %dprod; \n\t"
+	    "mul.wide.u32 %dprod, %2, %2; \n\t"
+	    "cvt.u32.u64 %0, %dprod;      \n\t"
+	    "shr.u64 %dprod, %dprod, 32;  \n\t"
+	    "cvt.u32.u64 %1, %dprod;      \n\t"
+	    "}                   \n\t"
+	    : "=r"(a0), "=r"(a1)
+	    : "r"(a));
+
+	return (uint64)a1 << 32 | a0;
+}
+
 __device__ uint96 
 wide_sqr48(uint64 a)
 {
@@ -281,23 +252,64 @@ wide_sqr64(uint64 a)
 __device__ uint64 
 modsub64(uint64 a, uint64 b, uint64 p) 
 {
-	uint64 t = 0, tr;
-	tr = a - b;
-	if (tr > a)
-		t = p;
-	return tr + t;
+	uint32 r0, r1;
+	uint32 a0 = (uint32)a;
+	uint32 a1 = (uint32)(a >> 32);
+	uint32 b0 = (uint32)b;
+	uint32 b1 = (uint32)(b >> 32);
+	uint32 p0 = (uint32)p;
+	uint32 p1 = (uint32)(p >> 32);
+
+	asm("{  \n\t"
+	    ".reg .pred %pborrow;           \n\t"
+	    ".reg .u32 %borrow;           \n\t"
+	    "mov.b32 %borrow, 0;           \n\t"
+	    "sub.cc.u32 %0, %2, %4;        \n\t"
+	    "subc.cc.u32 %1, %3, %5;        \n\t"
+	    "subc.u32 %borrow, %borrow, 0; \n\t"
+	    "setp.ne.u32 %pborrow, %borrow, 0;  \n\t"
+	    "@%pborrow add.cc.u32 %0, %0, %6; \n\t"
+	    "@%pborrow addc.u32 %1, %1, %7; \n\t"
+	    "} \n\t"
+	    : "=r"(r0), "=r"(r1)
+	    : "r"(a0), "r"(a1), 
+	      "r"(b0), "r"(b1), 
+	      "r"(p0), "r"(p1));
+
+	return (uint64)r1 << 32 | r0;
 }
 
-__device__ uint96 
+__device__ uint96
 modsub96(uint96 a, uint96 b, uint96 p) 
 {
-	/* this could be 7 branch-less instructions
-	   if nvcc allowed inline asm */
+	uint96 res;
+	uint32 a0 = a.w[0];
+	uint32 a1 = a.w[1];
+	uint32 a2 = a.w[2];
+	uint32 b0 = b.w[0];
+	uint32 b1 = b.w[1];
+	uint32 b2 = b.w[2];
+	uint32 p0 = p.w[0];
+	uint32 p1 = p.w[1];
+	uint32 p2 = p.w[2];
 
-	uint96 res = sub96(a, b);
-
-	if (cmp96(res, a) > 0)
-		res = add96(res, p);
+	asm("{  \n\t"
+	    ".reg .pred %pborrow;           \n\t"
+	    ".reg .u32 %borrow;           \n\t"
+	    "mov.b32 %borrow, 0;           \n\t"
+	    "sub.cc.u32 %0, %3, %6;        \n\t"
+	    "subc.cc.u32 %1, %4, %7;        \n\t"
+	    "subc.cc.u32 %2, %5, %8;        \n\t"
+	    "subc.u32 %borrow, %borrow, 0; \n\t"
+	    "setp.ne.u32 %pborrow, %borrow, 0;  \n\t"
+	    "@%pborrow add.cc.u32 %0, %0, %9; \n\t"
+	    "@%pborrow addc.cc.u32 %1, %1, %10; \n\t"
+	    "@%pborrow addc.u32 %2, %2, %11; \n\t"
+	    "} \n\t"
+	    : "=r"(res.w[0]), "=r"(res.w[1]), "=r"(res.w[2])
+	    : "r"(a0), "r"(a1), "r"(a2),
+	      "r"(b0), "r"(b1), "r"(b2),
+	      "r"(p0), "r"(p1), "r"(p2));
 
 	return res;
 }
@@ -305,10 +317,39 @@ modsub96(uint96 a, uint96 b, uint96 p)
 __device__ uint128 
 modsub128(uint128 a, uint128 b, uint128 p) 
 {
-	uint128 res = sub128(a, b);
+	uint128 res;
+	uint32 a0 = a.w[0];
+	uint32 a1 = a.w[1];
+	uint32 a2 = a.w[2];
+	uint32 a3 = a.w[3];
+	uint32 b0 = b.w[0];
+	uint32 b1 = b.w[1];
+	uint32 b2 = b.w[2];
+	uint32 b3 = b.w[3];
+	uint32 p0 = p.w[0];
+	uint32 p1 = p.w[1];
+	uint32 p2 = p.w[2];
+	uint32 p3 = p.w[3];
 
-	if (cmp128(res, a) > 0)
-		res = add128(res, p);
+	asm("{  \n\t"
+	    ".reg .pred %pborrow;           \n\t"
+	    ".reg .u32 %borrow;           \n\t"
+	    "mov.b32 %borrow, 0;           \n\t"
+	    "sub.cc.u32 %0, %4, %8;        \n\t"
+	    "subc.cc.u32 %1, %5, %9;        \n\t"
+	    "subc.cc.u32 %2, %6, %10;        \n\t"
+	    "subc.cc.u32 %3, %7, %11;        \n\t"
+	    "subc.u32 %borrow, %borrow, 0; \n\t"
+	    "setp.ne.u32 %pborrow, %borrow, 0;  \n\t"
+	    "@%pborrow add.cc.u32 %0, %0, %12; \n\t"
+	    "@%pborrow addc.cc.u32 %1, %1, %13; \n\t"
+	    "@%pborrow addc.cc.u32 %2, %2, %14; \n\t"
+	    "@%pborrow addc.u32 %3, %3, %15; \n\t"
+	    "} \n\t"
+	    : "=r"(res.w[0]), "=r"(res.w[1]), "=r"(res.w[2]), "=r"(res.w[3])
+	    : "r"(a0), "r"(a1), "r"(a2), "r"(a3),
+	      "r"(b0), "r"(b1), "r"(b2), "r"(b3),
+	      "r"(p0), "r"(p1), "r"(p2), "r"(p3));
 
 	return res;
 }

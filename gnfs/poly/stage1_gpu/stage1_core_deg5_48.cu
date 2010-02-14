@@ -55,7 +55,7 @@ sieve_kernel_48(p_soa_t *pbatch,
 		uint64 q2, q2_r;
 
 		q = qbatch->p[i];
-		q2 = (uint64)q * q;
+		q2 = wide_sqr32(q);
 		q2_w = montmul24_w((uint32)q2);
 		q2_r = montmul48_r(q2, q2_w);
 
@@ -82,14 +82,14 @@ sieve_kernel_48(p_soa_t *pbatch,
 			for (j = 0; j < curr_num_p; j++) {
 				uint64 prefetch = qbatch->roots[0][i];
 				uint32 p = pbatch_cache.p[j];
-				uint64 p2 = (uint64)p * p;
+				uint64 p2 = wide_sqr32(p);
 				uint32 pinvmodq = modinv32(p, q);
 
 				uint32 lattice_size = 
 						pbatch_cache.lattice_size[j];
 				uint64 pinv, tmp;
 
-				tmp = (uint64)pinvmodq * pinvmodq;
+				tmp = wide_sqr32(pinvmodq);
 				tmp = montmul48(tmp, q2_r, q2, q2_w);
 				pinv = montmul48(p2, tmp, q2, q2_w);
 				pinv = modsub64((uint64)2, pinv, q2);
