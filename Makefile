@@ -168,6 +168,7 @@ NFS_HDR = \
 	gnfs/gnfs.h
 
 NFS_GPU_HDR = \
+	gnfs/poly/stage1_gpu/cuda_intrinsics.h \
 	gnfs/poly/stage1_gpu/stage1.h \
 	gnfs/poly/stage1_gpu/stage1_core_deg46_64.h \
 	gnfs/poly/stage1_gpu/stage1_core_deg5_128.h \
@@ -226,11 +227,12 @@ NFS_NOGPU_OBJS = $(NFS_NOGPU_SRCS:.c=.no)
 ifeq ($(CUDA),1)
 	NFS_HDR += $(NFS_GPU_HDR)
 	NFS_SRCS += $(NFS_GPU_SRCS)
-	NFS_OBJS += $(NFS_GPU_OBJS) $(GPU_OBJS)
+	NFS_OBJS += $(NFS_GPU_OBJS)
 else
 	NFS_HDR += $(NFS_NOGPU_HDR)
 	NFS_SRCS += $(NFS_NOGPU_SRCS)
 	NFS_OBJS += $(NFS_NOGPU_OBJS)
+	GPU_OBJS =
 endif
 
 #---------------------------------- make targets -------------------------
@@ -244,7 +246,7 @@ all:
 	@echo "add 'CUDA=1' for Nvidia graphics card support"
 
 x86: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) \
-		$(QS_CORE_OBJS_X86) $(NFS_OBJS)
+		$(QS_CORE_OBJS_X86) $(NFS_OBJS) $(GPU_OBJS)
 	rm -f libmsieve.a
 	ar r libmsieve.a $(COMMON_OBJS) $(QS_OBJS) \
 			$(QS_CORE_OBJS) $(QS_CORE_OBJS_X86) \
@@ -254,7 +256,7 @@ x86: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) \
 			libmsieve.a $(LIBS)
 
 x86_64: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) \
-		$(QS_CORE_OBJS_X86_64) $(NFS_OBJS)
+		$(QS_CORE_OBJS_X86_64) $(NFS_OBJS) $(GPU_OBJS)
 	rm -f libmsieve.a
 	ar r libmsieve.a $(COMMON_OBJS) $(QS_OBJS) \
 			$(QS_CORE_OBJS) $(QS_CORE_OBJS_X86_64) \
@@ -263,7 +265,7 @@ x86_64: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) \
 	$(CC) $(CFLAGS) demo.c -o msieve $(LDFLAGS) \
 			libmsieve.a $(LIBS)
 
-generic: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) $(NFS_OBJS)
+generic: $(COMMON_OBJS) $(QS_OBJS) $(QS_CORE_OBJS) $(NFS_OBJS) $(GPU_OBJS)
 	rm -f libmsieve.a
 	ar r libmsieve.a $(COMMON_OBJS) $(QS_OBJS) \
 			$(QS_CORE_OBJS) $(NFS_OBJS)
@@ -361,17 +363,5 @@ mpqs/sieve_core_k8_64_64k.qo: mpqs/sieve_core.c $(COMMON_HDR) $(QS_HDR)
 
 # GPU build rules
 
-stage1_core_deg46_48.ptx: gnfs/poly/stage1_gpu/stage1_core_deg46_48.cu \
-		gnfs/poly/stage1_gpu/stage1_core_deg46_64.h \
-		gnfs/poly/stage1_gpu/cuda_intrinsics.h
-	nvcc -ptx -o $@ $<
-
-stage1_core_deg5_48.ptx: gnfs/poly/stage1_gpu/stage1_core_deg5_48.cu \
-		gnfs/poly/stage1_gpu/stage1_core_deg5_64.h \
-		gnfs/poly/stage1_gpu/cuda_intrinsics.h
-	nvcc -ptx -o $@ $<
-
-%.ptx: gnfs/poly/stage1_gpu/%.cu \
-		gnfs/poly/stage1_gpu/%.h \
-		gnfs/poly/stage1_gpu/cuda_intrinsics.h
+%.ptx: gnfs/poly/stage1_gpu/%.cu $(NFS_GPU_HDR)
 	nvcc -ptx -o $@ $<
