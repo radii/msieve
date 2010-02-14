@@ -277,7 +277,7 @@ clean:
 	rm -f msieve msieve.exe libmsieve.a $(COMMON_OBJS) 	\
 		$(QS_OBJS) $(QS_CORE_OBJS) $(QS_CORE_OBJS_X86) \
 		$(QS_CORE_OBJS_X86_64) $(NFS_OBJS) \
-		$(NFS_GPU_OBJS) $(NFS_NOGPU_OBJS) $(GPU_OBJS)
+		$(NFS_GPU_OBJS) $(NFS_NOGPU_OBJS) *.ptx
 
 #----------------------------------------- build rules ----------------------
 
