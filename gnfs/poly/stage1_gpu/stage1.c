@@ -170,7 +170,7 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	uint32 digits = mpz_sizeinbase(poly->N, 10);
 	double start_time = get_cpu_time();
 	uint32 deadline_per_coeff = 800;
-	uint32 batch_size = 1;
+	uint32 batch_size = (poly->degree == 5) ? POLY_BATCH_SIZE : 1;
 	CUcontext gpu_context;
 	CUmodule gpu_module48 = NULL;
 	CUmodule gpu_module64 = NULL;
@@ -191,7 +191,6 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 		break;
 
 	case 5:
-		batch_size = POLY_BATCH_SIZE;
 		CUDA_TRY(cuModuleLoad(&gpu_module48, 
 				"stage1_core_deg5_48.ptx"))
 		CUDA_TRY(cuModuleLoad(&gpu_module64, 

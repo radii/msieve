@@ -236,8 +236,7 @@ uint32
 sieve_lattice_gpu_deg5_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
-		uint32 large_p_min, uint32 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel)
+		uint32 large_p_min, uint32 large_p_max)
 {
 	uint32 i;
 	uint32 min_small, min_large;
@@ -247,6 +246,8 @@ sieve_lattice_gpu_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 	uint32 num_poly = L->poly->num_poly;
 
 	uint32 threads_per_block;
+	gpu_info_t *gpu_info = L->gpu_info;
+       	CUfunction gpu_kernel = L->gpu_kernel;
 
 	L->p_marshall = (p_soa_t *)xmalloc(sizeof(p_soa_t));
 	L->q_marshall = (q_soa_t *)xmalloc(sizeof(q_soa_t));

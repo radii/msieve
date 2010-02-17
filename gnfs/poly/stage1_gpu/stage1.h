@@ -203,13 +203,14 @@ typedef struct {
 	uint32 found_array_size;
 	void *p_marshall;
 	void *q_marshall;
+	gpu_info_t *gpu_info;
+	CUmodule gpu_module;
+	CUfunction gpu_kernel;
 
 	poly_search_t *poly;
 
 	time_t start_time;
 	uint32 deadline;
-	uint32 num_tests;
-	uint32 tests_per_block;
 } lattice_fb_t;
 
 /* lower-level sieve routines */
@@ -218,43 +219,37 @@ uint32
 sieve_lattice_gpu_deg46_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
-		uint32 large_p_min, uint32 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel);
+		uint32 large_p_min, uint32 large_p_max);
 
 uint32
 sieve_lattice_gpu_deg5_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
-		uint32 large_p_min, uint32 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel);
+		uint32 large_p_min, uint32 large_p_max);
 
 uint32
 sieve_lattice_gpu_deg5_96(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
-		uint64 large_p_min, uint64 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel);
+		uint64 large_p_min, uint64 large_p_max);
 
 uint32
 sieve_lattice_gpu_deg5_128(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
-		uint64 large_p_min, uint64 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel);
+		uint64 large_p_min, uint64 large_p_max);
 
 uint32
 sieve_lattice_gpu_deg6_96(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
-		uint64 large_p_min, uint64 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel);
+		uint64 large_p_min, uint64 large_p_max);
 
 uint32
 sieve_lattice_gpu_deg6_128(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
-		uint64 large_p_min, uint64 large_p_max,
-		gpu_info_t *gpu_info, CUfunction gpu_kernel);
+		uint64 large_p_min, uint64 large_p_max);
 
 void
 handle_collision(poly_search_t *poly, uint32 which_poly,

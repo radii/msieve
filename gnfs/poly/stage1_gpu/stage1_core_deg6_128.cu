@@ -32,7 +32,7 @@ p_packed_next(p_packed_t *curr)
 
 /*------------------------------------------------------------------------*/
 __global__ void
-sieve_kernel_128(q_soa_t *qbatch, 
+sieve_kernel(q_soa_t *qbatch, 
              uint32 num_q,
 	     uint32 num_qroots,
 	     uint32 num_p,

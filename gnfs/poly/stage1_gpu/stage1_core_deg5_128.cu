@@ -36,7 +36,7 @@ __constant__ uint128 two = {{2, 0, 0, 0}};
    the __syncthreads() call below) */
 
 __global__ void
-sieve_kernel_128(p_soa_t *pbatch, 
+sieve_kernel(p_soa_t *pbatch, 
              uint32 num_p,
 	     q_soa_t *qbatch,
 	     uint32 num_q,

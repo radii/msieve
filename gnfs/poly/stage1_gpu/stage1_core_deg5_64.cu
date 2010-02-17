@@ -34,7 +34,7 @@ __shared__ p_soa_shared_t pbatch_cache;
    the __syncthreads() call below) */
 
 __global__ void
-sieve_kernel_64(p_soa_t *pbatch, 
+sieve_kernel(p_soa_t *pbatch, 
              uint32 num_p,
 	     q_soa_t *qbatch,
 	     uint32 num_q,
