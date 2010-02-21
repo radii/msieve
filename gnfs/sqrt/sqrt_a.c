@@ -162,7 +162,7 @@ static void gmp_poly_mul(gmp_poly_t *p1, gmp_poly_t *p2,
 	/* initialize */
 
 	for (i = 0; i < MAX_POLY_DEGREE + 1; i++)
-		mpz_init(tmp[i]);
+		mpz_init_set_ui(tmp[i], (unsigned long)0);
 
 	/* multiply p1 by the leading coefficient of p2 */
 
