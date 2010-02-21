@@ -356,7 +356,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg5_48.cu"
+				RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_core_deg5_48.cu"
 				>
 			</File>
 		</Filter>
@@ -365,10 +365,6 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_core_deg5_48.h"
-				>
-			</File>
 		</Filter>
 	</Files>
 	<Globals>

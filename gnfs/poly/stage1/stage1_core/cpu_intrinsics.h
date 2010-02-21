@@ -150,11 +150,24 @@ modsub128(uint128 a, uint128 b, uint128 p)
 }
 
 /*------------------- Montgomery arithmetic --------------------------*/
+#ifdef _MSC_VER
+#include <intrin.h>
+#pragma intrinsic(__emulu)
+
+#define PROD32(hi, lo, a, b)		\
+	{	uint64 __t = __emulu(a,b);	\
+		hi = (uint32)(__t >> 32);	\
+		lo = (uint32)(__t); }
+
+#else
+
 #define PROD32(hi, lo, a, b) \
 	asm("mull %2  \n\t"      \
 	    :"=d"(hi), "=a"(lo)  \
 	    :"%rm"(a), "1"(b)    \
 	    :"cc")
+
+#endif
 
 static INLINE uint64 
 montmul64(uint64 a, uint64 b,

@@ -51,7 +51,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1"
 				PreprocessorDefinitions="WIN32;_DEBUG;_LIB"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -120,7 +120,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1"
 				PreprocessorDefinitions="WIN32;_DEBUG;_LIB"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -190,7 +190,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="3"
 				InlineFunctionExpansion="2"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="0"
@@ -259,7 +259,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="3"
 				InlineFunctionExpansion="2"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="0"
@@ -403,6 +403,30 @@
 						RelativePath="..\..\gnfs\poly\stage1\stage1_sieve.c"
 						>
 					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg46_64.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg5_128.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg5_64.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg5_96.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg6_128.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg6_96.c"
+						>
+					</File>
 				</Filter>
 				<Filter
 					Name="Stage2"
@@ -465,6 +489,10 @@
 			</File>
 			<File
 				RelativePath="..\..\include\common.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\gnfs\poly\stage1\stage1_core\cpu_intrinsics.h"
 				>
 			</File>
 			<File

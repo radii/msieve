@@ -21,7 +21,7 @@
 			FileName="yasm.rules"
 		/>
 		<ToolFile
-			RelativePath="..\..\..\..\..\..\..\..\..\ProgramData\NVIDIA Corporation\NVIDIA GPU Computing SDK\C\common\Cuda.Rules"
+			RelativePath="..\..\..\..\..\..\..\..\ProgramData\NVIDIA Corporation\NVIDIA GPU Computing SDK\C\common\Cuda.Rules"
 		/>
 	</ToolFiles>
 	<Configurations>
@@ -57,7 +57,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;C:\CUDA\include"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1;C:\CUDA\include"
 				PreprocessorDefinitions="WIN32;_DEBUG;_LIB;HAVE_CUDA"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -131,7 +131,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;C:\CUDA\include"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1;C:\CUDA\include"
 				PreprocessorDefinitions="WIN32;_DEBUG;_LIB;HAVE_CUDA"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -206,7 +206,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="3"
 				InlineFunctionExpansion="2"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;C:\CUDA\include"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1;C:\CUDA\include"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CUDA"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="0"
@@ -280,7 +280,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="3"
 				InlineFunctionExpansion="2"
-				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;C:\CUDA\include"
+				AdditionalIncludeDirectories=".\;..\;..\..\;..\..\include;..\..\gnfs;..\..\gnfs\poly;..\..\gnfs\poly\stage1;C:\CUDA\include"
 				PreprocessorDefinitions="WIN32;NDEBUG;_LIB;HAVE_CUDA"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="0"
@@ -392,6 +392,18 @@
 					>
 				</File>
 				<File
+					RelativePath="..\..\gnfs\poly\stage1\stage1.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\gnfs\poly\stage1\stage1_roots.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\gnfs\poly\stage1\stage1_sieve.c"
+					>
+				</File>
+				<File
 					RelativePath="..\x64_support.asm"
 					>
 					<FileConfiguration
@@ -415,7 +427,43 @@
 					Name="Stage1"
 					>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1\stage1.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\cpu_intrinsics.h"
+						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCustomBuildTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Debug|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCustomBuildTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCustomBuildTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCustomBuildTool"
+							/>
+						</FileConfiguration>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg46_64.c"
 						>
 						<FileConfiguration
 							Name="Debug|Win32"
@@ -451,7 +499,7 @@
 						</FileConfiguration>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1\stage1_roots.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg5_128.c"
 						>
 						<FileConfiguration
 							Name="Debug|Win32"
@@ -487,7 +535,115 @@
 						</FileConfiguration>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1\stage1_sieve.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg5_64.c"
+						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Debug|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg5_96.c"
+						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Debug|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg6_128.c"
+						>
+						<FileConfiguration
+							Name="Debug|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Debug|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|Win32"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+						<FileConfiguration
+							Name="Release|x64"
+							ExcludedFromBuild="true"
+							>
+							<Tool
+								Name="VCCLCompilerTool"
+							/>
+						</FileConfiguration>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core\stage1_sieve_deg6_96.c"
 						>
 						<FileConfiguration
 							Name="Debug|Win32"
@@ -543,43 +699,31 @@
 					Name="Stage1_gpu"
 					>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\cuda_intrinsics.h"
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1.h"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_sieve_deg46_64.c"
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_roots.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_sieve_deg5_128.c"
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_sieve_deg5_64.c"
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg46_64.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_sieve_deg5_96.c"
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg5_128.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_sieve_deg6_128.c"
 						>
 					</File>
 					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg5_64.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg5_96.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg6_128.c"
-						>
-					</File>
-					<File
-						RelativePath="..\..\gnfs\poly\stage1_gpu\stage1_sieve_deg6_96.c"
+						RelativePath="..\..\gnfs\poly\stage1\stage1_core_gpu\stage1_sieve_deg6_96.c"
 						>
 					</File>
 				</Filter>
