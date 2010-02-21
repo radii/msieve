@@ -12,8 +12,8 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
-#include "stage1_core_deg6_96.h"
+#include <stage1.h>
+#include "stage1_core_deg46_64.h"
 
 #define HOST_BATCH_SIZE 50000
 
@@ -23,11 +23,11 @@ typedef struct {
 	uint32 num_p;
 	uint32 num_p_alloc;
 
-	uint64 *p;
-	uint32 *roots[3*MAX_ROOTS];
+	uint32 *p;
+	uint64 *roots[MAX_ROOTS];
 } q_soa_var_t;
 
-#define MAX_P_SOA_ARRAYS 6
+#define MAX_P_SOA_ARRAYS 7
 
 typedef struct {
 	uint32 num_arrays;
@@ -36,29 +36,37 @@ typedef struct {
 } q_soa_array_t;
 
 static void
-q_soa_array_init(q_soa_array_t *s)
+q_soa_array_init(q_soa_array_t *s, uint32 degree)
 {
 	uint32 i, j;
 	memset(s, 0, sizeof(q_soa_array_t));
 
-	s->num_arrays = 6;
-	s->soa[5].num_roots = 32;
-	s->soa[4].num_roots = 36;
-	s->soa[3].num_roots = 48;
-	s->soa[2].num_roots = 64;
-	s->soa[1].num_roots = 72;
-	s->soa[0].num_roots = 96;
+	if (degree == 4) {
+		s->num_arrays = 2;
+		s->soa[0].num_roots = 8;
+		s->soa[1].num_roots = 4;
+	}
+	else {  /* degree 6 */
+		s->num_arrays = 7;
+		s->soa[6].num_roots = 16;
+		s->soa[5].num_roots = 24;
+		s->soa[4].num_roots = 32;
+		s->soa[3].num_roots = 36;
+		s->soa[2].num_roots = 48;
+		s->soa[1].num_roots = 64;
+		s->soa[0].num_roots = 72;
+	}
 
 	for (i = 0; i < s->num_arrays; i++) {
 		q_soa_var_t *soa = s->soa + i;
 
 		soa->num_p_alloc = 1000;
-		soa->p = (uint64 *)xmalloc(soa->num_p_alloc * 
-					sizeof(uint64));
-		for (j = 0; j < 3 * soa->num_roots; j++) {
-			soa->roots[j] = (uint32 *)xmalloc(
+		soa->p = (uint32 *)xmalloc(soa->num_p_alloc * 
+					sizeof(uint32));
+		for (j = 0; j < soa->num_roots; j++) {
+			soa->roots[j] = (uint64 *)xmalloc(
 						soa->num_p_alloc * 
-						sizeof(uint32));
+						sizeof(uint64));
 		}
 	}
 }
@@ -72,7 +80,7 @@ q_soa_array_free(q_soa_array_t *s)
 		q_soa_var_t *soa = s->soa + i;
 
 		free(soa->p);
-		for (j = 0; j < 3 * soa->num_roots; j++)
+		for (j = 0; j < soa->num_roots; j++)
 			free(soa->roots[j]);
 	}
 }
@@ -93,13 +101,13 @@ q_soa_var_grow(q_soa_var_t *soa)
 	uint32 i;
 
 	soa->num_p_alloc *= 2;
-	soa->p = (uint64 *)xrealloc(soa->p, 
+	soa->p = (uint32 *)xrealloc(soa->p, 
 				soa->num_p_alloc * 
-				sizeof(uint64));
-	for (i = 0; i < 3 * soa->num_roots; i++) {
-		soa->roots[i] = (uint32 *)xrealloc(soa->roots[i], 
+				sizeof(uint32));
+	for (i = 0; i < soa->num_roots; i++) {
+		soa->roots[i] = (uint64 *)xrealloc(soa->roots[i], 
 					soa->num_p_alloc * 
-					sizeof(uint32));
+					sizeof(uint64));
 	}
 }
 
@@ -127,17 +135,9 @@ store_p_soa(uint64 p, uint32 num_roots, uint32 which_poly,
 		if (soa->num_p_alloc == num)
 			q_soa_var_grow(soa);
 
-		soa->p[num] = p;
-		for (j = 0; j < num_roots; j++) {
-			uint96 tmp = {{0}};
-
-			mpz_export(&tmp, NULL, -1, sizeof(uint32), 
-					0, 0, roots[j]);
-
-			soa->roots[3*j  ][num] = tmp.w[0];
-			soa->roots[3*j+1][num] = tmp.w[1];
-			soa->roots[3*j+2][num] = tmp.w[2];
-		}
+		soa->p[num] = (uint32)p;
+		for (j = 0; j < num_roots; j++)
+			soa->roots[j][num] = gmp2uint64(roots[j]);
 
 		soa->num_p++;
 		s->num_p++;
@@ -181,7 +181,7 @@ static p_packed_t *
 p_packed_next(p_packed_t *curr)
 {
 	return (p_packed_t *)((uint64 *)curr + 
-			P_PACKED_HEADER_WORDS + 3 * (curr->num_roots / 2));
+			P_PACKED_HEADER_WORDS + curr->num_roots);
 }
 
 static void 
@@ -197,6 +197,7 @@ store_p_packed(uint64 p, uint32 num_roots, uint32 which_poly,
 		printf("error: batched polynomials not allowed\n");
 		exit(-1);
 	}
+
 	if ((p_packed_t *)((uint64 *)s->curr + s->p_size) + 1 >=
 			s->packed_array + s->p_size_alloc ) {
 
@@ -209,18 +210,13 @@ store_p_packed(uint64 p, uint32 num_roots, uint32 which_poly,
 	}
 
 	curr = s->curr;
-	curr->p = p;
-	curr->lattice_size = 2 * L->poly->batch[
-			which_poly].sieve_size / ((double)p * p);
+	curr->p = (uint32)p;
+	curr->lattice_size = 2 * L->poly->batch[0].sieve_size / 
+				((double)p * p);
 	curr->num_roots = num_roots;
 	curr->pad = 0;
-	for (i = 0; i < num_roots; i++) {
-		uint96 tmp = {{0}};
-
-		mpz_export(&tmp, NULL, -1, sizeof(uint32), 
-					0, 0, roots[i]);
-		curr->roots[i] = tmp;
-	}
+	for (i = 0; i < num_roots; i++)
+		curr->roots[i] = gmp2uint64(roots[i]);
 
 	s->num_p++;
 	s->curr = p_packed_next(s->curr);
@@ -278,6 +274,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 	CUDA_TRY(cuParamSetSize(gpu_kernel, i))
 
+
 	for (i = 0; i < q_array->num_arrays; i++) {
 
 		q_soa_var_t *soa = q_array->soa + i;
@@ -304,16 +301,16 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 			memcpy(q_marshall->p, 
 				soa->p + num_q_done,
-				curr_num_q * sizeof(uint64));
-			for (j = 0; j < 3 * num_qroots; j++) {
+				curr_num_q * sizeof(uint32));
+			for (j = 0; j < num_qroots; j++) {
 				memcpy(q_marshall->roots[j],
 					soa->roots[j] + num_q_done,
-					curr_num_q * sizeof(uint32));
+					curr_num_q * sizeof(uint64));
 			}
 
 			CUDA_TRY(cuMemcpyHtoD(L->gpu_q_array, q_marshall,
-					Q_SOA_BATCH_SIZE * (sizeof(uint64) +
-					3 * num_qroots * sizeof(uint32))))
+					Q_SOA_BATCH_SIZE * (sizeof(uint32) +
+						num_qroots * sizeof(uint64))))
 
 			CUDA_TRY(cuParamSeti(gpu_kernel, num_q_offset, 
 						curr_num_q))
@@ -323,8 +320,8 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 				do {
 					uint32 next_words = packed_words +
-						P_PACKED_HEADER_WORDS +
-						3 * (curr_packed->num_roots/2);
+							P_PACKED_HEADER_WORDS +
+							curr_packed->num_roots;
 
 					if (next_words >= P_ARRAY_WORDS)
 						break;
@@ -369,20 +366,21 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 					found_t *f = found_array + j;
 
 					if (f->p > 0) {
-						uint128 proot, offset;
+						uint128 proot = {{0}};
+						uint128 offset = {{0}};
 
-						proot.w[0] = f->proot.w[0];
-						proot.w[1] = f->proot.w[1];
-						proot.w[2] = f->proot.w[2];
-						proot.w[3] = 0;
-						offset.w[0] = f->offset.w[0];
-						offset.w[1] = f->offset.w[1];
-						offset.w[2] = f->offset.w[2];
-						offset.w[3] = 0;
+						proot.w[0] = (uint32)f->proot;
+						proot.w[1] = 
+						      (uint32)(f->proot >> 32);
+						offset.w[0] = (uint32)f->offset;
+						offset.w[1] = 
+						      (uint32)(f->offset >> 32);
 
 						handle_collision(L->poly, 
-							which_poly, f->p, 
-							proot, offset, f->q);
+								which_poly,
+								(uint64)f->p, 
+								proot, offset, 
+								(uint64)f->q);
 					}
 				}
 
@@ -407,19 +405,19 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 /*------------------------------------------------------------------------*/
 uint32
-sieve_lattice_gpu_deg6_96(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg46_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
-		uint64 small_p_min, uint64 small_p_max, 
-		uint64 large_p_min, uint64 large_p_max)
+		uint32 small_p_min, uint32 small_p_max, 
+		uint32 large_p_min, uint32 large_p_max)
 {
 	uint32 i;
-	uint64 min_small, min_large;
+	uint32 min_small, min_large;
 	uint32 quit = 0;
 	p_packed_var_t * p_array;
 	q_soa_array_t * q_array;
+	uint32 degree = L->poly->degree;
 	uint32 p_min_roots, p_max_roots;
 	uint32 q_min_roots, q_max_roots;
-
 	uint32 threads_per_block;
 	gpu_info_t *gpu_info = L->gpu_info;
        	CUfunction gpu_kernel = L->gpu_kernel;
@@ -430,7 +428,7 @@ sieve_lattice_gpu_deg6_96(msieve_obj *obj, lattice_fb_t *L,
 	p_array = L->p_array = (p_packed_var_t *)xmalloc(
 					sizeof(p_packed_var_t));
 	p_packed_init(p_array);
-	q_soa_array_init(q_array);
+	q_soa_array_init(q_array, degree);
 
 	CUDA_TRY(cuMemAlloc(&L->gpu_q_array, sizeof(q_soa_t)))
 
@@ -448,34 +446,43 @@ sieve_lattice_gpu_deg6_96(msieve_obj *obj, lattice_fb_t *L,
 	CUDA_TRY(cuMemAlloc(&L->gpu_found_array, 
 			L->found_array_size * sizeof(found_t)))
 
-	printf("------- %" PRIu64 "-%" PRIu64 " %" PRIu64 "-%" PRIu64 "\n",
+	printf("------- %u-%u %u-%u\n",
 			small_p_min, small_p_max,
 			large_p_min, large_p_max);
 
-	p_min_roots = 12;
-	p_max_roots = 36;
-	q_min_roots = 32;
-	q_max_roots = 96;
+	if (degree == 4) {
+		p_min_roots = 4;
+		p_max_roots = 8;
+		q_min_roots = 4;
+		q_max_roots = 128;
+	}
+	else {
+		p_min_roots = 12;
+		p_max_roots = 36;
+		q_min_roots = 16;
+		q_max_roots = 128;
+	}
+
 	min_large = large_p_min;
-	sieve_fb_reset(sieve_small, large_p_min, 
-			large_p_max, q_min_roots, q_max_roots);
+	sieve_fb_reset(sieve_small, (uint64)large_p_min, 
+			(uint64)large_p_max, q_min_roots, 
+			q_max_roots);
 
 	while (min_large < large_p_max) {
 
 		q_soa_array_reset(q_array);
 
 		for (i = 0; i < HOST_BATCH_SIZE && 
-				min_large != P_SEARCH_DONE; i++) {
+				min_large < large_p_max; i++) {
 			min_large = sieve_fb_next(sieve_small, L->poly,
 						store_p_soa, L);
 		}
-
 		if (q_array->num_p == 0)
 			break;
 
 		min_small = small_p_min;
 		sieve_fb_reset(sieve_large, 
-				small_p_min, small_p_max,
+				(uint64)small_p_min, (uint64)small_p_max,
 				p_min_roots, p_max_roots);
 
 		while (min_small <= small_p_max) {
@@ -486,11 +493,10 @@ sieve_lattice_gpu_deg6_96(msieve_obj *obj, lattice_fb_t *L,
 			p_packed_reset(p_array);
 
 			for (i = 0; i < HOST_BATCH_SIZE && 
-					min_small != P_SEARCH_DONE; i++) {
+					min_small < small_p_max; i++) {
 				min_small = sieve_fb_next(sieve_large, L->poly,
 							store_p_packed, L);
 			}
-
 			if (p_array->num_p == 0)
 				break;
 

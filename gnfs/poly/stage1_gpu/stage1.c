@@ -12,7 +12,7 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
+#include <stage1.h>
 
 /*------------------------------------------------------------------------*/
 void 
@@ -120,9 +120,11 @@ poly_search_free(poly_search_t *poly)
 /*------------------------------------------------------------------------*/
 static void
 search_coeffs_core(msieve_obj *obj, poly_search_t *poly, 
+#ifdef HAVE_CUDA
 			gpu_info_t *gpu_info, CUmodule gpu_module48,
 			CUmodule gpu_module64, CUmodule gpu_module72,
 			CUmodule gpu_module96, CUmodule gpu_module128, 
+#endif
 			uint32 deadline)
 {
 	uint32 i, j;
@@ -152,17 +154,22 @@ search_coeffs_core(msieve_obj *obj, poly_search_t *poly,
 		mpz_set_d(c->mp_sieve_size, c->sieve_size);
 	}
 
-	sieve_lattice(obj, poly, 2000, 2001, 
-			100000, gpu_info, gpu_module48,
+	sieve_lattice(obj, poly, 2000, 2001, 100000, 
+#ifdef HAVE_CUDA
+			gpu_info, gpu_module48,
 			gpu_module64, gpu_module72,
 			gpu_module96, gpu_module128, 
+#endif
 			num_poly * deadline);
 }
 
 /*------------------------------------------------------------------------*/
 static void
 search_coeffs(msieve_obj *obj, poly_search_t *poly, 
-		bounds_t *bounds, gpu_info_t *gpu_info,
+		bounds_t *bounds, 
+#ifdef HAVE_CUDA
+		gpu_info_t *gpu_info,
+#endif
 		uint32 deadline)
 {
 	mpz_t curr_high_coeff;
@@ -171,6 +178,8 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	double start_time = get_cpu_time();
 	uint32 deadline_per_coeff = 800;
 	uint32 batch_size = (poly->degree == 5) ? POLY_BATCH_SIZE : 1;
+
+#ifdef HAVE_CUDA
 	CUcontext gpu_context;
 	CUmodule gpu_module48 = NULL;
 	CUmodule gpu_module64 = NULL;
@@ -216,6 +225,7 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 				"stage1_core_deg6_128.ptx"))
 		break;
 	}
+#endif
 
 	if (digits <= 100)
 		deadline_per_coeff = 5;
@@ -254,10 +264,13 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 					bounds->gmp_high_coeff_end) > 0) {
 
 			if (poly->num_poly > 0) {
-				search_coeffs_core(obj, poly, gpu_info,
-					   gpu_module48, gpu_module64, 
-					   gpu_module72, gpu_module96, 
-					   gpu_module128, deadline_per_coeff);
+				search_coeffs_core(obj, poly, 
+#ifdef HAVE_CUDA
+					   gpu_info, gpu_module48, 
+					   gpu_module64, gpu_module72, 
+					   gpu_module96, gpu_module128, 
+#endif
+					   deadline_per_coeff);
 			}
 			break;
 		}
@@ -271,9 +284,12 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 		c->coeff_max = bounds->coeff_max;
 
 		if (++poly->num_poly == batch_size) {
-			search_coeffs_core(obj, poly, gpu_info, gpu_module48,
+			search_coeffs_core(obj, poly, 
+#ifdef HAVE_CUDA
+					gpu_info, gpu_module48,
 					gpu_module64, gpu_module72, 
 					gpu_module96, gpu_module128, 
+#endif
 					deadline_per_coeff);
 
 			if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
@@ -294,7 +310,9 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	}
 
 	mpz_clear(curr_high_coeff);
+#ifdef HAVE_CUDA
 	CUDA_TRY(cuCtxDestroy(gpu_context)) 
+#endif
 }
 
 /*------------------------------------------------------------------------*/
@@ -325,7 +343,7 @@ poly_stage1_run(msieve_obj *obj, poly_stage1_t *data)
 {
 	bounds_t bounds;
 	poly_search_t poly;
-
+#ifdef HAVE_CUDA
 	gpu_config_t gpu_config;
 
 	gpu_init(&gpu_config);
@@ -338,14 +356,18 @@ poly_stage1_run(msieve_obj *obj, poly_stage1_t *data)
 			"or is not CUDA-enabled\n", obj->which_gpu);
 		exit(-1);
 	}
+	logprintf(obj, "using GPU %u (%s)\n", obj->which_gpu,
+			gpu_config.info[obj->which_gpu].name);
+#endif
 
 	stage1_bounds_init(&bounds, data);
 	poly_search_init(&poly, data);
 
-	logprintf(obj, "using GPU %u (%s)\n", obj->which_gpu,
-			gpu_config.info[obj->which_gpu].name);
 	search_coeffs(obj, &poly, &bounds, 
-			gpu_config.info + obj->which_gpu, data->deadline);
+#ifdef HAVE_CUDA
+			gpu_config.info + obj->which_gpu, 
+#endif
+			data->deadline);
 
 	poly_search_free(&poly);
 	stage1_bounds_free(&bounds);

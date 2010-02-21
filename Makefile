@@ -20,7 +20,7 @@ OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
 #OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
 
 CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) \
-		-I. -Iinclude -Ignfs -Ignfs/poly
+		-I. -Iinclude -Ignfs -Ignfs/poly -Ignfs/poly/stage1_gpu
 
 # tweak the compile flags
 
@@ -164,23 +164,23 @@ NFS_HDR = \
 	gnfs/filter/filter.h \
 	gnfs/poly/poly.h \
 	gnfs/poly/poly_skew.h \
+	gnfs/poly/stage1_gpu/stage1.h \
 	gnfs/poly/stage2/stage2.h \
 	gnfs/sieve/sieve.h \
 	gnfs/sqrt/sqrt.h \
 	gnfs/gnfs.h
 
 NFS_GPU_HDR = \
-	gnfs/poly/stage1_gpu/cuda_intrinsics.h \
-	gnfs/poly/stage1_gpu/stage1.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg46_64.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg5_128.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg5_64.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg5_96.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg6_96.h \
-	gnfs/poly/stage1_gpu/stage1_core_deg6_128.h
+	gnfs/poly/stage1_gpu/stage1_core_gpu/cuda_intrinsics.h \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_core_deg46_64.h \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_core_deg5_128.h \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_core_deg5_64.h \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_core_deg5_96.h \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_core_deg6_96.h \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_core_deg6_128.h
 
 NFS_NOGPU_HDR = \
-	gnfs/poly/stage1/stage1.h
+	gnfs/poly/stage1_gpu/stage1_core/cpu_intrinsics.h
 
 NFS_SRCS = \
 	gnfs/poly/poly.c \
@@ -188,6 +188,9 @@ NFS_SRCS = \
 	gnfs/poly/polyutil.c \
 	gnfs/poly/root_score.c \
 	gnfs/poly/size_score.c \
+	gnfs/poly/stage1_gpu/stage1.c \
+	gnfs/poly/stage1_gpu/stage1_roots.c \
+	gnfs/poly/stage1_gpu/stage1_sieve.c \
 	gnfs/poly/stage2/optimize.c \
 	gnfs/poly/stage2/root_sieve.c \
 	gnfs/poly/stage2/stage2.c \
@@ -207,22 +210,22 @@ NFS_SRCS = \
 NFS_OBJS = $(NFS_SRCS:.c=.no)
 
 NFS_GPU_SRCS = \
-	gnfs/poly/stage1_gpu/stage1.c \
-	gnfs/poly/stage1_gpu/stage1_roots.c \
-	gnfs/poly/stage1_gpu/stage1_sieve.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg46_64.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg5_128.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg5_64.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg5_96.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg6_128.c \
-	gnfs/poly/stage1_gpu/stage1_sieve_deg6_96.c
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_sieve_deg46_64.c \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_sieve_deg5_128.c \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_sieve_deg5_64.c \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_sieve_deg5_96.c \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_sieve_deg6_128.c \
+	gnfs/poly/stage1_gpu/stage1_core_gpu/stage1_sieve_deg6_96.c
 
 NFS_GPU_OBJS = $(NFS_GPU_SRCS:.c=.no)
 
 NFS_NOGPU_SRCS = \
-	gnfs/poly/stage1/stage1.c \
-	gnfs/poly/stage1/stage1_roots.c \
-	gnfs/poly/stage1/stage1_sieve.c
+	gnfs/poly/stage1_gpu/stage1_core/stage1_sieve_deg46_64.c \
+	gnfs/poly/stage1_gpu/stage1_core/stage1_sieve_deg5_128.c \
+	gnfs/poly/stage1_gpu/stage1_core/stage1_sieve_deg5_64.c \
+	gnfs/poly/stage1_gpu/stage1_core/stage1_sieve_deg5_96.c \
+	gnfs/poly/stage1_gpu/stage1_core/stage1_sieve_deg6_128.c \
+	gnfs/poly/stage1_gpu/stage1_core/stage1_sieve_deg6_96.c
 
 NFS_NOGPU_OBJS = $(NFS_NOGPU_SRCS:.c=.no)
 
@@ -365,5 +368,5 @@ mpqs/sieve_core_k8_64_64k.qo: mpqs/sieve_core.c $(COMMON_HDR) $(QS_HDR)
 
 # GPU build rules
 
-%.ptx: gnfs/poly/stage1_gpu/%.cu $(NFS_GPU_HDR)
+%.ptx: gnfs/poly/stage1_gpu/stage1_core_gpu/%.cu $(NFS_GPU_HDR)
 	nvcc -ptx -o $@ $<

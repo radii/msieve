@@ -12,7 +12,7 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
+#include <stage1.h>
 
 #define SIEVE_SIZE 16384
 #define LOG_SCALE 2.2

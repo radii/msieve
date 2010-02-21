@@ -12,19 +12,19 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
-#include "stage1_core_deg5_128.h"
+#include <stage1.h>
+#include "stage1_core_deg5_64.h"
 
-#define HOST_BATCH_SIZE (156*256)
+#define HOST_BATCH_SIZE (104*384)
 
 /*------------------------------------------------------------------------*/
 typedef struct {
 	uint32 num_p;
-	uint64 last_p;
+	uint32 last_p;
 
-	uint64 p[HOST_BATCH_SIZE];
-	uint64 lattice_size[HOST_BATCH_SIZE];
-	uint32 roots[4*POLY_BATCH_SIZE][HOST_BATCH_SIZE];
+	uint32 p[HOST_BATCH_SIZE];
+	uint32 lattice_size[HOST_BATCH_SIZE];
+	uint64 roots[POLY_BATCH_SIZE][HOST_BATCH_SIZE];
 } p_soa_var_t;
 
 static void
@@ -41,7 +41,6 @@ store_p_soa(uint64 p, uint32 num_roots, uint32 which_poly,
 	lattice_fb_t *L = (lattice_fb_t *)extra;
 	p_soa_var_t *soa;
 	uint32 num;
-	uint128 tmp = {{0}};
 
 	if (num_roots != 1) {
 		printf("error: num_roots > 1\n");
@@ -54,22 +53,14 @@ store_p_soa(uint64 p, uint32 num_roots, uint32 which_poly,
 		soa = (p_soa_var_t *)L->q_array;
 
 	num = soa->num_p;
-	mpz_export(&tmp, NULL, -1, sizeof(uint32), 0, 0, roots[0]);
-
 	if (p != soa->last_p) {
-		soa->p[num] = p;
+		soa->p[num] = (uint32)p;
 		soa->num_p++;
-		soa->last_p = p;
-		soa->roots[4*which_poly][num] = tmp.w[0];
-		soa->roots[4*which_poly+1][num] = tmp.w[1];
-		soa->roots[4*which_poly+2][num] = tmp.w[2];
-		soa->roots[4*which_poly+3][num] = tmp.w[3];
+		soa->last_p = (uint32)p;
+		soa->roots[which_poly][num] = gmp2uint64(roots[0]);
 	}
 	else {
-		soa->roots[4*which_poly][num-1] = tmp.w[0];
-		soa->roots[4*which_poly+1][num-1] = tmp.w[1];
-		soa->roots[4*which_poly+2][num-1] = tmp.w[2];
-		soa->roots[4*which_poly+3][num-1] = tmp.w[3];
+		soa->roots[which_poly][num - 1] = gmp2uint64(roots[0]);
 	}
 }
 
@@ -144,17 +135,17 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 		memcpy(q_marshall->p, 
 			q_array->p + num_q_done,
-			curr_num_q * sizeof(uint64));
+			curr_num_q * sizeof(uint32));
 
-		for (i = 0; i < 4 * num_poly; i++) {
+		for (i = 0; i < num_poly; i++) {
 			memcpy(q_marshall->roots[i],
 				q_array->roots[i] + num_q_done,
-				curr_num_q * sizeof(uint32));
+				curr_num_q * sizeof(uint64));
 		}
 
 		CUDA_TRY(cuMemcpyHtoD(L->gpu_q_array, q_marshall,
-				Q_SOA_BATCH_SIZE * (sizeof(uint64) +
-					4 * num_poly * sizeof(uint32))))
+				Q_SOA_BATCH_SIZE * (sizeof(uint32) +
+					num_poly * sizeof(uint64))))
 		CUDA_TRY(cuParamSeti(gpu_kernel, num_q_offset, curr_num_q))
 
 		while (num_p_done < p_array->num_p) {
@@ -165,24 +156,24 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 			curr_num_p = MIN(curr_num_p, P_SOA_BATCH_SIZE);
 			memcpy(p_marshall->p, 
 				p_array->p + num_p_done,
-				curr_num_p * sizeof(uint64));
+				curr_num_p * sizeof(uint32));
 			memcpy(p_marshall->lattice_size, 
 				p_array->lattice_size + num_p_done,
-				curr_num_p * sizeof(uint64));
+				curr_num_p * sizeof(uint32));
 
-			for (i = 0; i < 4 * num_poly; i++) {
+			for (i = 0; i < num_poly; i++) {
 				memcpy(p_marshall->roots[i],
 					p_array->roots[i] + num_p_done,
-					curr_num_p * sizeof(uint32));
+					curr_num_p * sizeof(uint64));
 			}
 
 			CUDA_TRY(cuMemcpyHtoD(L->gpu_p_array, p_marshall,
-				P_SOA_BATCH_SIZE * (2 * sizeof(uint64) +
-					4 * num_poly * sizeof(uint32))))
+				P_SOA_BATCH_SIZE * (2 * sizeof(uint32) +
+					num_poly * sizeof(uint64))))
 
 			CUDA_TRY(cuParamSeti(gpu_kernel, num_p_offset, 
 						curr_num_p))
-#if 1
+#if 0
 			printf("qnum %u pnum %u\n", curr_num_q, curr_num_p);
 #endif
 
@@ -199,14 +190,27 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 						threads_per_block *
 							sizeof(found_t)))
 
-			for (i = 0; i < threads_per_block * num_blocks; i++) {
+			for (i = 0; i < threads_per_block *
+					num_blocks; i++) {
 				found_t *f = found_array + i;
 
 				if (f->p > 0) {
+					uint128 proot, offset;
+
+					proot.w[0] = (uint32)f->proot;
+					proot.w[1] = (uint32)(f->proot >> 32);
+					proot.w[2] = 0;
+					proot.w[3] = 0;
+					offset.w[0] = (uint32)f->offset;
+					offset.w[1] = (uint32)(f->offset >> 32);
+					offset.w[2] = 0;
+					offset.w[3] = 0;
+
 					handle_collision(L->poly, 
-						f->which_poly,
-						f->p, f->proot, 
-						f->offset, f->q);
+							f->which_poly,
+							(uint64)f->p, 
+							proot, offset, 
+							(uint64)f->q);
 				}
 			}
 
@@ -229,17 +233,18 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 /*------------------------------------------------------------------------*/
 uint32
-sieve_lattice_gpu_deg5_128(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
-		uint64 small_p_min, uint64 small_p_max, 
-		uint64 large_p_min, uint64 large_p_max)
+		uint32 small_p_min, uint32 small_p_max, 
+		uint32 large_p_min, uint32 large_p_max)
 {
 	uint32 i;
-	uint64 min_small, min_large;
+	uint32 min_small, min_large;
 	uint32 quit = 0;
 	p_soa_var_t * p_array;
 	p_soa_var_t * q_array;
 	uint32 num_poly = L->poly->num_poly;
+
 	uint32 threads_per_block;
 	gpu_info_t *gpu_info = L->gpu_info;
        	CUfunction gpu_kernel = L->gpu_kernel;
@@ -268,13 +273,13 @@ sieve_lattice_gpu_deg5_128(msieve_obj *obj, lattice_fb_t *L,
 	CUDA_TRY(cuMemAlloc(&L->gpu_found_array, 
 			L->found_array_size * sizeof(found_t)))
 
-	printf("------- %" PRIu64 "-%" PRIu64 " %" PRIu64 "-%" PRIu64 "\n",
+	printf("------- %u-%u %u-%u\n",
 			small_p_min, small_p_max,
 			large_p_min, large_p_max);
 
 	min_large = large_p_min;
-	sieve_fb_reset(sieve_small, large_p_min, 
-			large_p_max, 1, 1);
+	sieve_fb_reset(sieve_small, (uint64)large_p_min, 
+			(uint64)large_p_max, 1, 1);
 
 	while (min_large < large_p_max) {
 
@@ -290,7 +295,7 @@ sieve_lattice_gpu_deg5_128(msieve_obj *obj, lattice_fb_t *L,
 
 		min_small = small_p_min;
 		sieve_fb_reset(sieve_large, 
-				small_p_min, small_p_max,
+				(uint64)small_p_min, (uint64)small_p_max,
 				1, 1);
 
 		while (min_small <= small_p_max) {
@@ -306,9 +311,9 @@ sieve_lattice_gpu_deg5_128(msieve_obj *obj, lattice_fb_t *L,
 				goto finished;
 
 			for (i = 0; i < p_array->num_p; i++) {
-				uint64 p = p_array->p[i];
+				uint32 p = p_array->p[i];
 
-				p_array->lattice_size[i] = (uint64)
+				p_array->lattice_size[i] = (uint32)
 					(2 * L->poly->batch[num_poly - 
 					1].sieve_size / ((double)p * p));
 			}

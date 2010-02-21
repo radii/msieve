@@ -196,6 +196,7 @@ typedef struct {
 	void *p_array;
 	void *q_array;
 
+#ifdef HAVE_CUDA
 	CUdeviceptr gpu_p_array;
 	CUdeviceptr gpu_q_array;
 	CUdeviceptr gpu_found_array;
@@ -206,6 +207,7 @@ typedef struct {
 	gpu_info_t *gpu_info;
 	CUmodule gpu_module;
 	CUfunction gpu_kernel;
+#endif
 
 	poly_search_t *poly;
 
@@ -216,37 +218,37 @@ typedef struct {
 /* lower-level sieve routines */
 
 uint32
-sieve_lattice_gpu_deg46_64(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg46_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
 		uint32 large_p_min, uint32 large_p_max);
 
 uint32
-sieve_lattice_gpu_deg5_64(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint32 small_p_min, uint32 small_p_max, 
 		uint32 large_p_min, uint32 large_p_max);
 
 uint32
-sieve_lattice_gpu_deg5_96(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg5_96(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
 		uint64 large_p_min, uint64 large_p_max);
 
 uint32
-sieve_lattice_gpu_deg5_128(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg5_128(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
 		uint64 large_p_min, uint64 large_p_max);
 
 uint32
-sieve_lattice_gpu_deg6_96(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg6_96(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
 		uint64 large_p_min, uint64 large_p_max);
 
 uint32
-sieve_lattice_gpu_deg6_128(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg6_128(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
 		uint64 large_p_min, uint64 large_p_max);
@@ -259,10 +261,13 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 
 void sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 			uint32 small_fb_max, uint32 large_fb_min, 
-			uint32 large_fb_max, gpu_info_t *gpu_info,
-			CUmodule gpu_module48, CUmodule gpu_module64, 
-			CUmodule gpu_module72, CUmodule gpu_module96, 
-			CUmodule gpu_module128, uint32 deadline);
+			uint32 large_fb_max, 
+#ifdef HAVE_CUDA
+			gpu_info_t *gpu_info, CUmodule gpu_module48, 
+			CUmodule gpu_module64, CUmodule gpu_module72, 
+			CUmodule gpu_module96, CUmodule gpu_module128, 
+#endif
+			uint32 deadline);
 
 #ifdef __cplusplus
 }

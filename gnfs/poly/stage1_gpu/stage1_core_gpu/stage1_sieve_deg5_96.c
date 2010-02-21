@@ -12,7 +12,7 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
+#include <stage1.h>
 #include "stage1_core_deg5_96.h"
 
 #define HOST_BATCH_SIZE (156*256)
@@ -237,7 +237,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 /*------------------------------------------------------------------------*/
 uint32
-sieve_lattice_gpu_deg5_96(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg5_96(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
 		uint64 large_p_min, uint64 large_p_max)

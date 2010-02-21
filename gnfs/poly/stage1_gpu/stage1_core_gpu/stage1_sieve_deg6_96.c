@@ -12,8 +12,8 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
-#include "stage1_core_deg6_128.h"
+#include <stage1.h>
+#include "stage1_core_deg6_96.h"
 
 #define HOST_BATCH_SIZE 50000
 
@@ -24,10 +24,10 @@ typedef struct {
 	uint32 num_p_alloc;
 
 	uint64 *p;
-	uint32 *roots[4*MAX_ROOTS];
+	uint32 *roots[3*MAX_ROOTS];
 } q_soa_var_t;
 
-#define MAX_P_SOA_ARRAYS 5
+#define MAX_P_SOA_ARRAYS 6
 
 typedef struct {
 	uint32 num_arrays;
@@ -41,8 +41,9 @@ q_soa_array_init(q_soa_array_t *s)
 	uint32 i, j;
 	memset(s, 0, sizeof(q_soa_array_t));
 
-	s->num_arrays = 5;
-	s->soa[4].num_roots = 32;
+	s->num_arrays = 6;
+	s->soa[5].num_roots = 32;
+	s->soa[4].num_roots = 36;
 	s->soa[3].num_roots = 48;
 	s->soa[2].num_roots = 64;
 	s->soa[1].num_roots = 72;
@@ -54,7 +55,7 @@ q_soa_array_init(q_soa_array_t *s)
 		soa->num_p_alloc = 1000;
 		soa->p = (uint64 *)xmalloc(soa->num_p_alloc * 
 					sizeof(uint64));
-		for (j = 0; j < 4 * soa->num_roots; j++) {
+		for (j = 0; j < 3 * soa->num_roots; j++) {
 			soa->roots[j] = (uint32 *)xmalloc(
 						soa->num_p_alloc * 
 						sizeof(uint32));
@@ -71,7 +72,7 @@ q_soa_array_free(q_soa_array_t *s)
 		q_soa_var_t *soa = s->soa + i;
 
 		free(soa->p);
-		for (j = 0; j < 4 * soa->num_roots; j++)
+		for (j = 0; j < 3 * soa->num_roots; j++)
 			free(soa->roots[j]);
 	}
 }
@@ -95,7 +96,7 @@ q_soa_var_grow(q_soa_var_t *soa)
 	soa->p = (uint64 *)xrealloc(soa->p, 
 				soa->num_p_alloc * 
 				sizeof(uint64));
-	for (i = 0; i < 4 * soa->num_roots; i++) {
+	for (i = 0; i < 3 * soa->num_roots; i++) {
 		soa->roots[i] = (uint32 *)xrealloc(soa->roots[i], 
 					soa->num_p_alloc * 
 					sizeof(uint32));
@@ -128,15 +129,14 @@ store_p_soa(uint64 p, uint32 num_roots, uint32 which_poly,
 
 		soa->p[num] = p;
 		for (j = 0; j < num_roots; j++) {
-			uint128 tmp = {{0}};
+			uint96 tmp = {{0}};
 
 			mpz_export(&tmp, NULL, -1, sizeof(uint32), 
 					0, 0, roots[j]);
 
-			soa->roots[4*j  ][num] = tmp.w[0];
-			soa->roots[4*j+1][num] = tmp.w[1];
-			soa->roots[4*j+2][num] = tmp.w[2];
-			soa->roots[4*j+3][num] = tmp.w[3];
+			soa->roots[3*j  ][num] = tmp.w[0];
+			soa->roots[3*j+1][num] = tmp.w[1];
+			soa->roots[3*j+2][num] = tmp.w[2];
 		}
 
 		soa->num_p++;
@@ -181,7 +181,7 @@ static p_packed_t *
 p_packed_next(p_packed_t *curr)
 {
 	return (p_packed_t *)((uint64 *)curr + 
-			P_PACKED_HEADER_WORDS + 2 * curr->num_roots);
+			P_PACKED_HEADER_WORDS + 3 * (curr->num_roots / 2));
 }
 
 static void 
@@ -197,7 +197,6 @@ store_p_packed(uint64 p, uint32 num_roots, uint32 which_poly,
 		printf("error: batched polynomials not allowed\n");
 		exit(-1);
 	}
-
 	if ((p_packed_t *)((uint64 *)s->curr + s->p_size) + 1 >=
 			s->packed_array + s->p_size_alloc ) {
 
@@ -216,7 +215,7 @@ store_p_packed(uint64 p, uint32 num_roots, uint32 which_poly,
 	curr->num_roots = num_roots;
 	curr->pad = 0;
 	for (i = 0; i < num_roots; i++) {
-		uint128 tmp = {{0}};
+		uint96 tmp = {{0}};
 
 		mpz_export(&tmp, NULL, -1, sizeof(uint32), 
 					0, 0, roots[i]);
@@ -285,7 +284,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 		uint32 num_qroots = soa->num_roots;
 		uint32 num_q_done = 0;
 
-		if (soa->num_p < 100)
+		if (soa->num_p < 1000)
 			continue;
 
 		CUDA_TRY(cuParamSeti(gpu_kernel, 
@@ -306,7 +305,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 			memcpy(q_marshall->p, 
 				soa->p + num_q_done,
 				curr_num_q * sizeof(uint64));
-			for (j = 0; j < 4 * num_qroots; j++) {
+			for (j = 0; j < 3 * num_qroots; j++) {
 				memcpy(q_marshall->roots[j],
 					soa->roots[j] + num_q_done,
 					curr_num_q * sizeof(uint32));
@@ -314,7 +313,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 			CUDA_TRY(cuMemcpyHtoD(L->gpu_q_array, q_marshall,
 					Q_SOA_BATCH_SIZE * (sizeof(uint64) +
-					4 * num_qroots * sizeof(uint32))))
+					3 * num_qroots * sizeof(uint32))))
 
 			CUDA_TRY(cuParamSeti(gpu_kernel, num_q_offset, 
 						curr_num_q))
@@ -325,7 +324,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 				do {
 					uint32 next_words = packed_words +
 						P_PACKED_HEADER_WORDS +
-						2 * curr_packed->num_roots;
+						3 * (curr_packed->num_roots/2);
 
 					if (next_words >= P_ARRAY_WORDS)
 						break;
@@ -370,11 +369,20 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 					found_t *f = found_array + j;
 
 					if (f->p > 0) {
+						uint128 proot, offset;
+
+						proot.w[0] = f->proot.w[0];
+						proot.w[1] = f->proot.w[1];
+						proot.w[2] = f->proot.w[2];
+						proot.w[3] = 0;
+						offset.w[0] = f->offset.w[0];
+						offset.w[1] = f->offset.w[1];
+						offset.w[2] = f->offset.w[2];
+						offset.w[3] = 0;
+
 						handle_collision(L->poly, 
-								which_poly,
-								f->p, f->proot, 
-								f->offset, 
-								f->q);
+							which_poly, f->p, 
+							proot, offset, f->q);
 					}
 				}
 
@@ -399,7 +407,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L,
 
 /*------------------------------------------------------------------------*/
 uint32
-sieve_lattice_gpu_deg6_128(msieve_obj *obj, lattice_fb_t *L, 
+sieve_lattice_deg6_96(msieve_obj *obj, lattice_fb_t *L, 
 		sieve_fb_t *sieve_small, sieve_fb_t *sieve_large, 
 		uint64 small_p_min, uint64 small_p_max, 
 		uint64 large_p_min, uint64 large_p_max)
@@ -445,8 +453,8 @@ sieve_lattice_gpu_deg6_128(msieve_obj *obj, lattice_fb_t *L,
 			large_p_min, large_p_max);
 
 	p_min_roots = 12;
-	p_max_roots = 32;
-	q_min_roots = 16;
+	p_max_roots = 36;
+	q_min_roots = 32;
 	q_max_roots = 96;
 	min_large = large_p_min;
 	sieve_fb_reset(sieve_small, large_p_min, 

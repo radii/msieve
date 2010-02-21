@@ -12,7 +12,7 @@ benefit from your work.
 $Id$
 --------------------------------------------------------------------*/
 
-#include "stage1.h"
+#include <stage1.h>
 
 /* structures for storing arithmetic progressions. Rational
    leading coeffs of NFS polynomials are assumed to be the 
@@ -89,10 +89,13 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 void
 sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 		uint32 small_fb_max, uint32 large_fb_min, 
-		uint32 large_fb_max, gpu_info_t *gpu_info,
-		CUmodule gpu_module48, CUmodule gpu_module64, 
-		CUmodule gpu_module72, CUmodule gpu_module96, 
-		CUmodule gpu_module128, uint32 deadline)
+		uint32 large_fb_max, 
+#ifdef HAVE_CUDA
+		gpu_info_t *gpu_info, CUmodule gpu_module48, 
+		CUmodule gpu_module64, CUmodule gpu_module72, 
+		CUmodule gpu_module96, CUmodule gpu_module128, 
+#endif
+		uint32 deadline)
 {
 	lattice_fb_t L;
 	sieve_fb_t sieve_small, sieve_large;
@@ -173,11 +176,14 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 	L.poly = poly;
 	L.start_time = time(NULL);
 	L.deadline = deadline;
+#ifdef HAVE_CUDA
 	L.gpu_info = gpu_info;
+#endif
 
 	while (1) {
 		uint32 done = 1;
 
+#ifdef HAVE_CUDA
 		if (degree == 4) {
 			if (large_p_max < ((uint64)1 << 24))
 				L.gpu_module = gpu_module48;
@@ -214,6 +220,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		if (degree != 5)
 			CUDA_TRY(cuModuleGetGlobal(&L.gpu_p_array, 
 				NULL, L.gpu_module, "pbatch"))
+#endif
 
 		if (degree == 4) {
 			/* bounds may have grown too large */
@@ -221,7 +228,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 				break;
 
 			if (large_p_max < ((uint64)1 << 24)) {
-				done = sieve_lattice_gpu_deg46_64(obj, &L,
+				done = sieve_lattice_deg46_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
 					(uint32)small_p_max,
@@ -229,7 +236,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 					(uint32)large_p_max);
 			}
 			else {
-				done = sieve_lattice_gpu_deg46_64(obj, &L,
+				done = sieve_lattice_deg46_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
 					(uint32)small_p_max,
@@ -239,7 +246,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		}
 		else if (degree == 5) {
 			if (large_p_max < ((uint64)1 << 24)) {
-				done = sieve_lattice_gpu_deg5_64(obj, &L,
+				done = sieve_lattice_deg5_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
 					(uint32)small_p_max,
@@ -247,7 +254,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 					(uint32)large_p_max);
 			}
 			else if (large_p_max < ((uint64)1 << 32)) {
-				done = sieve_lattice_gpu_deg5_64(obj, &L,
+				done = sieve_lattice_deg5_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
 					(uint32)small_p_max,
@@ -255,19 +262,19 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 					(uint32)large_p_max);
 			}
 			else if (large_p_max < ((uint64)1 << 36)) {
-				done = sieve_lattice_gpu_deg5_96(obj, &L,
+				done = sieve_lattice_deg5_96(obj, &L,
 					&sieve_small, &sieve_large,
 					small_p_min, small_p_max,
 					large_p_min, large_p_max);
 			}
 			else if (large_p_max < ((uint64)1 << 48)) {
-				done = sieve_lattice_gpu_deg5_96(obj, &L,
+				done = sieve_lattice_deg5_96(obj, &L,
 					&sieve_small, &sieve_large,
 					small_p_min, small_p_max,
 					large_p_min, large_p_max);
 			}
 			else {
-				done = sieve_lattice_gpu_deg5_128(obj, &L,
+				done = sieve_lattice_deg5_128(obj, &L,
 					&sieve_small, &sieve_large,
 					small_p_min, small_p_max,
 					large_p_min, large_p_max);
@@ -275,7 +282,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 		}
 		else {	/* degree 6 */
 			if (large_p_max < ((uint64)1 << 24)) {
-				done = sieve_lattice_gpu_deg46_64(obj, &L,
+				done = sieve_lattice_deg46_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
 					(uint32)small_p_max,
@@ -283,7 +290,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 					(uint32)large_p_max);
 			}
 			else if (large_p_max < ((uint64)1 << 32)) {
-				done = sieve_lattice_gpu_deg46_64(obj, &L,
+				done = sieve_lattice_deg46_64(obj, &L,
 					&sieve_small, &sieve_large,
 					(uint32)small_p_min, 
 					(uint32)small_p_max,
@@ -291,19 +298,19 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 					(uint32)large_p_max);
 			}
 			else if (large_p_max < ((uint64)1 << 36)) {
-				done = sieve_lattice_gpu_deg6_96(obj, &L,
+				done = sieve_lattice_deg6_96(obj, &L,
 					&sieve_small, &sieve_large,
 					small_p_min, small_p_max,
 					large_p_min, large_p_max);
 			}
 			else if (large_p_max < ((uint64)1 << 48)) {
-				done = sieve_lattice_gpu_deg6_96(obj, &L,
+				done = sieve_lattice_deg6_96(obj, &L,
 					&sieve_small, &sieve_large,
 					small_p_min, small_p_max,
 					large_p_min, large_p_max);
 			}
 			else {
-				done = sieve_lattice_gpu_deg6_128(obj, &L,
+				done = sieve_lattice_deg6_128(obj, &L,
 					&sieve_small, &sieve_large,
 					small_p_min, small_p_max,
 					large_p_min, large_p_max);
