@@ -151,6 +151,7 @@ modsub128(uint128 a, uint128 b, uint128 p)
 
 /*------------------- Montgomery arithmetic --------------------------*/
 #ifdef _MSC_VER
+
 #include <intrin.h>
 #pragma intrinsic(__emulu)
 
@@ -159,13 +160,20 @@ modsub128(uint128 a, uint128 b, uint128 p)
 		hi = (uint32)(__t >> 32);	\
 		lo = (uint32)(__t); }
 
-#else
+#elif defined(GCC_ASM32X)
 
 #define PROD32(hi, lo, a, b) \
 	asm("mull %2  \n\t"      \
 	    :"=d"(hi), "=a"(lo)  \
 	    :"%rm"(a), "1"(b)    \
 	    :"cc")
+
+#else
+
+#define PROD32(hi, lo, a, b) \
+	{ uint64 t = (uint64)(a) * (b); \
+	  hi = (uint32)(t >> 32);	\
+	  lo = (uint32)(t); }
 
 #endif
 
