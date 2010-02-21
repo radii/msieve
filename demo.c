@@ -103,7 +103,7 @@ void print_usage(char *progname) {
 	         "   -v        verbose: write log information to screen\n"
 		 "             as well as to logfile\n"
 #ifdef HAVE_CUDA
-		 "   -g <num>  use GPU <num>, 0 <= num < (GPUs-1)>\n"
+		 "   -g <num>  use GPU <num>, 0 <= num < (CUDA GPUs)>\n"
 #endif
 	         "   -t <num>  use at most <num> threads\n\n"
 		 " elliptic curve options:\n"
