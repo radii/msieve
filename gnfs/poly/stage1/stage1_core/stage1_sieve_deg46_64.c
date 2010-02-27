@@ -65,19 +65,27 @@ store_p_soa(uint64 p, uint32 num_roots, uint32 which_poly,
 	soa->num_p++;
 }
 
-/*------------------------------------------------------------------------*/
 static void
 batch_invert(uint32 *plist, uint32 num_p, uint64 *invlist,
-		uint32 q, uint64 q2, uint64 q2_r, uint32 q2_w)
+		uint64 q2, uint64 q2_r, uint32 q2_w)
 {
 	uint32 i;
+	uint64 p2[INVERT_BATCH_SIZE];
+	uint64 invprod;
 
-	for (i = 0; i < num_p; i++) {
-		uint32 p = plist[i];
-		uint64 p2 = wide_sqr32(p);
-		uint64 inv = mp_modinv_2(p2, q2);
-		invlist[i] = montmul64(inv, q2_r, q2, q2_w);
+	invlist[0] = invprod = wide_sqr32(plist[0]);
+	for (i = 1; i < num_p; i++) {
+		p2[i] = wide_sqr32(plist[i]);
+		invlist[i] = invprod = montmul64(invprod, p2[i], q2, q2_w);
 	}
+
+	invprod = mp_modinv_2(invprod, q2);
+	invprod = montmul64(invprod, q2_r, q2, q2_w);
+	for (i = num_p - 1; i; i--) {
+		invlist[i] = montmul64(invprod, invlist[i-1], q2, q2_w);
+		invprod = montmul64(invprod, p2[i], q2, q2_w);
+	}
+	invlist[i] = invprod;
 }
 
 /*------------------------------------------------------------------------*/
@@ -111,7 +119,7 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L)
 						num_p - num_p_done);
 
 			batch_invert(plist, curr_num_p, pinvlist,
-					q, q2, q2_r, q2_w);
+					q2, q2_r, q2_w);
 
 			for (j = 0; j < curr_num_p; j++) {
 
