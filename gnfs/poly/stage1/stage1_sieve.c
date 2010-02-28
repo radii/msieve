@@ -182,34 +182,77 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 
 	while (1) {
 		uint32 done = 1;
+		uint64 small_p_min2 = small_p_min;
+		uint64 small_p_max2 = small_p_max;
+		uint64 large_p_min2 = large_p_min;
+		uint64 large_p_max2 = large_p_max;
+
+		if (small_p_min2 > 1.0e8) {
+			uint32 small_piece;
+			uint32 large_piece;
+			uint32 num_small_pieces = 50;
+			uint32 num_large_pieces = 50;
+			
+			if (small_p_max2 < 1.0e9)
+				num_small_pieces = 5;
+			else if (small_p_max2 < 1.0e10)
+				num_small_pieces = 10;
+			else if (small_p_max2 < 1.0e11)
+				num_small_pieces = 25;
+			
+			small_piece = get_rand(&obj->seed1, 
+					&obj->seed2) % num_small_pieces;
+			small_p_min2 = small_p_min + small_piece *
+						((small_p_max - small_p_min) /
+						num_small_pieces);
+			small_p_max2 = small_p_min + (small_piece + 1) *
+						((small_p_max - small_p_min) /
+						num_small_pieces);
+
+			if (large_p_max2 < 1.0e9)
+				num_large_pieces = 5;
+			else if (large_p_max2 < 1.0e10)
+				num_large_pieces = 10;
+			else if (large_p_max2 < 1.0e11)
+				num_large_pieces = 25;
+
+			large_piece = get_rand(&obj->seed1, 
+					&obj->seed2) % num_large_pieces;
+			large_p_min2 = large_p_min + large_piece *
+						((large_p_max - large_p_min) /
+						num_large_pieces);
+			large_p_max2 = large_p_min + (large_piece + 1) *
+						((large_p_max - large_p_min) /
+						num_large_pieces);
+		}
 
 #ifdef HAVE_CUDA
 		if (degree == 4) {
-			if (large_p_max < ((uint64)1 << 24))
+			if (large_p_max2 < ((uint64)1 << 24))
 				L.gpu_module = gpu_module48;
 			else
 				L.gpu_module = gpu_module64;
 		}
 		else if (degree == 5) {
-			if (large_p_max < ((uint64)1 << 24))
+			if (large_p_max2 < ((uint64)1 << 24))
 				L.gpu_module = gpu_module48;
-			else if (large_p_max < ((uint64)1 << 32))
+			else if (large_p_max2 < ((uint64)1 << 32))
 				L.gpu_module = gpu_module64;
-			else if (large_p_max < ((uint64)1 << 36))
+			else if (large_p_max2 < ((uint64)1 << 36))
 				L.gpu_module = gpu_module72;
-			else if (large_p_max < ((uint64)1 << 48))
+			else if (large_p_max2 < ((uint64)1 << 48))
 				L.gpu_module = gpu_module96;
 			else
 				L.gpu_module = gpu_module128;
 		}
 		else {	/* degree 6 */
-			if (large_p_max < ((uint64)1 << 24))
+			if (large_p_max2 < ((uint64)1 << 24))
 				L.gpu_module = gpu_module48;
-			else if (large_p_max < ((uint64)1 << 32))
+			else if (large_p_max2 < ((uint64)1 << 32))
 				L.gpu_module = gpu_module64;
-			else if (large_p_max < ((uint64)1 << 36))
+			else if (large_p_max2 < ((uint64)1 << 36))
 				L.gpu_module = gpu_module72;
-			else if (large_p_max < ((uint64)1 << 48))
+			else if (large_p_max2 < ((uint64)1 << 48))
 				L.gpu_module = gpu_module96;
 			else
 				L.gpu_module = gpu_module128;
@@ -224,96 +267,70 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 
 		if (degree == 4) {
 			/* bounds may have grown too large */
-			if (large_p_max >= ((uint64)1 << 32))
+			if (large_p_max2 >= ((uint64)1 << 32))
 				break;
 
-			if (large_p_max < ((uint64)1 << 24)) {
-				done = sieve_lattice_deg46_64(obj, &L,
+			done = sieve_lattice_deg46_64(obj, &L,
 					&sieve_small, &sieve_large,
-					(uint32)small_p_min, 
-					(uint32)small_p_max,
-					(uint32)large_p_min, 
-					(uint32)large_p_max);
-			}
-			else {
-				done = sieve_lattice_deg46_64(obj, &L,
-					&sieve_small, &sieve_large,
-					(uint32)small_p_min, 
-					(uint32)small_p_max,
-					(uint32)large_p_min, 
-					(uint32)large_p_max);
-			}
+					(uint32)small_p_min2, 
+					(uint32)small_p_max2,
+					(uint32)large_p_min2, 
+					(uint32)large_p_max2);
 		}
 		else if (degree == 5) {
-			if (large_p_max < ((uint64)1 << 24)) {
+			if (large_p_max2 < ((uint64)1 << 32)) {
 				done = sieve_lattice_deg5_64(obj, &L,
 					&sieve_small, &sieve_large,
-					(uint32)small_p_min, 
-					(uint32)small_p_max,
-					(uint32)large_p_min, 
-					(uint32)large_p_max);
+					(uint32)small_p_min2, 
+					(uint32)small_p_max2,
+					(uint32)large_p_min2, 
+					(uint32)large_p_max2);
 			}
-			else if (large_p_max < ((uint64)1 << 32)) {
-				done = sieve_lattice_deg5_64(obj, &L,
-					&sieve_small, &sieve_large,
-					(uint32)small_p_min, 
-					(uint32)small_p_max,
-					(uint32)large_p_min, 
-					(uint32)large_p_max);
-			}
-			else if (large_p_max < ((uint64)1 << 36)) {
+			else if (large_p_max2 < ((uint64)1 << 36)) {
 				done = sieve_lattice_deg5_96(obj, &L,
 					&sieve_small, &sieve_large,
-					small_p_min, small_p_max,
-					large_p_min, large_p_max);
+					small_p_min2, small_p_max2,
+					large_p_min2, large_p_max2);
 			}
-			else if (large_p_max < ((uint64)1 << 48)) {
+			else if (large_p_max2 < ((uint64)1 << 48)) {
 				done = sieve_lattice_deg5_96(obj, &L,
 					&sieve_small, &sieve_large,
-					small_p_min, small_p_max,
-					large_p_min, large_p_max);
+					small_p_min2, small_p_max2,
+					large_p_min2, large_p_max2);
 			}
 			else {
 				done = sieve_lattice_deg5_128(obj, &L,
 					&sieve_small, &sieve_large,
-					small_p_min, small_p_max,
-					large_p_min, large_p_max);
+					small_p_min2, small_p_max2,
+					large_p_min2, large_p_max2);
 			}
 		}
 		else {	/* degree 6 */
-			if (large_p_max < ((uint64)1 << 24)) {
+			if (large_p_max2 < ((uint64)1 << 32)) {
 				done = sieve_lattice_deg46_64(obj, &L,
 					&sieve_small, &sieve_large,
-					(uint32)small_p_min, 
-					(uint32)small_p_max,
-					(uint32)large_p_min, 
-					(uint32)large_p_max);
+					(uint32)small_p_min2, 
+					(uint32)small_p_max2,
+					(uint32)large_p_min2, 
+					(uint32)large_p_max2);
 			}
-			else if (large_p_max < ((uint64)1 << 32)) {
-				done = sieve_lattice_deg46_64(obj, &L,
-					&sieve_small, &sieve_large,
-					(uint32)small_p_min, 
-					(uint32)small_p_max,
-					(uint32)large_p_min, 
-					(uint32)large_p_max);
-			}
-			else if (large_p_max < ((uint64)1 << 36)) {
+			else if (large_p_max2 < ((uint64)1 << 36)) {
 				done = sieve_lattice_deg6_96(obj, &L,
 					&sieve_small, &sieve_large,
-					small_p_min, small_p_max,
-					large_p_min, large_p_max);
+					small_p_min2, small_p_max2,
+					large_p_min2, large_p_max2);
 			}
-			else if (large_p_max < ((uint64)1 << 48)) {
+			else if (large_p_max2 < ((uint64)1 << 48)) {
 				done = sieve_lattice_deg6_96(obj, &L,
 					&sieve_small, &sieve_large,
-					small_p_min, small_p_max,
-					large_p_min, large_p_max);
+					small_p_min2, small_p_max2,
+					large_p_min2, large_p_max2);
 			}
 			else {
 				done = sieve_lattice_deg6_128(obj, &L,
 					&sieve_small, &sieve_large,
-					small_p_min, small_p_max,
-					large_p_min, large_p_max);
+					small_p_min2, small_p_max2,
+					large_p_min2, large_p_max2);
 			}
 		}
 
