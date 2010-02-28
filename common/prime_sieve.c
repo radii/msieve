@@ -141,6 +141,8 @@ void init_prime_sieve(prime_sieve_t *s,
 void free_prime_sieve(prime_sieve_t *s) { 
 	free(s->aux);
 	free(s->sieve);
+	s->aux = NULL;
+	s->sieve = NULL;
 }
 
 /*------------------------------------------------------------------*/

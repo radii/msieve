@@ -286,7 +286,7 @@ sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 		L->fill_p = 0;
 		p_soa_var_reset(q_array);
 		for (i = 0; i < HOST_BATCH_SIZE && 
-				min_large < large_p_max; i++) {
+				min_large != (uint32)P_SEARCH_DONE; i++) {
 			min_large = sieve_fb_next(sieve_small, L->poly,
 						store_p_soa, L);
 		}
@@ -303,7 +303,7 @@ sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 			L->fill_p = 1;
 			p_soa_var_reset(p_array);
 			for (i = 0; i < HOST_BATCH_SIZE && 
-					min_small < small_p_max; i++) {
+				    min_small != (uint32)P_SEARCH_DONE; i++) {
 				min_small = sieve_fb_next(sieve_large, L->poly,
 							store_p_soa, L);
 			}

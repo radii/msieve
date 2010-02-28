@@ -119,13 +119,26 @@ void poly_search_free(poly_search_t *poly);
 
 #define P_SEARCH_DONE ((uint64)(-1))
 
+/* structure for building arithmetic progressions */
+
+typedef struct {
+	uint32 p;
+	uint8 num_roots[POLY_BATCH_SIZE];
+	uint32 roots[POLY_BATCH_SIZE][MAX_POLYSELECT_DEGREE];
+} aprog_t;
+
+typedef struct {
+	aprog_t *aprogs;
+	uint32 num_aprogs;
+	uint32 num_aprogs_alloc;
+} aprog_list_t;
+
+/* structures for finding arithmetic progressions by sieving */
+
 typedef struct {
 	uint32 p;
 	uint32 r;
-	float fp_log_p;
 	uint8 log_p;
-	uint8 num_roots[POLY_BATCH_SIZE];
-	uint32 roots[POLY_BATCH_SIZE][MAX_POLYSELECT_DEGREE];
 } sieve_prime_t;
 
 typedef struct {
@@ -133,6 +146,17 @@ typedef struct {
 	uint32 num_primes;
 	uint32 num_primes_alloc;
 } sieve_prime_list_t;
+
+typedef struct {
+	uint8 *sieve_block;
+	uint32 curr_offset;
+	uint64 sieve_start;
+	sieve_prime_list_t good_primes;
+	sieve_prime_list_t bad_primes;
+} p_sieve_t;
+
+/* structures for finding arithmetic progressions via
+   explicit enumeration */
 
 typedef struct {
 	uint32 num_factors;
@@ -152,27 +176,26 @@ typedef struct {
 
 	uint32 curr_entry;
 	uint32 next_prime;
-	uint32 num_primes;
 	float log_p_min;
 	float log_p_max;
 } p_enum_t;
 
-typedef struct {
+#define ALGO_SIEVE 1
+#define ALGO_ENUM  2
+#define ALGO_PRIME 3
 
-	uint32 degree;
-	uint64 p_min, p_max;
+typedef struct {
 	uint32 num_roots_min;
 	uint32 num_roots_max;
+	uint32 curr_algo;
+	uint32 degree;
+	uint64 p_min, p_max;
 
-	uint32 allow_prime_p;
-	prime_sieve_t prime_sieve;
-	uint64 next_prime_p;
+	aprog_list_t aprog_data;
 
-	uint8 *sieve_block;
-	uint32 curr_offset;
-	sieve_prime_list_t good_primes;
-	sieve_prime_list_t bad_primes;
-	uint64 next_composite_p;
+	prime_sieve_t p_prime;
+
+	p_sieve_t p_sieve;
 
 	p_enum_t p_enum;
 
