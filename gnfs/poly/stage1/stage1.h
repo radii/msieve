@@ -90,6 +90,16 @@ typedef struct {
 	mpz_t tmp4;
 	mpz_t tmp5;
 
+#ifdef HAVE_CUDA
+	CUcontext gpu_context;
+	gpu_info_t *gpu_info; 
+	CUmodule gpu_module48; 
+	CUmodule gpu_module64; 
+	CUmodule gpu_module72; 
+	CUmodule gpu_module96; 
+	CUmodule gpu_module128; 
+#endif
+
 	stage1_callback_t callback;
 	void *callback_data;
 } poly_search_t;
@@ -261,13 +271,7 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 
 void sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 			uint32 small_fb_max, uint32 large_fb_min, 
-			uint32 large_fb_max, 
-#ifdef HAVE_CUDA
-			gpu_info_t *gpu_info, CUmodule gpu_module48, 
-			CUmodule gpu_module64, CUmodule gpu_module72, 
-			CUmodule gpu_module96, CUmodule gpu_module128, 
-#endif
-			uint32 deadline);
+			uint32 large_fb_max, uint32 deadline);
 
 #ifdef __cplusplus
 }

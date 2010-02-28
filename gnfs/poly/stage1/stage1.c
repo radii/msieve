@@ -92,6 +92,48 @@ poly_search_init(poly_search_t *poly, poly_stage1_t *data)
 	poly->degree = data->degree;
 	poly->callback = data->callback;
 	poly->callback_data = data->callback_data;
+
+#ifdef HAVE_CUDA
+	CUDA_TRY(cuCtxCreate(&poly->gpu_context, 
+			CU_CTX_BLOCKING_SYNC,
+			poly->gpu_info->device_handle))
+
+	switch (poly->degree) {
+	case 4:
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module48, 
+				"stage1_core_deg46_48.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module64, 
+				"stage1_core_deg46_64.ptx"))
+		break;
+
+	case 5:
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module48, 
+				"stage1_core_deg5_48.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module64, 
+				"stage1_core_deg5_64.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module72, 
+				"stage1_core_deg5_72.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module96, 
+				"stage1_core_deg5_96.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module128, 
+				"stage1_core_deg5_128.ptx"))
+		break;
+
+	case 6:
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module48, 
+				"stage1_core_deg46_48.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module64, 
+				"stage1_core_deg46_64.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module72, 
+				"stage1_core_deg6_72.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module96, 
+				"stage1_core_deg6_96.ptx"))
+		CUDA_TRY(cuModuleLoad(&poly->gpu_module128, 
+				"stage1_core_deg6_128.ptx"))
+		break;
+	}
+#endif
+
 }
 
 /*------------------------------------------------------------------------*/
@@ -115,16 +157,14 @@ poly_search_free(poly_search_t *poly)
 	mpz_clear(poly->tmp3);
 	mpz_clear(poly->tmp4);
 	mpz_clear(poly->tmp5);
+#ifdef HAVE_CUDA
+	CUDA_TRY(cuCtxDestroy(poly->gpu_context)) 
+#endif
 }
 
 /*------------------------------------------------------------------------*/
 static void
 search_coeffs_core(msieve_obj *obj, poly_search_t *poly, 
-#ifdef HAVE_CUDA
-			gpu_info_t *gpu_info, CUmodule gpu_module48,
-			CUmodule gpu_module64, CUmodule gpu_module72,
-			CUmodule gpu_module96, CUmodule gpu_module128, 
-#endif
 			uint32 deadline)
 {
 	uint32 i, j;
@@ -155,22 +195,13 @@ search_coeffs_core(msieve_obj *obj, poly_search_t *poly,
 	}
 
 	sieve_lattice(obj, poly, 2000, 2001, 100000, 
-#ifdef HAVE_CUDA
-			gpu_info, gpu_module48,
-			gpu_module64, gpu_module72,
-			gpu_module96, gpu_module128, 
-#endif
 			num_poly * deadline);
 }
 
 /*------------------------------------------------------------------------*/
 static void
 search_coeffs(msieve_obj *obj, poly_search_t *poly, 
-		bounds_t *bounds, 
-#ifdef HAVE_CUDA
-		gpu_info_t *gpu_info,
-#endif
-		uint32 deadline)
+		bounds_t *bounds, uint32 deadline)
 {
 	mpz_t curr_high_coeff;
 	double dn = mpz_get_d(poly->N);
@@ -178,54 +209,6 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	double start_time = get_cpu_time();
 	uint32 deadline_per_coeff = 800;
 	uint32 batch_size = (poly->degree == 5) ? POLY_BATCH_SIZE : 1;
-
-#ifdef HAVE_CUDA
-	CUcontext gpu_context;
-	CUmodule gpu_module48 = NULL;
-	CUmodule gpu_module64 = NULL;
-	CUmodule gpu_module72 = NULL;
-	CUmodule gpu_module96 = NULL;
-	CUmodule gpu_module128 = NULL;
-
-	CUDA_TRY(cuCtxCreate(&gpu_context, 
-			CU_CTX_BLOCKING_SYNC,
-			gpu_info->device_handle))
-
-	switch (poly->degree) {
-	case 4:
-		CUDA_TRY(cuModuleLoad(&gpu_module48, 
-				"stage1_core_deg46_48.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module64, 
-				"stage1_core_deg46_64.ptx"))
-		break;
-
-	case 5:
-		CUDA_TRY(cuModuleLoad(&gpu_module48, 
-				"stage1_core_deg5_48.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module64, 
-				"stage1_core_deg5_64.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module72, 
-				"stage1_core_deg5_72.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module96, 
-				"stage1_core_deg5_96.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module128, 
-				"stage1_core_deg5_128.ptx"))
-		break;
-
-	case 6:
-		CUDA_TRY(cuModuleLoad(&gpu_module48, 
-				"stage1_core_deg46_48.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module64, 
-				"stage1_core_deg46_64.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module72, 
-				"stage1_core_deg6_72.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module96, 
-				"stage1_core_deg6_96.ptx"))
-		CUDA_TRY(cuModuleLoad(&gpu_module128, 
-				"stage1_core_deg6_128.ptx"))
-		break;
-	}
-#endif
 
 	if (digits <= 100)
 		deadline_per_coeff = 5;
@@ -265,11 +248,6 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 
 			if (poly->num_poly > 0) {
 				search_coeffs_core(obj, poly, 
-#ifdef HAVE_CUDA
-					   gpu_info, gpu_module48, 
-					   gpu_module64, gpu_module72, 
-					   gpu_module96, gpu_module128, 
-#endif
 					   deadline_per_coeff);
 			}
 			break;
@@ -285,11 +263,6 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 
 		if (++poly->num_poly == batch_size) {
 			search_coeffs_core(obj, poly, 
-#ifdef HAVE_CUDA
-					gpu_info, gpu_module48,
-					gpu_module64, gpu_module72, 
-					gpu_module96, gpu_module128, 
-#endif
 					deadline_per_coeff);
 
 			if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
@@ -310,9 +283,6 @@ search_coeffs(msieve_obj *obj, poly_search_t *poly,
 	}
 
 	mpz_clear(curr_high_coeff);
-#ifdef HAVE_CUDA
-	CUDA_TRY(cuCtxDestroy(gpu_context)) 
-#endif
 }
 
 /*------------------------------------------------------------------------*/
@@ -358,16 +328,14 @@ poly_stage1_run(msieve_obj *obj, poly_stage1_t *data)
 	}
 	logprintf(obj, "using GPU %u (%s)\n", obj->which_gpu,
 			gpu_config.info[obj->which_gpu].name);
+
+	poly.gpu_info = gpu_config.info + obj->which_gpu; 
 #endif
 
 	stage1_bounds_init(&bounds, data);
 	poly_search_init(&poly, data);
 
-	search_coeffs(obj, &poly, &bounds, 
-#ifdef HAVE_CUDA
-			gpu_config.info + obj->which_gpu, 
-#endif
-			data->deadline);
+	search_coeffs(obj, &poly, &bounds, data->deadline);
 
 	poly_search_free(&poly);
 	stage1_bounds_free(&bounds);

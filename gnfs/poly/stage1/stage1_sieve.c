@@ -89,13 +89,7 @@ handle_collision(poly_search_t *poly, uint32 which_poly,
 void
 sieve_lattice(msieve_obj *obj, poly_search_t *poly, 
 		uint32 small_fb_max, uint32 large_fb_min, 
-		uint32 large_fb_max, 
-#ifdef HAVE_CUDA
-		gpu_info_t *gpu_info, CUmodule gpu_module48, 
-		CUmodule gpu_module64, CUmodule gpu_module72, 
-		CUmodule gpu_module96, CUmodule gpu_module128, 
-#endif
-		uint32 deadline)
+		uint32 large_fb_max, uint32 deadline)
 {
 	lattice_fb_t L;
 	sieve_fb_t sieve_small, sieve_large;
@@ -177,7 +171,7 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 	L.start_time = time(NULL);
 	L.deadline = deadline;
 #ifdef HAVE_CUDA
-	L.gpu_info = gpu_info;
+	L.gpu_info = poly->gpu_info;
 #endif
 
 	while (1) {
@@ -229,33 +223,33 @@ sieve_lattice(msieve_obj *obj, poly_search_t *poly,
 #ifdef HAVE_CUDA
 		if (degree == 4) {
 			if (large_p_max2 < ((uint64)1 << 24))
-				L.gpu_module = gpu_module48;
+				L.gpu_module = poly->gpu_module48;
 			else
-				L.gpu_module = gpu_module64;
+				L.gpu_module = poly->gpu_module64;
 		}
 		else if (degree == 5) {
 			if (large_p_max2 < ((uint64)1 << 24))
-				L.gpu_module = gpu_module48;
+				L.gpu_module = poly->gpu_module48;
 			else if (large_p_max2 < ((uint64)1 << 32))
-				L.gpu_module = gpu_module64;
+				L.gpu_module = poly->gpu_module64;
 			else if (large_p_max2 < ((uint64)1 << 36))
-				L.gpu_module = gpu_module72;
+				L.gpu_module = poly->gpu_module72;
 			else if (large_p_max2 < ((uint64)1 << 48))
-				L.gpu_module = gpu_module96;
+				L.gpu_module = poly->gpu_module96;
 			else
-				L.gpu_module = gpu_module128;
+				L.gpu_module = poly->gpu_module128;
 		}
 		else {	/* degree 6 */
 			if (large_p_max2 < ((uint64)1 << 24))
-				L.gpu_module = gpu_module48;
+				L.gpu_module = poly->gpu_module48;
 			else if (large_p_max2 < ((uint64)1 << 32))
-				L.gpu_module = gpu_module64;
+				L.gpu_module = poly->gpu_module64;
 			else if (large_p_max2 < ((uint64)1 << 36))
-				L.gpu_module = gpu_module72;
+				L.gpu_module = poly->gpu_module72;
 			else if (large_p_max2 < ((uint64)1 << 48))
-				L.gpu_module = gpu_module96;
+				L.gpu_module = poly->gpu_module96;
 			else
-				L.gpu_module = gpu_module128;
+				L.gpu_module = poly->gpu_module128;
 		}
 
 		CUDA_TRY(cuModuleGetFunction(&L.gpu_kernel, 
