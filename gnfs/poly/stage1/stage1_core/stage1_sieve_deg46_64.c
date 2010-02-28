@@ -15,10 +15,6 @@ $Id$
 #include <stage1.h>
 #include "cpu_intrinsics.h"
 
-#define HOST_BATCH_SIZE 10000
-
-#define INVERT_BATCH_SIZE 200
-
 /*------------------------------------------------------------------------*/
 typedef struct {
 	uint32 num_p;
@@ -95,7 +91,6 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L)
 	uint32 i, j, k, m;
 	p_soa_var_t * p_array = (p_soa_var_t *)L->p_array;
 	p_soa_var_t * q_array = (p_soa_var_t *)L->q_array;
-	uint32 num_poly = L->poly->num_poly;
 	uint32 num_p = p_array->num_p;
 
 	for (i = 0; i < q_array->num_p; i++) {
@@ -124,7 +119,6 @@ sieve_lattice_batch(msieve_obj *obj, lattice_fb_t *L)
 			for (j = 0; j < curr_num_p; j++) {
 
 				uint32 p = plist[j];
-				uint64 p2 = wide_sqr32(p);
 				uint64 pinv = pinvlist[j];
 				uint32 num_proots = 
 					  p_array->num_roots[num_p_done+j];

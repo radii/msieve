@@ -96,6 +96,98 @@ cmp128(uint128 a, uint128 b)
 	return 0;
 }
 
+/*-------------------- Addition ---------------------------------*/
+static INLINE uint96
+add96(uint96 a, uint96 b)
+{
+	uint32 c;
+	uint32 acc;
+	uint96 res;
+
+	acc = a.w[0] + b.w[0];
+	res.w[0] = acc;
+	c = (acc < a.w[0]);
+
+	acc = a.w[1] + c;
+	c = (acc < a.w[1]);
+	res.w[1] = acc + b.w[1];
+	c += (res.w[1] < acc);
+
+	res.w[2] = a.w[2] + b.w[2] + c;
+	return res;
+}
+
+static INLINE uint128
+add128(uint128 a, uint128 b)
+{
+	uint32 c;
+	uint32 acc;
+	uint128 res;
+
+	acc = a.w[0] + b.w[0];
+	res.w[0] = acc;
+	c = (acc < a.w[0]);
+
+	acc = a.w[1] + c;
+	c = (acc < a.w[1]);
+	res.w[1] = acc + b.w[1];
+	c += (res.w[1] < acc);
+
+	acc = a.w[2] + c;
+	c = (acc < a.w[2]);
+	res.w[2] = acc + b.w[2];
+	c += (res.w[2] < acc);
+
+	res.w[3] = a.w[3] + b.w[3] + c;
+	return res;
+}
+
+/*------------------------ Subtraction ---------------------------------*/
+static INLINE uint96
+sub96(uint96 a, uint96 b)
+{
+	uint32 c;
+	uint32 acc;
+	uint96 res;
+
+	acc = a.w[0] - b.w[0];
+	res.w[0] = acc;
+	c = (acc > a.w[0]);
+
+	acc = a.w[1] - c;
+	c = (acc > a.w[1]);
+	res.w[1] = acc - b.w[1];
+	c += (res.w[1] > acc);
+
+	res.w[2] = a.w[2] - b.w[2] - c;
+	return res;
+}
+
+static INLINE uint128
+sub128(uint128 a, uint128 b)
+{
+	uint32 c;
+	uint32 acc;
+	uint128 res;
+
+	acc = a.w[0] - b.w[0];
+	res.w[0] = acc;
+	c = (acc > a.w[0]);
+
+	acc = a.w[1] - c;
+	c = (acc > a.w[1]);
+	res.w[1] = acc - b.w[1];
+	c += (res.w[1] > acc);
+
+	acc = a.w[2] - c;
+	c = (acc > a.w[2]);
+	res.w[2] = acc - b.w[2];
+	c += (res.w[2] > acc);
+
+	res.w[3] = a.w[3] - b.w[3] - c;
+	return res;
+}
+
 /*----------------- Squaring ----------------------------------------*/
 
 static INLINE uint64 
@@ -161,21 +253,27 @@ modsub64(uint64 a, uint64 b, uint64 p)
 	return mp_modsub_2(a, b, p);
 }
 
-#if 0
 static INLINE uint96
-modsub96(uint96 a, uint96 b, uint96 p) 
+modsub96(uint96 a, uint96 b, uint96 p)
 {
-	uint96 res;
+	uint96 res = sub96(a, b);
+
+	if (cmp96(res, a) > 0)
+		res = add96(res, p);
+
 	return res;
 }
 
-static INLINE uint128 
-modsub128(uint128 a, uint128 b, uint128 p) 
+static INLINE uint128
+modsub128(uint128 a, uint128 b, uint128 p)
 {
-	uint128 res;
+	uint128 res = sub128(a, b);
+
+	if (cmp128(res, a) > 0)
+		res = add128(res, p);
+
 	return res;
 }
-#endif
 
 /*------------------- Montgomery arithmetic --------------------------*/
 static INLINE uint64 
@@ -244,25 +342,341 @@ montmul64(uint64 a, uint64 b,
 		return prod;
 }
 
-#if 0
-static INLINE uint96 
+static INLINE uint96
 montmul96(uint96 a, uint96 b,
-		uint96 n, uint32 w) 
-{
-	uint96 res;
-	return res;
+		uint96 n, uint32 w) {
 
+	uint32 acc0, acc1, acc2, acc3, nmult;
+	uint32 prod_lo, prod_hi;
+	uint64 prod;
+	uint96 res;
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[0]);
+	acc0 = prod_lo;
+	prod = (uint64)prod_hi;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[0]);
+	prod += (uint64)prod_hi << 32 | prod_lo;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[0]);
+	prod += (uint64)prod_hi << 32 | prod_lo;
+	acc2 = (uint32)prod;
+	acc3 = (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc3;
+	acc2 = (uint32)prod;
+	acc3 = (uint32)(prod >> 32);
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[1]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc2 = (uint32)prod;
+	acc3 += (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc3;
+	acc2 = (uint32)prod;
+	acc3 = (uint32)(prod >> 32);
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[2]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc2 = (uint32)prod;
+	acc3 += (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc3;
+	acc2 = (uint32)prod;
+	acc3 = (uint32)(prod >> 32);
+
+	/*------------------------*/
+	res.w[0] = acc0;
+	res.w[1] = acc1;
+	res.w[2] = acc2;
+	if (acc3 > 0 || cmp96(res, n) >= 0)
+		return sub96(res, n);
+	else
+		return res;
 }
 
 static INLINE uint128
 montmul128(uint128 a, uint128 b,
-		uint128 n, uint32 w) 
-{
+		uint128 n, uint32 w) {
 
+	uint32 acc0, acc1, acc2, acc3, acc4, nmult;
+	uint32 prod_lo, prod_hi;
+	uint64 prod;
 	uint128 res;
-	return res;
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[0]);
+	acc0 = prod_lo;
+	prod = (uint64)prod_hi;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[0]);
+	prod += (uint64)prod_hi << 32 | prod_lo;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[0]);
+	prod += (uint64)prod_hi << 32 | prod_lo;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[3], b.w[0]);
+	prod += (uint64)prod_hi << 32 | prod_lo;
+	acc3 = (uint32)prod;
+	acc4 = (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc4;
+	acc3 = (uint32)prod;
+	acc4 = (uint32)(prod >> 32);
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[1]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[3], b.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc3 = (uint32)prod;
+	acc4 += (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc4;
+	acc3 = (uint32)prod;
+	acc4 = (uint32)(prod >> 32);
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[2]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[3], b.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc3 = (uint32)prod;
+	acc4 += (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc4;
+	acc3 = (uint32)prod;
+	acc4 = (uint32)(prod >> 32);
+
+	/*---------------------*/
+	PROD32(prod_hi, prod_lo, a.w[0], b.w[3]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[1], b.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[2], b.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, a.w[3], b.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc3 = (uint32)prod;
+	acc4 += (uint32)(prod >> 32);
+
+	/*------------------------*/
+	nmult = acc0 * w;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[0]);
+	prod = ((uint64)prod_hi << 32 | prod_lo) + acc0;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[1]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc1;
+	acc0 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[2]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc2;
+	acc1 = (uint32)prod;
+	prod >>= 32;
+
+	PROD32(prod_hi, prod_lo, nmult, n.w[3]);
+	prod += ((uint64)prod_hi << 32 | prod_lo) + acc3;
+	acc2 = (uint32)prod;
+	prod >>= 32;
+
+	prod += acc4;
+	acc3 = (uint32)prod;
+	acc4 = (uint32)(prod >> 32);
+
+	/*------------------------*/
+	res.w[0] = acc0;
+	res.w[1] = acc1;
+	res.w[2] = acc2;
+	res.w[3] = acc3;
+	if (acc4 > 0 || cmp128(res, n) >= 0)
+		return sub128(res, n);
+	else
+		return res;
 }
-#endif
 
 /*------------------ Initializing Montgomery arithmetic -----------------*/
 static INLINE uint32 
@@ -362,6 +776,12 @@ montmul128_r(uint128 n) {
 	res.w[3] = rem.val[3];
 	return res;
 }
+
+/*------------------------- Miscellaneous -------------------------------*/
+
+#define HOST_BATCH_SIZE 8192
+
+#define INVERT_BATCH_SIZE 512
 
 #ifdef __cplusplus
 }
