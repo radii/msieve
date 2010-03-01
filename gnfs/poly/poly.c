@@ -249,7 +249,6 @@ int32 find_poly(msieve_obj *obj, mp_t *n) {
 		return -3;
 	}
 
-
 	poly_config_init(&config);
 
 	/* figure out how long poly selection should take */

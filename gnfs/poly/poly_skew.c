@@ -186,6 +186,8 @@ static void get_poly_params(double digits, poly_param_t *params,
 	j = digits - low->digits;
 	k = high->digits - digits;
 
+	/* use exponential interpolation */
+
 	params->digits = digits;
 	params->stage1_norm = exp((log(low->stage1_norm) * k +
 			           log(high->stage1_norm) * j) / dist);

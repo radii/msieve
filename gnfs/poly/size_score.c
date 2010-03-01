@@ -372,6 +372,13 @@ static double eval_dpoly(dpoly_t *poly,
 			double x0, double xh, 
 			double y0, double yh) {
 
+	/* evaluate poly(x0+xh, y0+yh) using a Taylor series
+	   centered at poly(x0,y0). We have to do this because
+	   the numerical integrator will sample the integrand 
+	   extremely close to poly(x,y)=0, and in that case
+	   xh and yh will be of such different magnitude compared
+	   to x0 and y0 that we will run into numerical trouble */
+
 	uint32 i, j, k;
 	uint32 deg = poly->degree;
 	double *coeff = poly->coeff;
@@ -448,6 +455,11 @@ static double murphy_integrand(double r, double h, void *params) {
 	double x0, xh, y0, yh;
 	double polyval_r, polyval_a;
 
+	/* we need to convert the angular measure (r+h), with
+	   r and h of possibly very different magnitudes, into
+	   cartesian measures (x0+xh, y0+yh) so that we can use
+	   the homogeneous form of the NFS polynomials */
+
 	if (fabs(h) > 0.1) {
 		x0 = cos(r + h);
 		y0 = sin(r + h);
@@ -456,6 +468,9 @@ static double murphy_integrand(double r, double h, void *params) {
 	else {
 		uint32 i;
 		double term, hpow;
+
+		/* sum the Taylor series for cos(r+h) and sin(r+h)
+		   simultaneously */
 
 		x0 = cos(r);
 		y0 = sin(r);
@@ -482,12 +497,23 @@ static double murphy_integrand(double r, double h, void *params) {
 		}
 	}
 
+	/* skew the coordinates */
+
 	x0 *= p->skew_x;
 	xh *= p->skew_x;
 	y0 *= p->skew_y;
 	yh *= p->skew_y;
+
+	/* evaluate the NFS polynomials at the skewed coordinates */
+
 	polyval_r = eval_dpoly(&p->rpoly, x0, xh, y0, yh);
 	polyval_a = eval_dpoly(&p->apoly, x0, xh, y0, yh);
+
+	/* polyval_[ra] give a measure of the size of sieve values
+	   contained in a ray emanating from the origin at an angle 
+	   of (r+h) radians. The integrand is the probability that
+	   sieve values on this ray are [ra]fb-limit-smooth, after 
+	   small primes are removed */
 
 	return dickman(p->dickman_aux,
 			(log(fabs(polyval_r)) + p->root_score_r) / 
@@ -502,6 +528,21 @@ uint32 analyze_poly_murphy(integrate_t *integ_aux, dickman_t *dickman_aux,
 			ddpoly_t *rpoly, double root_score_r,
 			ddpoly_t *apoly, double root_score_a,
 			double skewness, double *result) {
+
+	/* Given the skewness and root score for an NFS polynomial
+	   pair, calculate the probability that an anverage sieve 
+	   value in the sieving region has all rational (resp. algebraic)
+	   factors less than rfb_limit (resp. afb_limit) 
+	 
+	   Ideally the sieving area and factor base limits should vary
+	   with the size of the NFS input, but we fix them here to
+	   be compatible with the code in pol51. That code uses a
+	   trapezoidal approximation to the integral and computes
+	   Dickman's function via linear interpolation from pre-tabulated
+	   values. The following uses a full numerical integrator and 
+	   the classical Dickman series instead, but the integrand is
+	   so smooth most of the time that the end effect is the same.
+	   This code uses about 90% fewer integrand evaluations though */
 
 	uint32 i, j;
 	murphy_param_t params;
