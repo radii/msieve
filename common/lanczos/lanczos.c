@@ -752,9 +752,11 @@ static void dump_lanczos_state(msieve_obj *obj,
 			uint32 s[2][64], uint32 dim1) {
 
 	char buf[256];
+	char buf_old[256];
 	FILE *dump_fp;
 
-	sprintf(buf, "%s.chk", obj->savefile.name);
+	sprintf(buf, "%s.chk0", obj->savefile.name);
+	sprintf(buf_old, "%s.chk", obj->savefile.name);
 	dump_fp = fopen(buf, "wb");
 	if (dump_fp == NULL) {
 		printf("error: cannot open matrix checkpoint file\n");
@@ -781,6 +783,16 @@ static void dump_lanczos_state(msieve_obj *obj,
 	fwrite(v[2], sizeof(uint64), (size_t)n, dump_fp);
 	fwrite(v0, sizeof(uint64), (size_t)n, dump_fp);
 	fclose(dump_fp);
+
+	/* only delete an old checkpoint file if the current 
+	   checkpoint completed writing. More paranoid: compare
+	   file sizes. Even more paranoid: compute a cryptographic 
+	   hash of the file and then verify against the disk image */
+
+	if (rename(buf, buf_old)) {
+		printf("error: cannot update checkpoint file\n");
+		exit(-1);
+	}
 }
 
 /*-----------------------------------------------------------------------*/
