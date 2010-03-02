@@ -1,10 +1,15 @@
 Version 1.45:
 	- NFS poly selection changes:
-		- Added assembly language for a small speedup
+		- Merged the CPU and GPU branches more tightly, and centralized
+		  much of the GPU handling code
+		- Added PTX inline assembly language for a small speedup
 		- Added specialized routines that make poly selection
 		  for inputs < 135 digits about 35% faster
 		- Fixed some degree 5 synchronization issues (thanks
 		  Jayson King)
+	- Modified the linear algebra to write new checkpoint files first,
+		then overwrite the old checkpoint only if the write completed
+		(thanks Greg Childers)
 	- Cleaned up the makefile a bit
 
 
