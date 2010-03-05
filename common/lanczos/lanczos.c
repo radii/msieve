@@ -754,6 +754,7 @@ static void dump_lanczos_state(msieve_obj *obj,
 	char buf[256];
 	char buf_old[256];
 	FILE *dump_fp;
+	uint32 status = 1;
 
 	sprintf(buf, "%s.chk0", obj->savefile.name);
 	sprintf(buf_old, "%s.chk", obj->savefile.name);
@@ -763,32 +764,38 @@ static void dump_lanczos_state(msieve_obj *obj,
 		exit(-1);
 	}
 
-	fwrite(&n, sizeof(uint32), (size_t)1, dump_fp);
-	fwrite(&dim_solved, sizeof(uint32), (size_t)1, dump_fp);
-	fwrite(&iter, sizeof(uint32), (size_t)1, dump_fp);
+	status &= (fwrite(&n, sizeof(uint32), (size_t)1, dump_fp)==1);
+	status &= (fwrite(&dim_solved, sizeof(uint32), (size_t)1, dump_fp)==1);
+	status &= (fwrite(&iter, sizeof(uint32), (size_t)1, dump_fp)==1);
 
-	fwrite(vt_a_v[1], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(vt_a2_v[1], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(winv[1], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(winv[2], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(vt_v0[0], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(vt_v0[1], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(vt_v0[2], sizeof(uint64), (size_t)64, dump_fp);
-	fwrite(s[1], sizeof(uint32), (size_t)64, dump_fp);
-	fwrite(&dim1, sizeof(uint32), (size_t)1, dump_fp);
+	status &= (fwrite(vt_a_v[1], sizeof(uint64), (size_t)64, dump_fp)==64);
+	status &= (fwrite(vt_a2_v[1], sizeof(uint64), (size_t)64, dump_fp)==64);
+	status &= (fwrite(winv[1], sizeof(uint64), (size_t)64, dump_fp) == 64);
+	status &= (fwrite(winv[2], sizeof(uint64), (size_t)64, dump_fp) == 64);
+	status &= (fwrite(vt_v0[0], sizeof(uint64), (size_t)64, dump_fp) == 64);
+	status &= (fwrite(vt_v0[1], sizeof(uint64), (size_t)64, dump_fp) == 64);
+	status &= (fwrite(vt_v0[2], sizeof(uint64), (size_t)64, dump_fp) == 64);
+	status &= (fwrite(s[1], sizeof(uint32), (size_t)64, dump_fp) == 64);
+	status &= (fwrite(&dim1, sizeof(uint32), (size_t)1, dump_fp) == 1);
 
-	fwrite(x, sizeof(uint64), (size_t)n, dump_fp);
-	fwrite(v[0], sizeof(uint64), (size_t)n, dump_fp);
-	fwrite(v[1], sizeof(uint64), (size_t)n, dump_fp);
-	fwrite(v[2], sizeof(uint64), (size_t)n, dump_fp);
-	fwrite(v0, sizeof(uint64), (size_t)n, dump_fp);
+	status &= (fwrite(x, sizeof(uint64), (size_t)n, dump_fp) == n);
+	status &= (fwrite(v[0], sizeof(uint64), (size_t)n, dump_fp) == n);
+	status &= (fwrite(v[1], sizeof(uint64), (size_t)n, dump_fp) == n);
+	status &= (fwrite(v[2], sizeof(uint64), (size_t)n, dump_fp) == n);
+	status &= (fwrite(v0, sizeof(uint64), (size_t)n, dump_fp) == n);
 	fclose(dump_fp);
 
 	/* only delete an old checkpoint file if the current 
-	   checkpoint completed writing. More paranoid: compare
-	   file sizes. Even more paranoid: compute a cryptographic 
-	   hash of the file and then verify against the disk image */
+	   checkpoint completed writing. More paranoid: compute a 
+	   cryptographic hash of the file and then verify against 
+	   the disk image */
 
+	if (status == 0) {
+		printf("error: cannot write new checkpoint file\n");
+		printf("error: previous checkpoint file not overwritten\n");
+		exit(-1);
+	}
+	remove(buf_old);
 	if (rename(buf, buf_old)) {
 		printf("error: cannot update checkpoint file\n");
 		exit(-1);
