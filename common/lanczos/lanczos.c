@@ -924,7 +924,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	uint32 report_interval = 0;
 	uint32 check_interval = 0;
 	uint32 next_report = 0;
-	uint32 log_ETA_once = 0;
+	uint32 log_eta_once = 0;
 	uint32 next_check = 0;
 	uint32 next_dump = 0;
 	time_t first_time;
@@ -1004,9 +1004,11 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	}
 
 	if (dump_interval) {
-		next_dump = (dim_solved / dump_interval + 1) * dump_interval;
+		next_dump = (dim_solved / dump_interval + 1) * 
+					dump_interval;
 		check_interval = 10000;
-		next_check = (dim_solved / check_interval + 1) * check_interval;
+		next_check = (dim_solved / check_interval + 1) * 
+					check_interval;
 	}
 
 	/* perform the iteration */
@@ -1122,7 +1124,8 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 				}
 			}
 			/* check passed */
-			next_check = (dim_solved / check_interval + 1) * check_interval;
+			next_check = (dim_solved / check_interval + 1) * 
+							check_interval;
 			memcpy(v0, vnext, n * sizeof(uint64));
 		}
 
@@ -1227,10 +1230,17 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 					"%dh%2dm)    \r",
 					dim_solved, n, 100.0 * dim_solved / n,
 					eta / 3600, (eta % 3600) / 60);
-				if(++log_ETA_once == 3)  /* wait 3 intervals for a better ETA */
-				  logprintf(obj, "linear algebra at %1.1f%%, ETA %dh%2dm\n",
-					100.0 * dim_solved / n,
-					eta / 3600, (eta % 3600) / 60);
+
+				/* report the ETA to the logfile once 
+				   (wait 3 intervals for a better ETA) */
+
+				if (++log_eta_once == 3) {
+					logprintf(obj, "linear algebra at "
+						   "%1.1f%%, ETA %dh%2dm\n",
+						100.0 * dim_solved / n,
+						eta / 3600, 
+						(eta % 3600) / 60);
+				}
 				next_report = dim_solved + report_interval;
 				fflush(stderr);
 			}
@@ -1245,7 +1255,8 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 				dump_lanczos_state(obj, x, vt_v0, v, v0, 
 						   vt_a_v, vt_a2_v, winv, n, 
 						   dim_solved, iter, s, dim1);
-				next_dump = (dim_solved / dump_interval + 1) * dump_interval;
+				next_dump = (dim_solved / dump_interval + 1) * 
+							dump_interval;
 			}
 			if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
 				break;
