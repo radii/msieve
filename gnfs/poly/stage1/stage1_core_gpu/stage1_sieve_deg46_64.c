@@ -15,8 +15,6 @@ $Id$
 #include <stage1.h>
 #include "stage1_core_deg46_64.h"
 
-#define HOST_BATCH_SIZE 50000
-
 /*------------------------------------------------------------------------*/
 typedef struct {
 	uint32 num_roots;
@@ -421,6 +419,8 @@ sieve_lattice_deg46_64(msieve_obj *obj, lattice_fb_t *L,
 	uint32 threads_per_block;
 	gpu_info_t *gpu_info = L->gpu_info;
        	CUfunction gpu_kernel = L->gpu_kernel;
+	uint32 host_p_batch_size;
+	uint32 host_q_batch_size;
 
 	L->q_marshall = (q_soa_t *)xmalloc(sizeof(q_soa_t));
 	q_array = L->q_array = (q_soa_array_t *)xmalloc(
@@ -445,6 +445,9 @@ sieve_lattice_deg46_64(msieve_obj *obj, lattice_fb_t *L,
 					sizeof(found_t));
 	CUDA_TRY(cuMemAlloc(&L->gpu_found_array, 
 			L->found_array_size * sizeof(found_t)))
+
+	host_p_batch_size = MAX(10000, L->found_array_size / 3);
+	host_q_batch_size = MAX(50000, 12 * L->found_array_size);
 
 	printf("------- %u-%u %u-%u\n",
 			small_p_min, small_p_max,
@@ -472,7 +475,7 @@ sieve_lattice_deg46_64(msieve_obj *obj, lattice_fb_t *L,
 
 		q_soa_array_reset(q_array);
 
-		for (i = 0; i < HOST_BATCH_SIZE && 
+		for (i = 0; i < host_q_batch_size && 
 				min_large != (uint32)P_SEARCH_DONE; i++) {
 			min_large = sieve_fb_next(sieve_small, L->poly,
 						store_p_soa, L);
@@ -492,7 +495,7 @@ sieve_lattice_deg46_64(msieve_obj *obj, lattice_fb_t *L,
 
 			p_packed_reset(p_array);
 
-			for (i = 0; i < HOST_BATCH_SIZE && 
+			for (i = 0; i < host_p_batch_size && 
 			 	    min_small != (uint32)P_SEARCH_DONE; i++) {
 				min_small = sieve_fb_next(sieve_large, L->poly,
 							store_p_packed, L);

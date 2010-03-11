@@ -15,17 +15,38 @@ $Id$
 #include <stage1.h>
 #include "stage1_core_deg5_64.h"
 
-#define HOST_BATCH_SIZE (104*384)
-
 /*------------------------------------------------------------------------*/
 typedef struct {
 	uint32 num_p;
 	uint32 last_p;
 
-	uint32 p[HOST_BATCH_SIZE];
-	uint32 lattice_size[HOST_BATCH_SIZE];
-	uint64 roots[POLY_BATCH_SIZE][HOST_BATCH_SIZE];
+	uint32 *p;
+	uint32 *lattice_size;
+	uint64 *roots[POLY_BATCH_SIZE];
 } p_soa_var_t;
+
+static void
+p_soa_var_init(p_soa_var_t *soa, uint32 batch_size)
+{
+	uint32 i;
+
+	memset(soa, 0, sizeof(soa));
+	soa->p = (uint32 *)xmalloc(batch_size * sizeof(uint32));
+	soa->lattice_size = (uint32 *)xmalloc(batch_size * sizeof(uint32));
+	for (i = 0; i < POLY_BATCH_SIZE; i++)
+		soa->roots[i] = (uint64 *)xmalloc(batch_size * sizeof(uint64));
+}
+
+static void
+p_soa_var_free(p_soa_var_t *soa)
+{
+	uint32 i;
+
+	free(soa->p);
+	free(soa->lattice_size);
+	for (i = 0; i < POLY_BATCH_SIZE; i++)
+		free(soa->roots[i]);
+}
 
 static void
 p_soa_var_reset(p_soa_var_t *soa)
@@ -244,6 +265,8 @@ sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 	p_soa_var_t * p_array;
 	p_soa_var_t * q_array;
 	uint32 num_poly = L->poly->num_poly;
+	uint32 host_p_batch_size;
+	uint32 host_q_batch_size;
 
 	uint32 threads_per_block;
 	gpu_info_t *gpu_info = L->gpu_info;
@@ -273,6 +296,11 @@ sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 	CUDA_TRY(cuMemAlloc(&L->gpu_found_array, 
 			L->found_array_size * sizeof(found_t)))
 
+	host_p_batch_size = MAX(10000, L->found_array_size / 3);
+	host_q_batch_size = MAX(50000, 12 * L->found_array_size);
+	p_soa_var_init(p_array, host_p_batch_size);
+	p_soa_var_init(q_array, host_q_batch_size);
+
 	printf("------- %u-%u %u-%u\n",
 			small_p_min, small_p_max,
 			large_p_min, large_p_max);
@@ -285,7 +313,7 @@ sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 
 		L->fill_p = 0;
 		p_soa_var_reset(q_array);
-		for (i = 0; i < HOST_BATCH_SIZE && 
+		for (i = 0; i < host_q_batch_size && 
 				min_large != (uint32)P_SEARCH_DONE; i++) {
 			min_large = sieve_fb_next(sieve_small, L->poly,
 						store_p_soa, L);
@@ -302,7 +330,7 @@ sieve_lattice_deg5_64(msieve_obj *obj, lattice_fb_t *L,
 
 			L->fill_p = 1;
 			p_soa_var_reset(p_array);
-			for (i = 0; i < HOST_BATCH_SIZE && 
+			for (i = 0; i < host_p_batch_size && 
 				    min_small != (uint32)P_SEARCH_DONE; i++) {
 				min_small = sieve_fb_next(sieve_large, L->poly,
 							store_p_soa, L);
@@ -330,6 +358,8 @@ finished:
 	CUDA_TRY(cuMemFree(L->gpu_p_array))
 	CUDA_TRY(cuMemFree(L->gpu_q_array))
 	CUDA_TRY(cuMemFree(L->gpu_found_array))
+	p_soa_var_free(p_array);
+	p_soa_var_free(q_array);
 	free(p_array);
 	free(q_array);
 	free(L->p_marshall);

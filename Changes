@@ -7,6 +7,8 @@ Version 1.45:
 		  for inputs < 135 digits about 35% faster
 		- Fixed some degree 5 synchronization issues (thanks
 		  Jayson King)
+		- Added code to increase the size of host arrays when using
+		  more powerful GPUs (thanks Paul Zimmermann)
 		- Added code to automatically randomize the search for 
 		  inputs that are large enough
 		- Made the cutoff E-value more aggressive for the largest
