@@ -7,6 +7,10 @@ Version 1.45:
 		  for inputs < 135 digits about 35% faster
 		- Fixed some degree 5 synchronization issues (thanks
 		  Jayson King)
+		- Added code to automatically randomize the search for 
+		  inputs that are large enough
+		- Made the cutoff E-value more aggressive for the largest
+		  jobs (thanks Tom Womack / Paul Leyland / Greg Childers)
 	- Modified the linear algebra to write new checkpoint files first,
 		then overwrite the old checkpoint only if the write completed
 		(thanks Greg Childers)
