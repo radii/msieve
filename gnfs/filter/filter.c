@@ -28,8 +28,8 @@ static void find_fb_size(factor_base_t *fb,
 	   the filtering bounds */
 
 	if (limit_r > 20000000 && limit_a > 20000000) {
-		*entries_r_out = 1.02 * limit_r / log((double)limit_r);
-		*entries_a_out = 1.02 * limit_a / log((double)limit_a);
+		*entries_r_out = 1.02 * limit_r / (log((double)limit_r) - 1);
+		*entries_a_out = 1.02 * limit_a / (log((double)limit_a) - 1);
 		return;
 	}
 

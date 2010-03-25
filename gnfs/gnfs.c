@@ -107,9 +107,9 @@ uint32 factor_gnfs(msieve_obj *obj, mp_t *n,
 			   of large primes possible */
 
 			max_relations = 0.8 * (params.rfb_lp_size /
-					log((double)params.rfb_lp_size) +
+					(log((double)params.rfb_lp_size) - 1) +
 					params.afb_lp_size /
-					log((double)params.afb_lp_size));
+					(log((double)params.afb_lp_size) - 1));
 		}
 	}
 
