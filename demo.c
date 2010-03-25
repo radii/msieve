@@ -92,18 +92,19 @@ void print_usage(char *progname) {
 		 "             <name> (default worktodo.ini) instead of\n"
 		 "             from the command line\n"
 		 "   -m        manual mode: enter numbers via standard input\n"
-		 "   -mb <num> # of megabytes of memory for postprocessing \n"
-		 "             (set automatically if unspecified or zero)\n"
+		 "   -mb <num> hint for number of megabytes of memory for\n"
+		 "             postprocessing (set automatically if unspec-\n"
+		 "             ified or zero)\n"
 	         "   -q        quiet: do not generate any log information,\n"
 		 "             only print any factors found\n"
 	         "   -d <min>  deadline: if still sieving after <min>\n"
 		 "             minutes, shut down gracefully (default off)\n"
-		 "   -r <num>  stop after finding <num> relations\n"
+		 "   -r <num>  stop sieving after finding <num> relations\n"
 		 "   -p        run at idle priority\n"
 	         "   -v        verbose: write log information to screen\n"
 		 "             as well as to logfile\n"
 #ifdef HAVE_CUDA
-		 "   -g <num>  use GPU <num>, 0 <= num < (CUDA GPUs)>\n"
+		 "   -g <num>  use GPU <num>, 0 <= num < (# graphics cards)>\n"
 #endif
 	         "   -t <num>  use at most <num> threads\n\n"
 		 " elliptic curve options:\n"
@@ -130,7 +131,7 @@ void print_usage(char *progname) {
 		 "   -ncr      perform only NFS linear algebra, restarting\n"
 		 "             from a previous checkpoint\n"
 		 "   -nc3 [X,Y] perform only NFS square root (compute \n"
-		 "             dependency numbers X through Y, 1<=X,Y<=64)\n",
+		 "             dependency numbers X through Y, 1<=X<=Y<=64)\n",
 		 MSIEVE_DEFAULT_SAVEFILE, MSIEVE_DEFAULT_LOGFILE,
 		 MSIEVE_DEFAULT_NFS_FBFILE);
 }
