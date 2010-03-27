@@ -248,6 +248,7 @@ uint32 nfs_filter_relations(msieve_obj *obj, mp_t *n) {
 	time_t wall_time = time(NULL);
 	uint64 savefile_size = get_file_size(obj->savefile.name);
 	uint64 ram_size = (uint64)obj->mem_mb * 1048576;
+	char lp_filename[256];
 
 	logprintf(obj, "\n");
 	logprintf(obj, "commencing relation filtering\n");
@@ -353,6 +354,11 @@ uint32 nfs_filter_relations(msieve_obj *obj, mp_t *n) {
 			}
 		}
 	}
+
+	/* filtering succeeded; delete the LP file */
+
+	sprintf(lp_filename, "%s.lp", obj->savefile.name);
+	remove(lp_filename);
 
 	/* optimize and then save the collection of relation-sets */
 

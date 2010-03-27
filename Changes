@@ -17,6 +17,9 @@ Version 1.45:
 		then overwrite the old checkpoint only if the write completed
 		(thanks Greg Childers)
 	- Cleaned up the makefile a bit
+	- Cleaned up the wording of the makefile usage
+	- Added code to delete the largest temporary file generated during
+		filtering (thanks Greg Childers)
 
 
 Version 1.44: 2/5/10
