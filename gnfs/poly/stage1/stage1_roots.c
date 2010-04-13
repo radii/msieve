@@ -331,11 +331,11 @@ static void enum_run(sieve_fb_t *s)
 
 		new_ss.num_factors++;
 		for (j = 0; j < num_powers; j++) {
-			if (new_ss.prod > cutoff)
-				break;
-
 			new_ss.prod *= p;
 			add_to_enum(new_list, new_ss);
+
+			if (new_ss.prod > cutoff)
+				break;
 		}
 	}
 
