@@ -160,7 +160,6 @@ typedef struct {
 
 typedef struct {
 	uint32 num_factors;
-	float log_prod;
 	uint64 prod;
 } ss_t;
 
@@ -176,8 +175,6 @@ typedef struct {
 
 	uint32 curr_entry;
 	uint32 next_prime;
-	float log_p_min;
-	float log_p_max;
 } p_enum_t;
 
 #define ALGO_SIEVE 1
