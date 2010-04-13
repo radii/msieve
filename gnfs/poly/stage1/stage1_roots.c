@@ -621,9 +621,11 @@ get_next_composite(sieve_fb_t *s)
 		uint32 curr_offset;
 		p_sieve_t *p_sieve = &s->p_sieve;
 		uint8 *sieve_block = p_sieve->sieve_block;
+		uint32 cutoff = MIN(SIEVE_SIZE,
+		    		    (s->p_max - p_sieve->sieve_start + 1) / 2);
 
 		for (curr_offset = p_sieve->curr_offset; 
-				curr_offset < SIEVE_SIZE; curr_offset++) {
+				curr_offset < cutoff; curr_offset++) {
 
 			if (!(sieve_block[curr_offset] & 0x80)) 
 				continue;
@@ -632,11 +634,11 @@ get_next_composite(sieve_fb_t *s)
 			return p_sieve->sieve_start + (2 * curr_offset + 1);
 		}
 
-		sieve_run(s);
 		p_sieve->sieve_start += 2 * SIEVE_SIZE;
 		p_sieve->curr_offset = curr_offset = 0;
-		if (p_sieve->sieve_start > s->p_max)
+		if (p_sieve->sieve_start >= s->p_max)
 			break;
+		sieve_run(s);
 	}
 
 	return P_SEARCH_DONE;
