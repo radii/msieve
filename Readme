@@ -8,7 +8,7 @@ Introduction
 Msieve is the result of my efforts to understand and optimize how integers 
 are factored using the most powerful modern algorithms.
 
-This documentation corresponds to version 1.45 of the Msieve library. Do not
+This documentation corresponds to version 1.46 of the Msieve library. Do not
 expect to become a factoring expert just by reading it. I've included a
 relatively complete list of references that you can and should look up if
 you want to treat the code as more than a black box to solve your factoring

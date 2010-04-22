@@ -1,3 +1,6 @@
+Version 1.46:
+
+
 Version 1.45: 4/21/10
 	- NFS poly selection changes:
 		- Merged the CPU and GPU branches more tightly, and centralized
