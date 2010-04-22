@@ -1,4 +1,4 @@
-Version 1.45:
+Version 1.45: 4/21/10
 	- NFS poly selection changes:
 		- Merged the CPU and GPU branches more tightly, and centralized
 		  much of the GPU handling code
@@ -7,6 +7,8 @@ Version 1.45:
 		  for inputs < 135 digits about 35% faster
 		- Fixed some degree 5 synchronization issues (thanks
 		  Jayson King)
+		- Tightened up the construction of arithmetic progressions
+		  in stage 1 (thanks Jayson King)
 		- Added code to increase the size of host arrays when using
 		  more powerful GPUs (thanks Paul Zimmermann)
 		- Added code to automatically randomize the search for 
