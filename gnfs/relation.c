@@ -79,7 +79,7 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	   base need to be initialized */
 
 	uint32 i; 
-	uint64 p;
+	uint64 p, btmp;
 	int64 a, atmp;
 	uint32 b;
 	char *tmp, *next_field;
@@ -96,8 +96,11 @@ int32 nfs_read_relation(char *buf, factor_base_t *fb,
 	if (tmp[0] != ',' || !isdigit(tmp[1]))
 		return -1;
 
-	b = strtoul(tmp+1, &next_field, 10);
+	btmp = strtoull(tmp+1, &next_field, 10);
 	tmp = next_field;
+	b = (uint32)btmp;
+	if (btmp != (uint64)b)
+		return -99; /* cannot use large b */
 
 	num_factors_r = 0;
 	num_factors_a = 0;
