@@ -171,7 +171,7 @@ int32 read_poly(msieve_obj *obj, mp_t *n,
 		signed_mp_copy(&tmp, &rpow);
 	}
 
-	/* verify that |result| >= N, and that N % result == 0. 
+	/* verify that |result| >= N, and that result % N == 0. 
 	   The only place where we do any mod-N arithmetic is the 
 	   NFS square root, which will not work if N has additional 
 	   factors that are not reflected in the polynomials */
