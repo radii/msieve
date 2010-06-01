@@ -1610,7 +1610,6 @@ void mp_modsqrt2(mp_t *a, mp_t *p, mp_t *res,
 
 	mp_t p0, p1, r0, r1, r2;
 
-	mp_mod(a, p, &r0);
 	mp_modsqrt(a, p, &r1, seed1, seed2);
 
 	mp_mul(&r1, &r1, &r2);
