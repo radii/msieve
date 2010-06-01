@@ -76,22 +76,29 @@ msieve_obj * msieve_obj_free(msieve_obj *obj) {
 static uint32 msieve_run_core(msieve_obj *obj, mp_t *n, 
 				factor_list_t *factor_list) {
 
-	uint32 i;
+	uint32 i, p;
 	uint32 bits;
+	double logn = mp_log(n);
+	double logbound = log(PRECOMPUTED_PRIME_BOUND);
 
 	/* detect if n is a perfect power. Try extracting any root
-	   whose value would exceed the trial factoring bound */
+	   whose value would exceed the trial factoring bound, and
+	   only consider prime powers. Most n are not powers, so it's
+	   more important to get through all the possibilities
+	   quickly, and quit before computing a root that is known
+	   to be too small */
 
-	i = 2;
-	while (1) {
+	for (i = p = 0; i < PRECOMPUTED_NUM_PRIMES; i++) {
 		mp_t n2;
-		if (mp_iroot(n, i, &n2) == 0) {
+
+		p += prime_delta[i];
+		if (logn < p * logbound)
+			break;
+
+		if (mp_iroot(n, p, &n2) == 0) {
 			factor_list_add(obj, factor_list, &n2);
 			return 1;
 		}
-		if (n2.nwords == 1 && n2.val[0] < PRECOMPUTED_PRIME_BOUND)
-			break;
-		i++;
 	}
 
 	/* If n is small enough, use custom routines */
