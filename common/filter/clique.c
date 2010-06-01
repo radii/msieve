@@ -620,7 +620,12 @@ void filter_purge_cliques(msieve_obj *obj, filter_t *filter) {
 
 	clique_heap_size = ((filter->num_relations - 
 			filter->num_ideals) - filter->target_excess) / 2;
-	clique_heap_size = MIN(clique_heap_size, 400000);
+	if (clique_heap_size > 5000000)
+		clique_heap_size = 2000000;
+	else if (clique_heap_size > 2000000)
+		clique_heap_size = 1000000;
+	else
+		clique_heap_size = MIN(clique_heap_size, 400000);
 
 	/* iteratively delete relations containing ideals
 	   appearing in exactly max_clique_relations relations */
