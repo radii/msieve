@@ -346,6 +346,10 @@ static void find_poly_core(msieve_obj *obj, mp_t *n,
 
 	if (obj->nfs_lower && obj->nfs_upper)
 		stage1_data.deadline = 0;
+	else
+		logprintf(obj,
+			"time limit set to %.2f hours\n",
+			stage1_data.deadline / 3600.0);
 
 	logprintf(obj, "searching leading coefficients from %.0lf to %.0lf\n",
 			mpz_get_d(stage1_data.gmp_high_coeff_begin),

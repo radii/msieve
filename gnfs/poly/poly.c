@@ -269,7 +269,6 @@ int32 find_poly(msieve_obj *obj, mp_t *n) {
 			 ((double)low->seconds * (high->bits - i) +
 			  (double)high->seconds * (i - low->bits)) / dist);
 	}
-	logprintf(obj, "time limit set to %.2f hours\n", deadline / 3600.0);
 
 	/* run the core polynomial finder */
 
