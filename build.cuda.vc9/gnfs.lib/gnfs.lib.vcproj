@@ -691,6 +691,26 @@
 						>
 					</File>
 					<File
+						RelativePath="..\..\gnfs\poly\stage2\root_sieve_deg6.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage2\root_sieve_deg6_line.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage2\root_sieve_deg6_x.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage2\root_sieve_deg6_xy.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\gnfs\poly\stage2\root_sieve_deg6_xyz.c"
+						>
+					</File>
+					<File
 						RelativePath="..\..\gnfs\poly\stage2\stage2.c"
 						>
 					</File>

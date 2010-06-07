@@ -367,6 +367,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\common\minimize_global.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\common\mp.c"
 				>
 			</File>
