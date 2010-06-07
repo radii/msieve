@@ -4,12 +4,16 @@ Version 1.46:
 		- Allowed stage 1 and stage 2 to be run separately,
 		  with stage 1 output saved to file and read back in stage 2
 		- For large problems, added a global optimizer that runs
-		  before the conventional size optimization step; this is currently
-		  not used because it destroys the size property of polynomials
-		  that leave stage 1 with a good score
-		- Performed an overhaul of the size optimization (thanks Paul Zimmermann)
+		  before the conventional size optimization step; this is 
+		  currently not used because it destroys the size property 
+		  of polynomials that leave stage 1 with a good score
+		- Performed an overhaul of the size optimization (thanks 
+		  Paul Zimmermann)
 		- When rating poynomials, remember the number of real roots
 		  (thanks Paul Zimmermann)
+	- Reduced the number of clique removal passes when there is a large
+		amount of excess (thanks Greg Childers)
+	- Optimized the power detection code in the main driver (thanks axn)
 
 
 Version 1.45: 4/21/10
