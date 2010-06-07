@@ -527,7 +527,8 @@ static double murphy_integrand(double r, double h, void *params) {
 uint32 analyze_poly_murphy(integrate_t *integ_aux, dickman_t *dickman_aux,
 			ddpoly_t *rpoly, double root_score_r,
 			ddpoly_t *apoly, double root_score_a,
-			double skewness, double *result) {
+			double skewness, double *result,
+			uint32 *num_real_roots) {
 
 	/* Given the skewness and root score for an NFS polynomial
 	   pair, calculate the probability that an anverage sieve 
@@ -586,6 +587,12 @@ uint32 analyze_poly_murphy(integrate_t *integ_aux, dickman_t *dickman_aux,
 		return 1;
 	}
 	num_roots += adeg;
+
+	*num_real_roots = 0;
+	for (i = 0; i < adeg; i++) {
+		if (dd_cmp_d(roots[rdeg+i].i, 0.0) == 0)
+			(*num_real_roots)++;
+	}
 
 	/* convert the roots to angles between 0 and pi. Since the
 	   integrator will skew values of x and y derived from these

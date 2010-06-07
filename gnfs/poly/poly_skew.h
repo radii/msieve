@@ -47,9 +47,12 @@ uint32 poly_stage1_run(msieve_obj *obj, poly_stage1_t *data);
 typedef void (*stage2_callback_t)(void *extra, uint32 deg,
 				mpz_t * coeff1, mpz_t * coeff2,
 				double skewness, double size_score,
-				double root_score, double combined_score);
+				double root_score, double combined_score,
+				uint32 num_real_roots);
 
 typedef struct {
+	msieve_obj *obj;
+
 	mpz_t gmp_N;
 	uint32 degree;
 	uint32 murphy_p_bound;
@@ -63,7 +66,7 @@ typedef struct {
 	void *callback_data;
 } poly_stage2_t;
 
-void poly_stage2_init(poly_stage2_t *data,
+void poly_stage2_init(poly_stage2_t *data, msieve_obj *obj,
 		      stage2_callback_t callback,
 		      void *callback_data);
 void poly_stage2_free(poly_stage2_t *data);

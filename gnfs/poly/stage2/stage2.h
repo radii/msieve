@@ -59,13 +59,17 @@ uint32 stage2_root_score(uint32 deg1, mpz_t *coeff1,
 
 void optimize_initial(poly_stage2_t *data, double *pol_norm);
 
-void optimize_final(int64 x, int32 y, poly_stage2_t *data);
+void optimize_final(mpz_t x, mpz_t y, int64 z, poly_stage2_t *data);
 
 double optimize_basic(dpoly_t *apoly, double *best_skewness,
 				double *best_translation);
 
 /*-----------------------------------------------------------------------*/
 /* data for the root sieve */
+
+#define MAX_SIEVE_PRIME 100
+#define ROOT_HEAP_SIZE 200
+#define LOG_SCALE_FACTOR 1000
 
 typedef struct {
 	uint16 resclass;
@@ -98,14 +102,132 @@ typedef struct {
 } rotation_t;
 
 typedef struct {
+	mpz_t x;
+	mpz_t y;
+	int64 z;
+	double score;
+} mp_rotation_t;
+
+typedef struct {
 	uint32 num_entries;
 	uint32 max_entries;
+
 	rotation_t *entries;
+	mp_rotation_t *mp_entries;
 
 	rotation_t cutoffs[2];
 	uint32 default_cutoff;
 	void *extra;
+
+	mpz_t x;
+	mpz_t y;
 } root_heap_t;
+
+/* definitions for degree 6 root sieve */
+
+#define MAX_CRT_FACTORS 10
+
+typedef struct {
+	uint16 score;
+	uint64 x;
+	uint64 y;
+	uint64 z;
+} lattice_t;
+
+#define MAX_ROOTS 64
+
+typedef struct {
+	uint8 power;
+	uint8 num_roots;
+	uint16 score[MAX_ROOTS];
+	uint8 roots[MAX_ROOTS][3];
+} hit_t;
+
+
+void compute_lattices(hit_t *hitlist, uint32 num_lattice_primes,
+			lattice_t *lattices, uint64 lattice_size,
+			uint32 num_lattices, uint32 dim);
+void compute_line_size_deg6(double max_norm, dpoly_t *apoly,
+		  double dbl_p, double dbl_d, double direction[3],
+		  double last_line_min_in, double last_line_max_in,
+		  double *line_min, double *line_max);
+
+
+/* sieve for selecting XYZ triplets */
+
+typedef struct {
+	uint64 lattice_size;
+	sieve_prime_t lattice_primes[MAX_CRT_FACTORS];
+	uint32 num_lattice_primes;
+
+	uint32 num_lattices;
+	lattice_t *lattices;
+
+	int64 z_base;
+	uint32 z_blocks;
+	double *y_line_min;
+	double *y_line_max;
+} sieve_xyz_t;
+
+void sieve_xyz_alloc(sieve_xyz_t *xyz);
+void sieve_xyz_free(sieve_xyz_t *xyz);
+
+/* root sieve for selecting XY planes */
+
+typedef struct {
+	uint64 lattice_size;
+	sieve_prime_t lattice_primes[MAX_CRT_FACTORS];
+	uint32 num_lattice_primes;
+
+	dpoly_t apoly;
+
+	uint16 curr_score;
+
+	mpz_t y_base;
+	uint32 y_blocks;
+
+	mpz_t mp_lattice_size;
+	double dbl_lattice_size;
+	mpz_t crt0;
+	mpz_t crt1;
+	mpz_t resclass_x;
+	mpz_t resclass_y;
+	mpz_t tmp1, tmp2, tmp3, tmp4;
+} sieve_xy_t;
+
+void sieve_xy_alloc(sieve_xy_t *xy);
+void sieve_xy_free(sieve_xy_t *xy);
+
+
+/* root sieve for selecting X lines */
+
+typedef struct {
+	uint64 lattice_size;
+	sieve_prime_t lattice_primes[MAX_CRT_FACTORS];
+	uint32 num_lattice_primes;
+
+	dpoly_t apoly;
+
+	double last_line_min;
+	double last_line_max;
+	uint16 curr_score;
+
+	mpz_t x_base;
+	uint32 x_blocks;
+
+	mpz_t mp_lattice_size;
+	double dbl_lattice_size;
+	mpz_t crt0;
+	mpz_t crt1;
+	mpz_t resclass;
+	mpz_t tmp1;
+} sieve_x_t;
+
+void sieve_x_alloc(sieve_x_t *x);
+void sieve_x_free(sieve_x_t *x);
+
+#define UNROLL 4
+#define DEFAULT_BLOCK_SIZE  8192
 
 typedef struct {
 	uint32 num_primes;
@@ -116,14 +238,36 @@ typedef struct {
 
 	uint16 *sieve_block;
 
+	dpoly_t apoly;
+	double dbl_p;
+	double dbl_d;
+	double max_norm;
+
 	root_heap_t root_heap;
 	root_heap_t lattice_heap;
 	root_heap_t tmp_lattice_heap;
+
+	sieve_xyz_t xyzdata;
+	sieve_xy_t xydata;
+	sieve_x_t xdata;
+
+	mpz_t curr_x, curr_y;
+	int64 curr_z;
 } root_sieve_t;
 
 void root_sieve_init(root_sieve_t *rs);
 void root_sieve_free(root_sieve_t *rs);
-void root_sieve_run(poly_stage2_t *data, double alpha_proj);
+void root_sieve_run(poly_stage2_t *data, double curr_norm,
+				double alpha_proj);
+
+void root_sieve_run_deg6(poly_stage2_t *data, double curr_norm,
+				double alpha_proj);
+void sieve_xyz_run(root_sieve_t *rs);
+void sieve_xy_run(root_sieve_t *rs);
+void sieve_x_run(root_sieve_t *rs);
+void root_sieve_line(root_sieve_t *rs);
+void save_mp_rotation(root_heap_t *heap, mpz_t x, mpz_t y,
+		int64 z, float score);
 
 /*-------------------------------------------------------------------------*/
 

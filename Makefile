@@ -17,7 +17,7 @@
 CC = gcc -D_FILE_OFFSET_BITS=64
 WARN_FLAGS = -Wall -W
 OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
-#OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
+OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
 
 CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) \
 		-I. -Iinclude -Ignfs -Ignfs/poly -Ignfs/poly/stage1
@@ -94,6 +94,7 @@ COMMON_SRCS = \
 	common/hashtable.c \
 	common/integrate.c \
 	common/minimize.c \
+	common/minimize_global.c \
 	common/mp.c \
 	common/polyroot.c \
 	common/prime_delta.c \
@@ -193,6 +194,11 @@ NFS_SRCS = \
 	gnfs/poly/stage1/stage1_sieve.c \
 	gnfs/poly/stage2/optimize.c \
 	gnfs/poly/stage2/root_sieve.c \
+	gnfs/poly/stage2/root_sieve_deg6.c \
+	gnfs/poly/stage2/root_sieve_deg6_line.c \
+	gnfs/poly/stage2/root_sieve_deg6_x.c \
+	gnfs/poly/stage2/root_sieve_deg6_xy.c \
+	gnfs/poly/stage2/root_sieve_deg6_xyz.c \
 	gnfs/poly/stage2/stage2.c \
 	gnfs/filter/duplicate.c \
 	gnfs/filter/filter.c \

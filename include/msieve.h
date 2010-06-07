@@ -66,18 +66,20 @@ enum msieve_flags {
 					    sieving where exact progress info
 					    is not needed, sieving clients can
 					    save a lot of memory with this */
-	MSIEVE_FLAG_NFS_POLY = 0x40,     /* if input is large enough, perform
-	                                    polynomial selection for NFS */
-	MSIEVE_FLAG_NFS_SIEVE = 0x80,    /* if input is large enough, perform
+	MSIEVE_FLAG_NFS_POLY1 = 0x40,     /* if input is large enough, perform
+	                                    stage 1 polynomial selection for NFS */
+	MSIEVE_FLAG_NFS_POLY2 = 0x80,     /* if input is large enough, perform
+	                                    stage 2 polynomial selection for NFS */
+	MSIEVE_FLAG_NFS_SIEVE = 0x100,   /* if input is large enough, perform
 	                                    sieving for NFS */
-	MSIEVE_FLAG_NFS_FILTER = 0x100,  /* if input is large enough, perform
+	MSIEVE_FLAG_NFS_FILTER = 0x200,  /* if input is large enough, perform
 	                                    filtering phase for NFS */
-	MSIEVE_FLAG_NFS_LA = 0x200,      /* if input is large enough, perform
+	MSIEVE_FLAG_NFS_LA = 0x400,      /* if input is large enough, perform
 	                                    linear algebra phase for NFS */
-	MSIEVE_FLAG_NFS_SQRT = 0x400,    /* if input is large enough, perform
+	MSIEVE_FLAG_NFS_SQRT = 0x800,    /* if input is large enough, perform
 	                                    square root phase for NFS */
-	MSIEVE_FLAG_NFS_LA_RESTART = 0x800,/* restart the NFS linear algbra */
-	MSIEVE_FLAG_DEEP_ECM = 0x1000    /* perform nontrivial-size ECM */
+	MSIEVE_FLAG_NFS_LA_RESTART = 0x1000,/* restart the NFS linear algbra */
+	MSIEVE_FLAG_DEEP_ECM = 0x2000    /* perform nontrivial-size ECM */
 };
 	
 /* structure encapsulating the savefile used in a factorization */

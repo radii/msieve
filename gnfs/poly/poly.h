@@ -39,6 +39,7 @@ typedef struct {
 	double root_score;
 	double combined_score;
 	double skewness;
+	uint32 num_real_roots;
 } poly_select_t;
 
 /* extended-precision polynomial rootfinder */
@@ -85,7 +86,8 @@ uint32 analyze_poly_size(integrate_t *integ_aux,
 uint32 analyze_poly_murphy(integrate_t *integ_aux, dickman_t *dickman_aux,
 			ddpoly_t *rpoly, double root_score_r,
 			ddpoly_t *apoly, double root_score_a,
-			double skewness, double *result);
+			double skewness, double *result,
+			uint32 *num_real_roots);
 
 uint32 analyze_poly_roots(mp_poly_t *poly, uint32 prime_bound,
 				double *result);

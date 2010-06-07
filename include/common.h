@@ -332,6 +332,12 @@ double minimize(double p[MAX_VARS], uint32 ndim,
 			double ftol, uint32 max_iter,
 			objective_func callback, void *extra);
 
+double minimize_global(double p[MAX_VARS], uint32 ndim,
+                        double limits[MAX_VARS][2],
+			double tol, uint32 iter_limit,
+			objective_func callback, 
+			void *extra);
+
 /* Dickman's rho function */
 
 #define DICKMAN_ACCURACY 1e-8

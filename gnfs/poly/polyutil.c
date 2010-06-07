@@ -99,7 +99,8 @@ void analyze_poly(poly_config_t *config, poly_select_t *poly) {
 
 	analyze_poly_murphy(&config->integ_aux, &config->dickman_aux,
 				&ddr, root_score_r, &dda, root_score_a, 
-				poly->skewness, &poly->combined_score);
+				poly->skewness, &poly->combined_score,
+				&poly->num_real_roots);
 }
 
 /*------------------------------------------------------------------*/
@@ -136,10 +137,11 @@ void analyze_one_poly(msieve_obj *obj,
 			mp_sprintf(&apoly->coeff[i].num, 10,
 						obj->mp_sprintf_buf));
 	}
-	logprintf(obj, "skew %.2lf, size %e, "
-			"alpha %f, combined = %e\n",
+	logprintf(obj, "skew %.2lf, size %.3e, "
+			"alpha %.3lf, combined = %.3e rroots = %u\n",
 			s.skewness, s.size_score, 
-			s.root_score, s.combined_score);
+			s.root_score, s.combined_score,
+			s.num_real_roots);
 	poly_config_free(&config);
 
 	if (prec_changed)

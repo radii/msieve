@@ -14,9 +14,11 @@ $Id$
 
 #include "stage2.h"
 
+typedef double (*norm_t)(double *a, uint32 degree, double s);
+
 /*-------------------------------------------------------------------------*/
 static double
-ifs(double *a, uint32 degree, double s)
+ifs_rectangular(double *a, uint32 degree, double s)
 {
 	double a0, a1, a2, a3, a4, a5, a6;
 	double s2, s3, s4, s5, s6;
@@ -65,6 +67,62 @@ ifs(double *a, uint32 degree, double s)
 		       2.0 / 45.0 * (a6 * a2 + a5 * a3 + a4 * a0 + a3 * a1) + 
 		       2.0 / 49.0 * (a6 * a0 + a5 * a1 + a4 * a2) + 
 		       1.0 / 49.0 * a3 * a3;
+		return norm / s6;
+	}
+
+	return 1e100;
+}
+
+static double
+ifs_radial(double *a, uint32 degree, double s)
+{
+	double a0, a1, a2, a3, a4, a5, a6;
+	double s2, s3, s4, s5, s6;
+	double norm;
+
+	if (s < 1)
+		return 1e100;
+
+	a0 = a[0];
+	a1 = a[1] * s;
+	s2 = s * s;
+	a2 = a[2] * s2;
+	s3 = s2 * s;
+	a3 = a[3] * s3;
+	s4 = s3 * s;
+	a4 = a[4] * s4;
+
+	switch (degree) {
+	case 4:
+		norm = 35.0 * (a4 * a4 + a0 * a0) + 
+		       10.0 * (a4 * a2 + a2 * a0) + 
+		        5.0 * (a3 * a3 + a1 * a1) + 
+		        6.0 * (a4 * a0 + a3 * a1) + 
+		        3.0 * a2 * a2;
+		return norm / s4;
+
+	case 5:
+		s5 = s4 * s;
+		a5 = a[5] * s5;
+		norm = 63.0 * (a5 * a5 + a0 * a0) + 
+		       14.0 * (a5 * a3 + a2 * a0) + 
+		        7.0 * (a4 * a4 + a1 * a1) +
+		        3.0 * (a3 * a3 + a2 * a2) +
+		        6.0 * (a5 * a1 + a4 * a2 + a4 * a0 + a3 * a1);
+		return norm / s5;
+
+	case 6:
+		s5 = s4 * s;
+		a5 = a[5] * s5;
+		s6 = s5 * s;
+		a6 = a[6] * s6;
+		norm = 231.0 * (a6 * a6 + a0 * a0) + 
+		        42.0 * (a6 * a4 + a2 * a0) + 
+		        21.0 * (a5 * a5 + a1 * a1) +
+		         7.0 * (a4 * a4 + a2 * a2) + 
+		        14.0 * (a6 * a2 + a5 * a3 + a4 * a0 + a3 * a1) + 
+		        10.0 * (a6 * a0 + a5 * a1 + a4 * a2) + 
+		         5.0 * a3 * a3;
 		return norm / s6;
 	}
 
@@ -196,6 +254,9 @@ typedef struct {
 	dickman_t *dickman_aux;
 	double root_score_r;
 	double root_score_a;
+
+	uint32 num_real_roots;
+	norm_t norm_callback;
 } opt_data_t;
 
 static double poly_xlate_callback(double *v, void *extra)
@@ -208,7 +269,7 @@ static double poly_xlate_callback(double *v, void *extra)
 
 	translate_d(translated, apoly->coeff, apoly->degree, t);
 
-	return ifs(translated, apoly->degree, s);
+	return ifs_rectangular(translated, apoly->degree, s);
 }
 
 static double poly_rotate_callback(double *v, void *extra)
@@ -232,7 +293,7 @@ static double poly_rotate_callback(double *v, void *extra)
 	}
 
 	translate_d(translated, apoly.coeff, apoly.degree, t);
-	return ifs(translated, apoly.degree, s);
+	return opt->norm_callback(translated, apoly.degree, s);
 }
 
 static double poly_murphy_callback(double *v, void *extra)
@@ -259,7 +320,7 @@ static double poly_murphy_callback(double *v, void *extra)
 	analyze_poly_murphy(opt->integ_aux, opt->dickman_aux,
 				&new_rpoly, opt->root_score_r,
 				&new_apoly, opt->root_score_a,
-				s, &score);
+				s, &score, &opt->num_real_roots);
 
 	return -score;
 }
@@ -274,15 +335,15 @@ optimize_initial(poly_stage2_t *data, double *pol_norm)
 	uint32 deg = data->degree;
 	uint32 rotate_dim = deg - 4;
 	opt_data_t opt_data;
-	uint32 i;
+	uint32 i, j;
 	double best[MAX_VARS];
-	double score, last_score;
-	double s0, s1;
+	double score, last_score, tol;
 	dpoly_t rpoly, apoly;
 
 	opt_data.rotate_dim = rotate_dim;
 	opt_data.drpoly = &rpoly;
 	opt_data.dapoly = &apoly;
+	opt_data.norm_callback = ifs_radial;
 
 	rpoly.degree = 1;
 	for (i = 0; i <= 1; i++) {
@@ -293,45 +354,50 @@ optimize_initial(poly_stage2_t *data, double *pol_norm)
 		apoly.coeff[i] = mpz_get_d(c->gmp_a[i]);
 	}
 
-	s0 = s1 = 1.0;
-	if (apoly.coeff[deg-1] != 0)
-		s0 = fabs(apoly.coeff[deg-1] / 
-			  apoly.coeff[deg]);
-	if (apoly.coeff[deg-2] != 0)
-		s1 = sqrt(fabs(apoly.coeff[deg-2] / 
-			       apoly.coeff[deg]));
 	best[TRANSLATE_SIZE] = 0;
-	best[SKEWNESS] = MAX(s0, s1);
+	best[SKEWNESS] = 1000;
 	best[ROTATE0] = 0;
 	best[ROTATE1] = 0;
 	best[ROTATE2] = 0;
-
 	score = 1e100;
-	do {
-		last_score = score;
-		score = minimize(best, rotate_dim + 3, 1e-5, 40, 
-				poly_rotate_callback, &opt_data);
+	tol = 1e-3;
 
-		for (i = 0; i <= rotate_dim; i++) {
-			double ci = floor(best[ROTATE0 + i] + 0.5);
-			mpz_set_d(c->gmp_help1, ci);
-			mpz_addmul(c->gmp_a[i+1], c->gmp_help1, c->gmp_p);
-			mpz_submul(c->gmp_a[i], c->gmp_help1, c->gmp_d);
+	for (i = 0; i < 2; i++) {
+		do {
+			last_score = score;
+			score = minimize(best, rotate_dim + 3, tol, 40, 
+					poly_rotate_callback, &opt_data);
+
+			for (j = 0; j <= rotate_dim; j++) {
+				double cj = floor(best[ROTATE0 + j] + 0.5);
+				mpz_set_d(c->gmp_help1, cj);
+				mpz_addmul(c->gmp_a[j+1], c->gmp_help1, 
+						c->gmp_p);
+				mpz_submul(c->gmp_a[j], c->gmp_help1, 
+						c->gmp_d);
+			}
+			translate_gmp(c, c->gmp_a, deg, c->gmp_lina,
+					(int64)(best[TRANSLATE_SIZE] + 0.5));
+
+			mpz_neg(c->gmp_d, c->gmp_lina[0]);
+			for (j = 0; j <= 1; j++)
+				rpoly.coeff[j] = mpz_get_d(c->gmp_lina[j]);
+			for (j = 0; j <= deg; j++)
+				apoly.coeff[j] = mpz_get_d(c->gmp_a[j]);
+			best[TRANSLATE_SIZE] = 0;
+			best[ROTATE0] = 0;
+			best[ROTATE1] = 0;
+			best[ROTATE2] = 0;
+
+		} while (fabs(score - last_score) > .001 * fabs(score));
+
+		if (i == 0) {
+			opt_data.norm_callback = ifs_rectangular;
+			tol = 1e-5;
+			score = ifs_rectangular(apoly.coeff, apoly.degree,
+						best[SKEWNESS]);
 		}
-		translate_gmp(c, c->gmp_a, deg, c->gmp_lina,
-				(int64)(best[TRANSLATE_SIZE] + 0.5));
-
-		mpz_neg(c->gmp_d, c->gmp_lina[0]);
-		for (i = 0; i <= 1; i++)
-			rpoly.coeff[i] = mpz_get_d(c->gmp_lina[i]);
-		for (i = 0; i <= deg; i++)
-			apoly.coeff[i] = mpz_get_d(c->gmp_a[i]);
-		best[TRANSLATE_SIZE] = 0;
-		best[ROTATE0] = 0;
-		best[ROTATE1] = 0;
-		best[ROTATE2] = 0;
-
-	} while (fabs(score - last_score) > .001 * fabs(score));
+	}
 
 	*pol_norm = sqrt(fabs(score));
 #if 0
@@ -348,21 +414,13 @@ double
 optimize_basic(dpoly_t *apoly, double *best_skewness,
 		double *best_translation)
 {
-	uint32 d = apoly->degree;
 	opt_data_t opt_data;
 	double best[MAX_VARS];
 	double score;
-	double s0 = 1.0;
-	double s1 = 1.0;
 
 	opt_data.dapoly = apoly;
-	if (apoly->coeff[d-1] != 0)
-		s0 = fabs(apoly->coeff[d-1] / apoly->coeff[d]);
-	if (apoly->coeff[d-2] != 0)
-		s1 = sqrt(fabs(apoly->coeff[d-2] / apoly->coeff[d]));
-
 	best[TRANSLATE_SIZE] = 0;
-	best[SKEWNESS] = MAX(s0, s1);
+	best[SKEWNESS] = 1000;
 
 	score = minimize(best, 2, 1e-5, 40, poly_xlate_callback, &opt_data);
 
@@ -375,7 +433,8 @@ optimize_basic(dpoly_t *apoly, double *best_skewness,
 static void
 optimize_final_core(curr_poly_t *c, assess_t *assess, uint32 deg,
 			double root_score, double *best_score_out,
-			double *best_skewness_out)
+			double *best_skewness_out, 
+			uint32 *num_real_roots_out)
 {
 	uint32 i;
 	signed_mp_t tmp;
@@ -394,9 +453,7 @@ optimize_final_core(curr_poly_t *c, assess_t *assess, uint32 deg,
 	apoly.degree = deg;
 
 	best[TRANSLATE_SIZE] = 0;
-	best[SKEWNESS] = sqrt(fabs(mpz_get_d(c->gmp_b[deg-2]) / 
-				mpz_get_d(c->gmp_b[deg])));
-	best[SKEWNESS] = MAX(1.0, best[SKEWNESS]);
+	best[SKEWNESS] = 1000;
 
 	for (i = 0; i <= 1; i++) {
 		gmp2mp(c->gmp_linb[i], &tmp.num);
@@ -419,6 +476,7 @@ optimize_final_core(curr_poly_t *c, assess_t *assess, uint32 deg,
 
 	*best_score_out = fabs(score);
 	*best_skewness_out = best[SKEWNESS];
+	*num_real_roots_out = opt_data.num_real_roots;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -457,10 +515,11 @@ get_bernstein_score(curr_poly_t *c, assess_t *assess,
 
 /*-------------------------------------------------------------------------*/
 void
-optimize_final(int64 x, int y, poly_stage2_t *data)
+optimize_final(mpz_t x, mpz_t y, int64 z, poly_stage2_t *data)
 {
 	uint32 i;
 	uint32 deg = data->degree;
+	uint32 num_real_roots;
 	double alpha, skewness, bscore, combined_score;
 	stage2_curr_data_t *s = (stage2_curr_data_t *)data->internal;
 	curr_poly_t *c = &s->curr_poly;
@@ -472,17 +531,15 @@ optimize_final(int64 x, int y, poly_stage2_t *data)
 	for (i = 0; i <= deg; i++)
 		mpz_set(c->gmp_b[i], c->gmp_a[i]);
 
-	mpz_set_si(c->gmp_help1, y);
-	mpz_mul(c->gmp_help2, c->gmp_help1, c->gmp_p);
-	mpz_add(c->gmp_b[2], c->gmp_b[2], c->gmp_help2);
-	mpz_mul(c->gmp_help1, c->gmp_help1, c->gmp_d);
-	mpz_sub(c->gmp_b[1], c->gmp_b[1], c->gmp_help1);
+	int64_2gmp(z, c->gmp_help1);
+	mpz_addmul(c->gmp_b[3], c->gmp_p, c->gmp_help1);
+	mpz_submul(c->gmp_b[2], c->gmp_d, c->gmp_help1);
 
-	int64_2gmp(x, c->gmp_help1);
-	mpz_mul(c->gmp_help2, c->gmp_help1, c->gmp_p);
-	mpz_add(c->gmp_b[1], c->gmp_b[1], c->gmp_help2);
-	mpz_mul(c->gmp_help1, c->gmp_help1, c->gmp_d);
-	mpz_sub(c->gmp_b[0], c->gmp_b[0], c->gmp_help1);
+	mpz_addmul(c->gmp_b[2], c->gmp_p, y);
+	mpz_submul(c->gmp_b[1], c->gmp_d, y);
+
+	mpz_addmul(c->gmp_b[1], c->gmp_p, x);
+	mpz_submul(c->gmp_b[0], c->gmp_d, x);
 
 	if (stage2_root_score(deg, c->gmp_b, data->murphy_p_bound, &alpha, 0))
 		return;
@@ -500,7 +557,8 @@ optimize_final(int64 x, int y, poly_stage2_t *data)
 	if (bscore > data->min_e_bernstein) {
 
 		optimize_final_core(c, assess, deg, alpha, 
-				&combined_score, &skewness);
+				&combined_score, &skewness,
+				&num_real_roots);
 
 #if 0
 		printf("combined %le ratio %lf\n", combined_score,
@@ -509,7 +567,7 @@ optimize_final(int64 x, int y, poly_stage2_t *data)
 		if (combined_score > data->min_e) {
 			data->callback(data->callback_data, deg, c->gmp_b, 
 					c->gmp_linb, skewness, bscore,
-					alpha, combined_score);
+					alpha, combined_score, num_real_roots);
 		}
 	}
 }

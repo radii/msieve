@@ -196,11 +196,13 @@ curr_poly_free(curr_poly_t *c)
 /*-------------------------------------------------------------------------*/
 void
 poly_stage2_init(poly_stage2_t *data, 
+		 msieve_obj *obj,
 		 stage2_callback_t callback,
 		 void *callback_data)
 {
 	memset(data, 0, sizeof(poly_stage2_t));
 	mpz_init(data->gmp_N);
+	data->obj = obj;
 	data->murphy_p_bound = 2000;
 	data->callback = callback;
 	data->callback_data = callback_data;
@@ -275,7 +277,7 @@ poly_stage2_run(poly_stage2_t *data, mpz_t high_coeff, mpz_t p,
 		goto finished;
 
 	stage2_root_score(degree, c->gmp_a, 100, &alpha_proj, 1);
-	root_sieve_run(data, alpha_proj);
+	root_sieve_run(data, pol_norm, alpha_proj);
 
 finished:
 	if (precision_changed)

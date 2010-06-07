@@ -119,6 +119,10 @@ void print_usage(char *progname) {
 		 "   -np [X,Y] perform only NFS polynomial selection; if\n"
 		 "             specified, only cover leading coefficients\n"
 		 "             in the range from X to Y inclusive\n"
+		 "   -np1 [X,Y] perform stage 1 of NFS polynomial selection; if\n"
+		 "             specified, only cover leading coefficients\n"
+		 "             in the range from X to Y inclusive\n"
+		 "   -np2      perform stage 2 of NFS polynomial selection\n"
 		 "   -ns [X,Y] perform only NFS sieving; if specified,\n"
 		 "             handle sieve lines X to Y inclusive\n"
 		 "   -nc       perform only NFS combining (all phases)\n"
@@ -343,7 +347,13 @@ int main(int argc, char **argv) {
 
 			case 'n':
 				if (argv[i][2] == 'p') {
-					flags |= MSIEVE_FLAG_NFS_POLY;
+					if (argv[i][3] == '1')
+						flags |= MSIEVE_FLAG_NFS_POLY1;
+					else if (argv[i][3] == '2')
+						flags |= MSIEVE_FLAG_NFS_POLY2;
+					else
+						flags |= MSIEVE_FLAG_NFS_POLY1 |
+							 MSIEVE_FLAG_NFS_POLY2;
 				}
 				else if (argv[i][2] == 's') {
 					flags |= MSIEVE_FLAG_NFS_SIEVE;
@@ -366,7 +376,8 @@ int main(int argc, char **argv) {
 						     MSIEVE_FLAG_NFS_SQRT;
 				}
 				else if (argv[i][2] == 0) {
-					flags |= MSIEVE_FLAG_NFS_POLY |
+					flags |= MSIEVE_FLAG_NFS_POLY1 |
+						 MSIEVE_FLAG_NFS_POLY2 |
 						 MSIEVE_FLAG_NFS_SIEVE |
 						 MSIEVE_FLAG_NFS_FILTER |
 						 MSIEVE_FLAG_NFS_LA |
