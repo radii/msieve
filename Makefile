@@ -17,7 +17,7 @@
 CC = gcc -D_FILE_OFFSET_BITS=64
 WARN_FLAGS = -Wall -W
 OPT_FLAGS = -O3 -fomit-frame-pointer -march=athlon-xp -DNDEBUG
-OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
+#OPT_FLAGS = -O3 -fomit-frame-pointer -march=k8 -DNDEBUG
 
 CFLAGS = $(OPT_FLAGS) $(MACHINE_FLAGS) $(WARN_FLAGS) \
 		-I. -Iinclude -Ignfs -Ignfs/poly -Ignfs/poly/stage1
