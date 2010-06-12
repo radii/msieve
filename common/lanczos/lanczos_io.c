@@ -80,7 +80,8 @@ void dump_matrix(msieve_obj *obj,
 void read_cycles(msieve_obj *obj, 
 		uint32 *num_cycles_out, 
 		la_col_t **cycle_list_out, 
-		uint32 dependency) {
+		uint32 dependency,
+		uint32 *colperm) {
 
 	uint32 i;
 	uint32 num_cycles;
@@ -91,6 +92,11 @@ void read_cycles(msieve_obj *obj,
 	FILE *dep_fp = NULL;
 	la_col_t *cycle_list;
 	uint64 mask = 0;
+
+	if (dependency > 0 && colperm != NULL) {
+		logprintf(obj, "error: cannot read dependency with permute\n");
+		exit(-1);
+	}
 
 	sprintf(buf, "%s.cyc", obj->savefile.name);
 	cycle_fp = fopen(buf, "rb");
@@ -154,7 +160,12 @@ void read_cycles(msieve_obj *obj,
 				continue;
 		}
 
-		c = cycle_list + curr_cycle++;
+		if (colperm != NULL)
+			c = cycle_list + colperm[i];
+		else
+			c = cycle_list + curr_cycle;
+
+		curr_cycle++;
 		c->cycle.num_relations = num_relations;
 		c->cycle.list = (uint32 *)xmalloc(num_relations * 
 						sizeof(uint32));
@@ -163,6 +174,15 @@ void read_cycles(msieve_obj *obj,
 	}
 	logprintf(obj, "read %u cycles\n", curr_cycle);
 	num_cycles = curr_cycle;
+
+	/* check that all cycles have a nonzero number of relations */
+	for (i = 0; i < num_cycles; i++) {
+		if (cycle_list[i].cycle.num_relations == 0) {
+			logprintf(obj, "error: empty cycle encountered\n");
+			exit(-1);
+		}
+	}
+
 	fclose(cycle_fp);
 	if (dep_fp) {
 		fclose(dep_fp);
@@ -179,18 +199,30 @@ void read_cycles(msieve_obj *obj,
 				num_cycles * sizeof(la_col_t));
 }
 /*--------------------------------------------------------------------*/
+static int compare_uint32(const void *x, const void *y) {
+	uint32 *xx = (uint32 *)x;
+	uint32 *yy = (uint32 *)y;
+	if (*xx > *yy)
+		return 1;
+	if (*xx < *yy)
+		return -1;
+	return 0;
+}
+
+/*--------------------------------------------------------------------*/
 void read_matrix(msieve_obj *obj, 
 		uint32 *nrows_out, uint32 *num_dense_rows_out,
-		uint32 *ncols_out, la_col_t **cols_out) {
+		uint32 *ncols_out, la_col_t **cols_out,
+		uint32 *rowperm, uint32 *colperm) {
 
-	uint32 i;
+	uint32 i, j;
 	uint32 dense_row_words;
 	uint32 ncols;
 	la_col_t *cols;
 	char buf[256];
 	FILE *matrix_fp;
 
-	read_cycles(obj, &ncols, &cols, 0);
+	read_cycles(obj, &ncols, &cols, 0, colperm);
 
 	sprintf(buf, "%s.mat", obj->savefile.name);
 	matrix_fp = fopen(buf, "rb");
@@ -209,15 +241,30 @@ void read_matrix(msieve_obj *obj,
 	}
 
 	for (i = 0; i < ncols; i++) {
-		la_col_t *c = cols + i;
+		la_col_t *c;
 		uint32 num;
 		
+		if (colperm != NULL)
+			c = cols + colperm[i];
+		else
+			c = cols + i;
+
 		fread(&num, sizeof(uint32), (size_t)1, matrix_fp);
 		c->weight = num;
 		c->data = (uint32 *)xmalloc((num + dense_row_words) * 
 					sizeof(uint32));
-		fread(c->data, sizeof(uint32), 
-				(size_t)(num + dense_row_words), matrix_fp);
+		fread(c->data, sizeof(uint32), (size_t)(num + 
+				dense_row_words), matrix_fp);
+
+		if (rowperm != NULL) {
+			for (j = 0; j < num; j++)
+				c->data[j] = rowperm[c->data[j]];
+	
+			if (num > 1) {
+				qsort(c->data, (size_t)num, 
+					sizeof(uint32), compare_uint32);
+			}
+		}
 	}
 	fclose(matrix_fp);
 	*cols_out = cols;

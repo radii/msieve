@@ -618,7 +618,7 @@ void nfs_read_cycles(msieve_obj *obj,
 
 	/* read the raw list of relation numbers for each cycle */
 
-	read_cycles(obj, &num_cycles, &cycle_list, dependency);
+	read_cycles(obj, &num_cycles, &cycle_list, dependency, NULL);
 
 	if (num_cycles == 0) {
 		free(cycle_list);

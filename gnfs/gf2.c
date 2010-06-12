@@ -564,6 +564,8 @@ void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
 	uint32 num_dense_rows;
 	uint32 deps_found;
 	uint64 *dependencies;
+	uint32 *rowperm = NULL;
+	uint32 *colperm = NULL;
 	time_t cpu_time = time(NULL);
 
 	logprintf(obj, "\n");
@@ -573,7 +575,8 @@ void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
 	   stage into a matrix */
 	if (!(obj->flags & MSIEVE_FLAG_NFS_LA_RESTART)) {
 		build_matrix(obj, n);
-		read_matrix(obj, &nrows, &num_dense_rows, &ncols, &cols);
+		read_matrix(obj, &nrows, &num_dense_rows, 
+				&ncols, &cols, NULL, NULL);
 		count_matrix_nonzero(obj, nrows, num_dense_rows, ncols, cols);
 		reduce_matrix(obj, &nrows, num_dense_rows, &ncols, 
 				cols, NUM_EXTRA_RELATIONS);
@@ -591,10 +594,25 @@ void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
 			free(cols[i].cycle.list);
 		}
 		free(cols);
+
+#if 0
+		/* optimize the layout of large matrices */
+		if (ncols > MIN_REORDER_SIZE)
+			reorder_matrix(obj, &rowperm, &colperm);
+#endif
 	}
 
-	read_matrix(obj, &nrows, &num_dense_rows, &ncols, &cols);
+	/* read the matrix again; if a permutation was previously
+	   computed, apply it and save the new matrix */
+
+	read_matrix(obj, &nrows, &num_dense_rows, 
+			&ncols, &cols, rowperm, colperm);
 	count_matrix_nonzero(obj, nrows, num_dense_rows, ncols, cols);
+	if (rowperm != NULL || colperm != NULL) {
+		dump_matrix(obj, nrows, num_dense_rows, ncols, cols);
+		free(rowperm);
+		free(colperm);
+	}
 
 	/* the matrix is read-only from here on, so conserve memory
 	   by deleting the list of relations that comprise each column */
