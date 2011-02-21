@@ -297,6 +297,10 @@ int main(int argc, char **argv) {
 	        return -1;
 	}     
 
+	if (!isatty(1)) {
+		setlinebuf(stdout);
+	}
+
 	flags = MSIEVE_FLAG_USE_LOGFILE;
 
 	i = 1;
