@@ -70,7 +70,7 @@ uint32 squfof_one_cycle(squfof_data_t *data, uint32 mult_idx,
 	uint64 scaledn;
 
 	for (i = 0; i < num_iter; i++) {		
-		uint32 q, bits, tmp;
+		uint32 q, tmp;
 
 		/* compute (sqrtn+p1)/q1; since this is unity
 		   more than half the time, special case the
@@ -113,18 +113,15 @@ uint32 squfof_one_cycle(squfof_data_t *data, uint32 mult_idx,
 		/* if q0 is a perfect square, then the factorization
 		   has probably succeeded. Most of the squareness
 		   tests out there require multiple divisions and 
-		   complicated loops. We can approximate these tests
-		   by doing two things: testing that the number of
-		   trailing zeros in q0 is even, and then testing
-		   if q0 shifted right this many places is 1 mod 8. */
+		   complicated loops. We approximate these tests by
+		   ensuring that the last 3 bits are 001 after
+		   dividing (shifting) out all factors of 4. */
 
-		bits = 0; 
 		tmp = q0;
-		while(!(tmp & 1)) {
-			bits++;
-			tmp >>= 1;
+		while(!(tmp & 3)) {
+			tmp >>= 2;
 		}
-		if (!(bits & 1) && ((tmp & 7) == 1)) {
+		if ((tmp & 7) == 1) {
 
 			/* q0 is probably a perfect square. Take the
 			   square root by cheating */
