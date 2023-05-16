@@ -175,38 +175,35 @@ static ideal_t *fill_small_ideals(factor_base_t *fb,
 
 /*------------------------------------------------------------------*/
 #define QCB_VALS(r) ((r)->rel_index)
+#define QCB_NUM_CHOICES 50000
 
-static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly, 
+static uint32 fill_qcb(msieve_obj *obj, mpz_poly_t *apoly, 
 			relation_t *rlist, uint32 num_relations) {
 	uint32 i, j;
 	prime_sieve_t sieve;
 	fb_entry_t qcb[QCB_SIZE];
-	uint32 min_qcb_ideal;
+	uint32 min_qcb_ideal = ((uint32)(-1) - QCB_NUM_CHOICES) &
+					~(uint32)(0x1); /* must be even */
+	uint8 bits[(QCB_NUM_CHOICES + 15) / 16] = {0};
+	uint32 qcb_size;
 
-	/* find the largest algebraic factor across the whole set
+	/* strike out all the algebraic factors of relations that
+	   are between min_qcb_ideal and 2^32 */
 
-	   If the largest ideal is too close to 2^32, force it
-	   to be too small so the choice of QCB primes does not
-	   wrap around 32 bits */
-
-	for (i = min_qcb_ideal = 0; i < num_relations; i++) {
+	for (i = 0; i < num_relations; i++) {
 		relation_t *r = rlist + i;
 		uint32 num_r = r->num_factors_r;
 		uint32 num_a = r->num_factors_a;
 		uint32 array_size = 0;
 		for (j = 0; j < num_r + num_a; j++) {
 			uint64 p = decompress_p(r->factors, &array_size);
-			if (j >= num_r && p < ((uint64)1 << 32))
-				min_qcb_ideal = MAX(min_qcb_ideal, (uint32)p);
+			if (j >= num_r && p > min_qcb_ideal &&
+					p < ((uint64)1 << 32)) {
+				uint32 pos = (p - min_qcb_ideal) / 2;
+				bits[pos / 8] |= 1 << (pos % 8);
+			}
 		}
 	}
-	min_qcb_ideal = MIN(min_qcb_ideal, (uint32)(-1) - 50000);
-
-	/* choose the quadratic character base from the primes
-	   larger than any that appear in the list of relations */
-
-	logprintf(obj, "using %u quadratic characters above %u\n",
-				QCB_SIZE, min_qcb_ideal + 1);
 
 	/* construct the quadratic character base, starting
 	   with the primes above min_qcb_ideal */
@@ -218,6 +215,16 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 		uint32 roots[MAX_POLY_DEGREE];
 		uint32 num_roots, high_coeff;
 		uint32 p = get_next_prime(&sieve);
+		uint32 pos;
+
+		if (p >= 0xffffff00)
+			break;
+
+		/* skip any p that appears in relations */
+
+		pos = (p - min_qcb_ideal) / 2;
+		if (bits[pos / 8] & (1 << (pos % 8)))
+			continue;
 
 		num_roots = poly_get_zeros(roots, apoly, p, 
 					&high_coeff, 0);
@@ -237,6 +244,10 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 
 	free_prime_sieve(&sieve);
 
+	qcb_size = i;
+	logprintf(obj, "using %u quadratic characters above %u\n",
+				qcb_size, min_qcb_ideal + 1);
+
 	/* cache each relation's quadratic characters for later use */
 
 	for (i = 0; i < num_relations; i++) {
@@ -245,7 +256,7 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 		uint32 b = rel->b;
 
 		QCB_VALS(rel) = 0;
-		for (j = 0; j < QCB_SIZE; j++) {
+		for (j = 0; j < qcb_size; j++) {
 			uint32 p = qcb[j].p;
 			uint32 r = qcb[j].r;
 			int64 res = a % (int64)p;
@@ -268,14 +279,14 @@ static void fill_qcb(msieve_obj *obj, mp_poly_t *apoly,
 				printf("warning: zero character\n");
 		}
 	}
+
+	return qcb_size;
 }
 
 /*------------------------------------------------------------------*/
-#define MAX_COL_IDEALS 1000
-
 static uint32 combine_relations(la_col_t *col, relation_t *rlist,
 				ideal_t *merged_ideals, uint32 *dense_rows,
-				uint32 num_dense_rows) {
+				uint32 num_dense_rows, uint32 qcb_size) {
 
 	uint32 i, j, k;
 	uint32 num_merged = 0;
@@ -352,10 +363,10 @@ static uint32 combine_relations(la_col_t *col, relation_t *rlist,
 	}
 
 	/* fill in the parity row, and place at dense 
-	   row position QCB_SIZE */
+	   row position qcb_size */
 
 	if (col->cycle.num_relations % 2)
-		dense_rows[QCB_SIZE / 32] |= 1 << (QCB_SIZE % 32);
+		dense_rows[qcb_size / 32] |= 1 << (qcb_size % 32);
 
 	return num_merged;
 }
@@ -367,7 +378,7 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 			uint32 num_cycles, relation_t *rlist, 
 			uint32 num_relations, uint32 num_dense_rows, 
 			ideal_t *small_ideals, uint32 num_small_ideals, 
-			FILE *matrix_fp) {
+			uint32 qcb_size, FILE *matrix_fp) {
 
 	uint32 i, j, k;
 	hashtable_t unique_ideals;
@@ -411,7 +422,8 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 		   in the cycle */
 
 		num_merged = combine_relations(c, rlist, merged_ideals, 
-						dense_rows, num_dense_rows);
+						dense_rows, num_dense_rows,
+						qcb_size);
 
 		/* assign a unique number to each ideal in 
 		   the cycle. This will automatically ignore
@@ -429,7 +441,7 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 						(size_t)num_small_ideals,
 						sizeof(ideal_t),
 						compare_ideals);
-				uint32 idx = QCB_SIZE + 1 +
+				uint32 idx = qcb_size + 1 +
 						(loc - small_ideals);
 				if (loc == NULL) {
 					printf("error: unexpected dense "
@@ -484,7 +496,7 @@ static void build_matrix_core(msieve_obj *obj, la_col_t *cycle_list,
 }
 
 /*------------------------------------------------------------------*/
-static void build_matrix(msieve_obj *obj, mp_t *n) {
+static void build_matrix(msieve_obj *obj, mpz_t n) {
 
 	/* read in the relations that contribute to the
 	   initial matrix, and form the quadratic characters
@@ -498,6 +510,7 @@ static void build_matrix(msieve_obj *obj, mp_t *n) {
 	ideal_t *small_ideals;
 	uint32 num_small_ideals;
 	uint32 max_small_ideal;
+	uint32 qcb_size;
 	FILE *matrix_fp;
 	char buf[256];
 	factor_base_t fb;
@@ -512,6 +525,8 @@ static void build_matrix(msieve_obj *obj, mp_t *n) {
 	/* read in the NFS polynomials */
 
 	memset(&fb, 0, sizeof(fb));
+	mpz_poly_init(&fb.rfb.poly);
+	mpz_poly_init(&fb.afb.poly);
 	if (read_poly(obj, n, &fb.rfb.poly, &fb.afb.poly, NULL)) {
 		printf("error: failed to read NFS polynomials\n");
 		exit(-1);
@@ -522,16 +537,6 @@ static void build_matrix(msieve_obj *obj, mp_t *n) {
 	small_ideals = fill_small_ideals(&fb, &num_small_ideals,
 					&max_small_ideal);
 
-	/* we need extra matrix rows to make sure that each
-	   dependency has an even number of relations, and also an
-	   even number of free relations. If the rational 
-	   poly R(x) is monic, and we weren't using free relations,
-	   the sign of R(x) is negative for all relations, meaning we 
-	   already get the effect of the extra rows. However, in 
-	   general we can't assume both of these are true */
-	
-	num_dense_rows = QCB_SIZE + 2 + num_small_ideals;
-
 	/* read in the cycles that form the matrix columns,
 	   and the relations they will need */
 
@@ -540,97 +545,293 @@ static void build_matrix(msieve_obj *obj, mp_t *n) {
 
 	/* assign quadratic characters to each relation */
 
-	fill_qcb(obj, &fb.afb.poly, rlist, num_relations);
+	qcb_size = fill_qcb(obj, &fb.afb.poly, rlist, num_relations);
+
+	/* we need extra matrix rows to make sure that each
+	   dependency has an even number of relations, and also an
+	   even number of free relations. If the rational 
+	   poly R(x) is monic, and we weren't using free relations,
+	   the sign of R(x) is negative for all relations, meaning we 
+	   already get the effect of the extra rows. However, in 
+	   general we can't assume both of these are true */
+	
+	num_dense_rows = qcb_size + 2 + num_small_ideals;
 
 	/* build the matrix columns, store to disk */
 
 	build_matrix_core(obj, cycle_list, num_cycles, rlist, 
 			num_relations, num_dense_rows, 
 			small_ideals, num_small_ideals, 
-			matrix_fp);
+			qcb_size, matrix_fp);
 
 	nfs_free_relation_list(rlist, num_relations);
 	free_cycle_list(cycle_list, num_cycles);
 	free(small_ideals);
 	fclose(matrix_fp);
+	mpz_poly_free(&fb.rfb.poly);
+	mpz_poly_free(&fb.afb.poly);
 }
 
 /*------------------------------------------------------------------*/
-void nfs_solve_linear_system(msieve_obj *obj, mp_t *n) {
+void nfs_solve_linear_system(msieve_obj *obj, mpz_t n) {
+
+	/* convert the list of relations from the sieving 
+	   stage into a matrix */
 
 	uint32 i;
 	la_col_t *cols;
-	uint32 nrows, ncols; 
+	uint32 nrows; 
+	uint32 max_nrows; 
+	uint32 start_row;
+	uint32 ncols; 
+	uint32 max_ncols; 
+	uint32 start_col;
 	uint32 num_dense_rows;
 	uint32 deps_found;
 	uint64 *dependencies;
-	uint32 *rowperm = NULL;
-	uint32 *colperm = NULL;
+	uint32 skip_matbuild = 0;
+	uint32 cado_filter = 0;
 	time_t cpu_time = time(NULL);
+#ifdef HAVE_MPI
+	int32 grid_bools[2] = {0};
+	int32 grid_dims[2];
+	int32 mpi_nrows = 0;
+	int32 mpi_ncols = 0;
+#endif
 
 	logprintf(obj, "\n");
 	logprintf(obj, "commencing linear algebra\n");
 
-	/* convert the list of relations from the sieving 
-	   stage into a matrix */
-	if (!(obj->flags & MSIEVE_FLAG_NFS_LA_RESTART)) {
+	/* parse input arguments */
+
+	if (obj->nfs_args != NULL) {
+#ifdef HAVE_MPI
+		const char *tmp0, *tmp1;
+
+		tmp1 = strstr(obj->nfs_args, "mpi_nrows=");
+		if (tmp1 != NULL)
+			mpi_nrows = atoi(tmp1 + 10);
+
+		tmp1 = strstr(obj->nfs_args, "mpi_ncols=");
+		if (tmp1 != NULL)
+			mpi_ncols = atoi(tmp1 + 10);
+
+		/* old-style 'X,Y' format */
+
+		tmp1 = strchr(obj->nfs_args, ',');
+		if (tmp1 != NULL) {
+			tmp0 = tmp1 - 1;
+			while (tmp0 > obj->nfs_args && isdigit(tmp0[-1]))
+				tmp0--;
+			mpi_nrows = atoi(tmp0);
+			mpi_ncols = atoi(tmp1 + 1);
+		}
+#endif
+		if (strstr(obj->nfs_args, "skip_matbuild=1")) {
+			logprintf(obj, "skipping matrix build\n");
+			skip_matbuild = 1;
+		}
+		if (strstr(obj->nfs_args, "cado_filter=1")) {
+			logprintf(obj, "assuming CADO-NFS filtering\n");
+			cado_filter = 1;
+		}
+	}
+
+#ifdef HAVE_MPI
+	/* do not allow the square root to run if the
+	   LA is running on a grid; this is a side-effect
+	   of the LA not cleaning up very gracefully */
+
+	if (obj->mpi_size > 1 && (obj->flags & MSIEVE_FLAG_NFS_SQRT)) {
+		printf("error: square root is incompatible with "
+			"multiple MPI processes\n");
+		exit(-1);
+	}
+
+	/* create the grid */
+
+	obj->mpi_nrows = grid_dims[0] = 1;
+	obj->mpi_ncols = grid_dims[1] = obj->mpi_size;
+	if (mpi_nrows && mpi_ncols) {
+		if (obj->mpi_size != mpi_nrows * mpi_ncols) {
+			printf("error: MPI size %u incompatible with "
+				"%d x %d grid\n", obj->mpi_size, 
+				mpi_nrows, mpi_ncols);
+			MPI_Abort(MPI_COMM_WORLD, MPI_ERR_TOPOLOGY);
+		}
+		obj->mpi_nrows = grid_dims[0] = mpi_nrows;
+		obj->mpi_ncols = grid_dims[1] = mpi_ncols;
+	}
+	if (obj->mpi_nrows > MAX_MPI_GRID_DIM ||
+	    obj->mpi_ncols > MAX_MPI_GRID_DIM) {
+		printf("error: MPI grid can be at most %u on a side\n",
+			MAX_MPI_GRID_DIM);
+		MPI_Abort(MPI_COMM_WORLD, MPI_ERR_TOPOLOGY);
+	}
+
+	MPI_TRY(MPI_Cart_create(MPI_COMM_WORLD, 2, grid_dims,
+			grid_bools, 1, &obj->mpi_la_grid))
+
+	/* get the rank of the current process in the grid */
+
+	MPI_TRY(MPI_Comm_rank(obj->mpi_la_grid, (int *)&i))
+
+	/* convert to grid coordinates */
+
+	MPI_TRY(MPI_Cart_coords(obj->mpi_la_grid, i, 2, grid_dims))
+	obj->mpi_la_row_rank = grid_dims[0];
+	obj->mpi_la_col_rank = grid_dims[1];
+
+	/* build communicators for the current row and column */
+
+	grid_bools[0] = 1;
+	grid_bools[1] = 0;
+	MPI_TRY(MPI_Cart_sub(obj->mpi_la_grid, grid_bools, 
+				&obj->mpi_la_col_grid))
+
+	grid_bools[0] = 0;
+	grid_bools[1] = 1;
+	MPI_TRY(MPI_Cart_sub(obj->mpi_la_grid, grid_bools, 
+				&obj->mpi_la_row_grid))
+
+	logprintf(obj, "initialized process (%u,%u) of %u x %u grid\n", 
+			obj->mpi_la_row_rank, obj->mpi_la_col_rank,
+			obj->mpi_nrows, obj->mpi_ncols);
+#endif
+
+	if (!skip_matbuild && !(obj->flags & MSIEVE_FLAG_NFS_LA_RESTART)) {
+
+		/* build the matrix; if using MPI, only process
+		   0 does this, the rest are stalled. This isn't very
+		   elegant, but avoiding it means either solving the
+		   matrix twice, with the first pass having foreknowledge 
+		   of the number of MPI processes that will eventually 
+		   be used, or doing it in one pass with the matrix build
+		   occurring in parallel. That actually is a nice idea
+		   but would need a lot more more memory (a distributed
+		   hashtable, or multiple copies of all the relations
+		   involved) */
+
+#ifdef HAVE_MPI
+		if (obj->mpi_la_row_rank + obj->mpi_la_col_rank == 0) {
+#endif
+		uint64 sparse_weight;
+
+		if (cado_filter)
+			nfs_convert_cado_cycles(obj);
+
+		/* build the initial matrix that is the output from
+		   the filtering */
+
 		build_matrix(obj, n);
-		read_matrix(obj, &nrows, &num_dense_rows, 
-				&ncols, &cols, NULL, NULL);
+
+		/* read the matrix and the list of cycles into memory
+		   again, now that the underlying relations have been freed */
+
+		read_matrix(obj, &nrows, NULL, NULL, &num_dense_rows, 
+				&ncols, NULL, NULL, &cols, NULL, NULL);
+		read_cycles(obj, &ncols, &cols, 0, NULL);
+
 		count_matrix_nonzero(obj, nrows, num_dense_rows, ncols, cols);
-		reduce_matrix(obj, &nrows, num_dense_rows, &ncols, 
-				cols, NUM_EXTRA_RELATIONS);
+
+		/* perform light filtering on the matrix */
+
+		sparse_weight = reduce_matrix(obj, &nrows, num_dense_rows, 
+				&ncols, cols, NUM_EXTRA_RELATIONS);
 		if (ncols == 0) {
 			logprintf(obj, "matrix is corrupt; skipping "
 					"linear algebra\n");
 			free(cols);
 			return;
 		}
-		dump_matrix(obj, nrows, num_dense_rows, ncols, cols);
 
-		/* clear off in-memory structures to defragment the heap */
+		/* save the reduced matrix on disk; if MPI is configured,
+		   also save the file offsets where each MPI process will
+		   begin reading its own slab of matrix columns */
+
+		dump_matrix(obj, nrows, num_dense_rows, 
+				ncols, cols, sparse_weight);
+
+		/* free the matrix */
 		for (i = 0; i < ncols; i++) {
 			free(cols[i].data);
 			free(cols[i].cycle.list);
 		}
 		free(cols);
-
 #if 0
 		/* optimize the layout of large matrices */
-		if (ncols > MIN_REORDER_SIZE)
+		if (ncols > MIN_REORDER_SIZE) {
+
+			uint32 *rowperm;
+			uint32 *colperm;
+
+			/* permute the rows and columns to concentrate
+			   the nonzeros in specific places */
+
 			reorder_matrix(obj, &rowperm, &colperm);
+
+			/* read the matrix back into memory, applying
+			   the permutation in the process */
+
+			read_matrix(obj, &nrows, NULL, NULL, 
+					&num_dense_rows, &ncols, 
+					NULL, NULL, &cols, rowperm, colperm);
+			read_cycles(obj, &ncols, &cols, 0, colperm);
+
+			/* save the permuted matrix */
+
+			dump_matrix(obj, nrows, num_dense_rows, 
+					ncols, cols, sparse_weight);
+
+			/* free everything */
+			free(rowperm);
+			free(colperm);
+			for (i = 0; i < ncols; i++) {
+				free(cols[i].data);
+				free(cols[i].cycle.list);
+			}
+			free(cols);
+		}
+#endif
+
+#ifdef HAVE_MPI
+		}
+		MPI_TRY(MPI_Barrier(obj->mpi_la_grid))
 #endif
 	}
 
-	/* read the matrix again; if a permutation was previously
-	   computed, apply it and save the new matrix */
+	/* read the matrix in; if configured for MPI, this reads
+	   in only the submatrix used by the current MPI process.
+	   Without MPI, this reads the whole matrix, ncols = max_ncols, 
+	   nrows = max_nrows, and start_row = start_col = 0.
+	
+	   Do not read in the relation numbers, the Lanczos code
+	   doesn't need them */
 
-	read_matrix(obj, &nrows, &num_dense_rows, 
-			&ncols, &cols, rowperm, colperm);
+	read_matrix(obj, &nrows, &max_nrows, &start_row,
+			&num_dense_rows, 
+			&ncols, &max_ncols, &start_col,
+			&cols, NULL, NULL);
+	logprintf(obj, "matrix starts at (%u, %u)\n", start_row, start_col);
 	count_matrix_nonzero(obj, nrows, num_dense_rows, ncols, cols);
-	if (rowperm != NULL || colperm != NULL) {
-		dump_matrix(obj, nrows, num_dense_rows, ncols, cols);
-		free(rowperm);
-		free(colperm);
-	}
-
-	/* the matrix is read-only from here on, so conserve memory
-	   by deleting the list of relations that comprise each column */
-
-	for (i = 0; i < ncols; i++) {
-		free(cols[i].cycle.list);
-		cols[i].cycle.list = NULL;
-	}
 
 	/* solve the linear system */
 
-	dependencies = block_lanczos(obj, nrows, num_dense_rows,
-					ncols, cols, &deps_found);
+	dependencies = block_lanczos(obj, 
+				nrows, max_nrows, start_row,
+				num_dense_rows,
+				ncols, max_ncols, start_col,
+				cols, &deps_found);
 	if (deps_found)
-		dump_dependencies(obj, dependencies, ncols);
+		dump_dependencies(obj, dependencies, max_ncols);
 	free(dependencies);
 	free(cols);
 
+#ifdef HAVE_MPI
+	MPI_TRY(MPI_Comm_free(&obj->mpi_la_grid))
+	MPI_TRY(MPI_Comm_free(&obj->mpi_la_row_grid))
+	MPI_TRY(MPI_Comm_free(&obj->mpi_la_col_grid))
+#endif
 	cpu_time = time(NULL) - cpu_time;
 	logprintf(obj, "BLanczosTime: %u\n", (uint32)cpu_time);
 }

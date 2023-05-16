@@ -21,6 +21,7 @@ $Id$
 
 #include <util.h>
 #include <mp.h>
+#include <gmp_xface.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,7 +30,7 @@ extern "C" {
    /* These routines *require* IEEE 53-bit double precision,
       even on x86 processors that support higher precision */
 
-#if defined(WIN32) || defined(_WIN64) 
+#if defined(WIN32) && !defined(_WIN64) 
 	#include <float.h>
 	typedef uint32 dd_precision_t;
 #elif (defined(__GNUC__) || defined(__ICL)) && \
@@ -41,7 +42,7 @@ extern "C" {
 #endif
 
 static INLINE dd_precision_t dd_set_precision_ieee(void) {
-#if defined(WIN32) || defined(_WIN64)
+#if defined(WIN32) && !defined(_WIN64)
 	dd_precision_t old_prec = _control87(0, 0);
 	_control87(_PC_53, _MCW_PC);
 	return old_prec;
@@ -59,7 +60,7 @@ static INLINE dd_precision_t dd_set_precision_ieee(void) {
 }
 
 static INLINE void dd_clear_precision(dd_precision_t old_prec) {
-#if defined(WIN32) || defined(_WIN64)
+#if defined(WIN32) && !defined(_WIN64)
 	_control87(old_prec, 0xffffffff);
 #elif defined(GCC_ASM32X) || defined(GCC_ASM64X)
 	ASM_G volatile ("fldcw %0": :"m"(old_prec));
@@ -67,7 +68,7 @@ static INLINE void dd_clear_precision(dd_precision_t old_prec) {
 }
 
 static INLINE uint32 dd_precision_is_ieee(void) {
-#if defined(WIN32) || defined(_WIN64)
+#if defined(WIN32) && !defined(_WIN64)
 	dd_precision_t prec = _control87(0, 0);
 	return  ((prec & _MCW_PC) == _PC_53) ? 1 : 0;
 
@@ -375,6 +376,19 @@ static INLINE dd_t dd_signed_mp2dd(signed_mp_t *x) {
 		return dd_neg(dd_mp2dd(&x->num));
 	else
 		return dd_mp2dd(&x->num);
+}
+
+static INLINE dd_t dd_gmp2dd(mpz_t x) {
+
+	signed_mp_t mpx;
+
+	gmp2mp(x, &mpx.num);
+
+	mpx.sign = POSITIVE;
+	if (mpz_sgn(x) < 0)
+		mpx.sign = NEGATIVE;
+
+	return dd_signed_mp2dd(&mpx);
 }
 
 static INLINE void dd_dd2mp(dd_t d, mp_t *x) {

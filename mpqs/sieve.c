@@ -104,62 +104,13 @@ void do_sieving(msieve_obj *obj, mp_t *n,
 		core_sieve_fcn = qs_core_sieve_vc8_64k;
 	}
 #else
-	#if defined(GCC_ASM32X)
-	if (obj->cpu == cpu_pentium2 && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Pentium 2 sieve core\n");
-		core_sieve_fcn = qs_core_sieve_p2_64k;
+	if (sieve_block_size == 32768) {
+		logprintf(obj, "using generic 32kb sieve core\n");
+		core_sieve_fcn = qs_core_sieve_generic_32k;
 	}
-	else if (obj->cpu == cpu_pentium3 && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Pentium 3 sieve core\n");
-		core_sieve_fcn = qs_core_sieve_p3_64k;
-	}
-	else if (obj->cpu == cpu_pentium4 && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Pentium 4 sieve core\n");
-		core_sieve_fcn = qs_core_sieve_p4_64k;
-	}
-	else if (obj->cpu == cpu_pentium_m && sieve_block_size == 32768) {
-		logprintf(obj, "using 32kb Pentium M sieve core\n");
-		core_sieve_fcn = qs_core_sieve_pm_32k;
-	}
-	else if (obj->cpu == cpu_core && sieve_block_size == 32768) {
-		logprintf(obj, "using 32kb Intel Core sieve core\n");
-		core_sieve_fcn = qs_core_sieve_core_32k;
-	}
-	else if (obj->cpu == cpu_athlon && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Athlon sieve core\n");
-		core_sieve_fcn = qs_core_sieve_k7_64k;
-	}
-	else if (obj->cpu == cpu_athlon_xp && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Athlon XP sieve core\n");
-		core_sieve_fcn = qs_core_sieve_k7xp_64k;
-	}
-	else if (obj->cpu == cpu_opteron && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Opteron sieve core\n");
-		core_sieve_fcn = qs_core_sieve_k8_64k;
-	}
-	#elif defined(GCC_ASM64X)
-	if (obj->cpu == cpu_pentium4 && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Pentium 4 sieve core\n");
-		core_sieve_fcn = qs_core_sieve_p4_64k;
-	}
-	else if (obj->cpu == cpu_core && sieve_block_size == 32768) {
-		logprintf(obj, "using 32kb Intel Core sieve core\n");
-		core_sieve_fcn = qs_core_sieve_core_32k;
-	}
-	else if (obj->cpu == cpu_opteron && sieve_block_size == 65536) {
-		logprintf(obj, "using 64kb Opteron sieve core\n");
-		core_sieve_fcn = qs_core_sieve_k8_64k;
-	}
-	#endif
-	if (core_sieve_fcn == NULL) {
-		if (sieve_block_size == 32768) {
-			logprintf(obj, "using generic 32kb sieve core\n");
-			core_sieve_fcn = qs_core_sieve_generic_32k;
-		}
-		else {
-			logprintf(obj, "using generic 64kb sieve core\n");
-			core_sieve_fcn = qs_core_sieve_generic_64k;
-		}
+	else {
+		logprintf(obj, "using generic 64kb sieve core\n");
+		core_sieve_fcn = qs_core_sieve_generic_64k;
 	}
 #endif
 

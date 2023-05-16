@@ -44,47 +44,23 @@ $Id$
 	   root would require approximately 100x as much code, plus
 	   large amounts of very difficult algebraic number theory */
 	     
-/* for polynomials with arbitrary-precision coefficients.
-   When the polynomial is monic, the highest-order coefficient
+/* When an mpz_poly_t is monic, the highest-order coefficient
    (i.e. one) is considered implicit, and is *not* reflected
    in the degree */
-
-typedef struct {
-	uint32 degree;
-	mpz_t coeff[MAX_POLY_DEGREE];
-} gmp_poly_t;
 
 /* bag of quantities needed for computing S(x) */
 
 typedef struct {
-	gmp_poly_t *monic_poly;
+	mpz_poly_t *monic_poly;
 	abpair_t *rlist;
-	mp_t *c;
+	mpz_t c;
 } relation_prod_t;
 
 /*-------------------------------------------------------------------*/
-static void gmp_poly_init(gmp_poly_t *poly) {
-	
-	uint32 i;
-
-	for (i = poly->degree = 0; i < MAX_POLY_DEGREE; i++)
-		mpz_init(poly->coeff[i]);
-}
-
-/*-------------------------------------------------------------------*/
-static void gmp_poly_clear(gmp_poly_t *poly) {
-	
-	uint32 i;
-
-	for (i = poly->degree = 0; i < MAX_POLY_DEGREE; i++)
-		mpz_clear(poly->coeff[i]);
-}
-
-/*-------------------------------------------------------------------*/
-static void gmp_poly_mod_q(gmp_poly_t *p, mpz_t q, gmp_poly_t *res) {
+static void mpz_poly_mod_q(mpz_poly_t *p, mpz_t q, mpz_poly_t *res) {
 
 	uint32 i;
-	uint32 pbits, resbits;
+	uint64 pbits, resbits;
 
 	/* also trim aggressively the memory use of the
 	   computed remainders; the algebraic square root has
@@ -110,13 +86,14 @@ static void gmp_poly_mod_q(gmp_poly_t *p, mpz_t q, gmp_poly_t *res) {
 }
 
 /*-------------------------------------------------------------------*/
-static void gmp_poly_bits(gmp_poly_t *p, 
-			uint32 *total_bits, uint32 *max_bits) {
+static void mpz_poly_bits(mpz_poly_t *p, 
+			uint64 *total_bits, uint64 *max_bits) {
 
-	uint32 i, bits1, bits2;
+	uint32 i;
+	uint64 bits1, bits2;
 
 	for (i = bits1 = bits2 = 0; i <= p->degree; i++) {
-		uint32 curr_bits = mpz_sizeinbase(p->coeff[i], 2);
+		uint64 curr_bits = mpz_sizeinbase(p->coeff[i], 2);
 		bits1 += curr_bits;
 		bits2 = MAX(bits2, curr_bits);
 	}
@@ -126,7 +103,7 @@ static void gmp_poly_bits(gmp_poly_t *p,
 }
 
 /*-------------------------------------------------------------------*/
-static void gmp_poly_monic_derivative(gmp_poly_t *src, gmp_poly_t *dest) {
+static void mpz_poly_monic_derivative(mpz_poly_t *src, mpz_poly_t *dest) {
 	
 	uint32 i;
 
@@ -140,13 +117,13 @@ static void gmp_poly_monic_derivative(gmp_poly_t *src, gmp_poly_t *dest) {
 	mpz_set_ui(dest->coeff[i], (unsigned long)(i+1));
 
 	dest->degree = src->degree;
-	for (i++; i < MAX_POLY_DEGREE; i++)
+	for (i++; i <= MAX_POLY_DEGREE; i++)
 		mpz_realloc2(dest->coeff[i], 1);
 }
 
 /*-------------------------------------------------------------------*/
-static void gmp_poly_mul(gmp_poly_t *p1, gmp_poly_t *p2,
-			gmp_poly_t *mod, uint32 free_p2) {
+static void mpz_poly_mul(mpz_poly_t *p1, mpz_poly_t *p2,
+			mpz_poly_t *mod, uint32 free_p2) {
 
 	/* multiply p1(x) by p2(x) modulo mod(x) (assumed monic)
 	   If free_p2 is nonzero the coefficients of p2(x) are 
@@ -233,9 +210,9 @@ static void gmp_poly_mul(gmp_poly_t *p1, gmp_poly_t *p2,
 }
 
 /*-------------------------------------------------------------------*/
-static uint32 verify_product(gmp_poly_t *gmp_prod, abpair_t *abpairs, 
-			uint32 num_relations, uint32 q, mp_t *c, 
-			mp_poly_t *alg_poly) {
+static uint32 verify_product(mpz_poly_t *gmp_prod, abpair_t *abpairs, 
+			uint32 num_relations, uint32 q, mpz_t c, 
+			mpz_poly_t *alg_poly) {
 
 	/* a sanity check on the computed value of S(x): for
 	   a small prime q for which alg_poly is irreducible,
@@ -244,7 +221,7 @@ static uint32 verify_product(gmp_poly_t *gmp_prod, abpair_t *abpairs,
 	   be computed very quickly */
 
 	uint32 i, j;
-	uint32 c_mod_q = mp_mod_1(c, q);
+	uint32 c_mod_q = mpz_fdiv_ui(c, q);
 	uint32 d = alg_poly->degree;
 	uint32 ref_prod[MAX_POLY_DEGREE];
 	uint32 prod[MAX_POLY_DEGREE];
@@ -254,14 +231,12 @@ static uint32 verify_product(gmp_poly_t *gmp_prod, abpair_t *abpairs,
 	/* compute the product mod q directly. First initialize
 	   and reduce the coefficients of alg_poly and gmp_prod mod q */
 
-	for (i = 0; i < d; i++) {
+	for (i = 0; i <= d; i++) {
 		prod[i] = 0;
 		ref_prod[i] = mpz_fdiv_ui(gmp_prod->coeff[i],
 					(unsigned long)q);
-		mod[i] = mp_mod_1(&alg_poly->coeff[i].num, q);
-		if (alg_poly->coeff[i].sign == NEGATIVE && mod[i] > 0) {
-			mod[i] = q - mod[i];
-		}
+		mod[i] = mpz_fdiv_ui(alg_poly->coeff[i],
+					(unsigned long)q);
 	}
 	prod[0] = 1;
 
@@ -278,37 +253,38 @@ static uint32 verify_product(gmp_poly_t *gmp_prod, abpair_t *abpairs,
 			a += q;
 		ac = mp_modmul_1((uint32)a, c_mod_q, q);
 
-		for (j = accum[0] = 0; j < d; j++) {
+		for (j = accum[0] = 0; j <= d; j++) {
 			accum[j+1] = mp_modmul_1(prod[j], b, q);
 			accum[j] = mp_modadd_1(accum[j],
 					mp_modmul_1(ac, prod[j], q), q);
 		}
 
-		for (j = 0; j < d; j++) {
+		for (j = 0; j <= d; j++) {
 			prod[j] = mp_modsub_1(accum[j],
-					mp_modmul_1(accum[d], mod[j], q), q);
+					mp_modmul_1(accum[d+1], 
+						mod[j], q), q);
 		}
 	}
 
 	/* do the polynomial compare */
 
-	for (i = 0; i < d; i++) {
+	for (i = 0; i <= d; i++) {
 		if (ref_prod[i] != prod[i])
 			break;
 	}
-	if (i == d)
+	if (i > d)
 		return 1;
 	return 0;
 }
 
 /*-------------------------------------------------------------------*/
-static void relation_to_poly(abpair_t *abpair, mp_t *c,
-				gmp_poly_t *poly) {
+static void relation_to_poly(abpair_t *abpair, mpz_t c,
+				mpz_poly_t *poly) {
 
 	/* given a and b in abpair, along with c, compute
 	   poly(x) = a*c - b*x */
 
-	mp2gmp(c, poly->coeff[0]);
+	mpz_set(poly->coeff[0], c);
 	int64_2gmp(abpair->a, poly->coeff[1]);
 	mpz_mul(poly->coeff[0], poly->coeff[0], poly->coeff[1]);
 	mpz_set_ui(poly->coeff[1], (unsigned long)abpair->b);
@@ -323,7 +299,7 @@ static void relation_to_poly(abpair_t *abpair, mp_t *c,
 /*-------------------------------------------------------------------*/
 static void multiply_relations(relation_prod_t *prodinfo, 
 			uint32 index1, uint32 index2,
-			gmp_poly_t *prod) {
+			mpz_poly_t *prod) {
 
 	/* multiply together the relations from index1 
 	   to index2, inclusive. We proceed recursively to
@@ -334,7 +310,7 @@ static void multiply_relations(relation_prod_t *prodinfo,
 	   but the memory allocated for them is large */
 
 	uint32 i;
-	gmp_poly_t prod1, prod2;
+	mpz_poly_t prod1, prod2;
 
 	if (index1 == index2) {
 		/* base case of recursion */
@@ -344,8 +320,8 @@ static void multiply_relations(relation_prod_t *prodinfo,
 		return;
 	}
 
-	gmp_poly_init(&prod1);
-	gmp_poly_init(&prod2);
+	mpz_poly_init(&prod1);
+	mpz_poly_init(&prod2);
 	
 	if (index1 == index2 - 1) {
 		/* base case of recursion */
@@ -365,30 +341,30 @@ static void multiply_relations(relation_prod_t *prodinfo,
 	}
 
 	/* multiply them together and save the result */
-	gmp_poly_mul(&prod1, &prod2, prodinfo->monic_poly, 1);
+	mpz_poly_mul(&prod1, &prod2, prodinfo->monic_poly, 1);
 
 	for (i = 0; i <= prod1.degree; i++)
 		mpz_swap(prod->coeff[i], prod1.coeff[i]);
 	prod->degree = prod1.degree;
-	gmp_poly_clear(&prod1);
-	gmp_poly_clear(&prod2);
+	mpz_poly_free(&prod1);
+	mpz_poly_free(&prod2);
 }
 
 /*-------------------------------------------------------------------*/
 #define ISQRT_NUM_ATTEMPTS 10
 
-static uint32 get_initial_inv_sqrt(msieve_obj *obj, mp_poly_t *mp_alg_poly,
-				gmp_poly_t *prod, gmp_poly_t *isqrt_mod_q, 
+static uint32 get_initial_inv_sqrt(msieve_obj *obj, mpz_poly_t *alg_poly,
+				mpz_poly_t *prod, mpz_poly_t *isqrt_mod_q, 
 				mpz_t q_out) {
 
 	/* find the prime q_out and the initial value of the
 	   reciprocal square root of prod(x) mod q_out to use 
 	   for the Newton iteration */
 
-	uint32 i, j;
+	uint32 i;
 	uint32 q, start_q;
-	mp_poly_t mp_prod_mod_q;
-	mp_poly_t mp_isqrt_mod_q;
+
+	alg_poly->degree++;
 
 	/* find a prime q for which mp_alg_poly mod q is
 	   irreducible. The starting value to try was passed in */
@@ -396,71 +372,44 @@ static uint32 get_initial_inv_sqrt(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 	start_q = mpz_get_ui(q_out);
 
 	for (i = 0; i < ISQRT_NUM_ATTEMPTS; i++) {
-		if (get_prime_for_sqrt(mp_alg_poly, start_q + 1, &q)) {
+		if (get_prime_for_sqrt(alg_poly, start_q + 1, &q)) {
 			if (start_q > 150) {
 				logprintf(obj, "warning: no irreducible prime "
 					"found, switching to small primes\n");
 				start_q = 50;
 				/* for octics, even mod 13 works and 
 				   is resonably fast */
-				if (mp_alg_poly->degree > 6) 
+				if (alg_poly->degree > 6) 
 					start_q = 12;
 				continue;
 			}
 		}
 
-		/* convert prod mod q to an mp_poly_t */
-
-		memset(&mp_prod_mod_q, 0, sizeof(mp_poly_t));
-		for (j = 0; j <= prod->degree; j++) {
-			signed_mp_t *coeff = mp_prod_mod_q.coeff + j;
-			uint32 r = mpz_fdiv_ui(prod->coeff[j],
-						(unsigned long)q);
-			coeff->sign = POSITIVE;
-			coeff->num.nwords = (r == 0) ? 0 : 1;
-			coeff->num.val[0] = r;
-		}
-		for (j = prod->degree; j; j--) {
-			signed_mp_t *coeff = mp_prod_mod_q.coeff + j;
-			if (!mp_is_zero(&coeff->num))
-				break;
-		}
-		mp_prod_mod_q.degree = j;
-
 		/* find the reciprocal square root mod q, or try
 		   another q if this fails */
 
-		if (inv_sqrt_mod_q(&mp_isqrt_mod_q, &mp_prod_mod_q, 
-				mp_alg_poly, q, &obj->seed1, &obj->seed2)) {
+		if (inv_sqrt_mod_q(isqrt_mod_q, prod, 
+				alg_poly, q, &obj->seed1, &obj->seed2)) {
 			break;
 		}
 		start_q = q;
 	}
+
+	alg_poly->degree--;
 
 	if (i == ISQRT_NUM_ATTEMPTS) {
 		logprintf(obj, "error: cannot recover square root mod q\n");
 		return 0;
 	}
 
-	/* initialize isqrt_mod_q */
-
-	mpz_set_ui(q_out, (unsigned long)q);
-	for (i = 0; i <= mp_isqrt_mod_q.degree; i++) {
-		signed_mp_t *coeff = mp_isqrt_mod_q.coeff + i;
-		mpz_set_ui(isqrt_mod_q->coeff[i], 
-				(unsigned long)coeff->num.val[0]);
-		if (coeff->sign == NEGATIVE)
-			mpz_neg(isqrt_mod_q->coeff[i], isqrt_mod_q->coeff[i]);
-	}
-	isqrt_mod_q->degree = mp_isqrt_mod_q.degree;
-
 	logprintf(obj, "initial square root is modulo %u\n", q);
+	mpz_set_ui(q_out, (unsigned long)q);
 	return 1;
 }
 
 /*-------------------------------------------------------------------*/
-static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
-			gmp_poly_t *prod, gmp_poly_t *isqrt_mod_q, 
+static uint32 get_final_sqrt(msieve_obj *obj, mpz_poly_t *alg_poly,
+			mpz_poly_t *prod, mpz_poly_t *isqrt_mod_q, 
 			mpz_t q) {
 
 	/* the main q-adic Newton iteration. On input, isqrt_mod_q
@@ -477,12 +426,12 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 	   written to isqrt_mod_q */
 
 	uint32 i, j;
-	uint32 prod_bits, prod_max_bits;
+	uint64 prod_bits, prod_max_bits;
 	uint32 num_iter;
 
 	/* initialize */
 
-	gmp_poly_bits(prod, &prod_bits, &prod_max_bits);
+	mpz_poly_bits(prod, &prod_bits, &prod_max_bits);
 
 	/* since prod(x) only matters mod q^(2^(final_k)), we can
 	   cut the memory use in half by changing prod(x) to this.
@@ -494,7 +443,7 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 		mpz_mul(q, q, q);
 	}
 
-	gmp_poly_mod_q(prod, q, prod);
+	mpz_poly_mod_q(prod, q, prod);
 	mpz_set_ui(q, (unsigned long)i);
 	mpz_realloc2(q, 33);
 
@@ -502,7 +451,7 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 
 	for (i = 0; i < num_iter; i++) {
 
-		gmp_poly_t tmp_poly;
+		mpz_poly_t tmp_poly;
 
 		/* square the previous modulus */
 
@@ -510,12 +459,12 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 
 		/* compute prod(x) * (previous R)^2 */
 
-		gmp_poly_init(&tmp_poly);
-		gmp_poly_mod_q(prod, q, &tmp_poly);
-		gmp_poly_mul(&tmp_poly, isqrt_mod_q, alg_poly, 0);
-		gmp_poly_mod_q(&tmp_poly, q, &tmp_poly);
-		gmp_poly_mul(&tmp_poly, isqrt_mod_q, alg_poly, 0);
-		gmp_poly_mod_q(&tmp_poly, q, &tmp_poly);
+		mpz_poly_init(&tmp_poly);
+		mpz_poly_mod_q(prod, q, &tmp_poly);
+		mpz_poly_mul(&tmp_poly, isqrt_mod_q, alg_poly, 0);
+		mpz_poly_mod_q(&tmp_poly, q, &tmp_poly);
+		mpz_poly_mul(&tmp_poly, isqrt_mod_q, alg_poly, 0);
+		mpz_poly_mod_q(&tmp_poly, q, &tmp_poly);
 
 		/* compute ( (3 - that) / 2 ) mod q */
 
@@ -537,17 +486,17 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 		/* finally, compute the new R(x) by multiplying the
 		   result above by the old R(x) */
 
-		gmp_poly_mul(&tmp_poly, isqrt_mod_q, alg_poly, 1);
-		gmp_poly_mod_q(&tmp_poly, q, isqrt_mod_q);
-		gmp_poly_clear(&tmp_poly);
+		mpz_poly_mul(&tmp_poly, isqrt_mod_q, alg_poly, 1);
+		mpz_poly_mod_q(&tmp_poly, q, isqrt_mod_q);
+		mpz_poly_free(&tmp_poly);
 	}
 
 	/* attempt to compute the square root. 
 	   First multiply R(x) by prod(x), deleting prod(x) 
 	   since we won't need it beyond this point */
 
-	gmp_poly_mul(isqrt_mod_q, prod, alg_poly, 1);
-	gmp_poly_mod_q(isqrt_mod_q, q, isqrt_mod_q);
+	mpz_poly_mul(isqrt_mod_q, prod, alg_poly, 1);
+	mpz_poly_mod_q(isqrt_mod_q, q, isqrt_mod_q);
 
 	/* this is a little tricky. Up until now we've
 	   been working modulo big numbers, but the coef-
@@ -590,7 +539,7 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 	   much smaller than we would expect from random
 	   polynomials modulo q */
 
-	gmp_poly_bits(isqrt_mod_q, &prod_bits, &i);
+	mpz_poly_bits(isqrt_mod_q, &prod_bits, &prod_max_bits);
 	if (prod_bits >= (isqrt_mod_q->degree + 1) * 
 				mpz_sizeinbase(q, 2) - 100) {
 		logprintf(obj, "Newton iteration failed to converge\n");
@@ -600,66 +549,55 @@ static uint32 get_final_sqrt(msieve_obj *obj, gmp_poly_t *alg_poly,
 }
 
 /*-------------------------------------------------------------------*/
-static void convert_to_integer(gmp_poly_t *alg_sqrt, mp_t *n,
-				mp_t *c, signed_mp_t *m1, 
-				signed_mp_t *m0, mp_t *res) {
+static void convert_to_integer(mpz_poly_t *alg_sqrt, mpz_t n,
+				mpz_t c, mpz_t m1, 
+				mpz_t m0, mpz_t res) {
 
 	/* given the completed square root, apply the homomorphism
 	   to convert the polynomial to an integer. We do this
-	   by evaluating alg_sqrt at c*m0/m1, with all calculations
+	   by evaluating alg_sqrt at -c*m0/m1, with all calculations
 	   performed mod n */
 
 	uint32 i;
-	mpz_t gmp_n;
-	mp_t m1_pow;
-	mp_t m1_tmp;
-	mp_t m0_tmp;
-	mp_t next_coeff;
+	mpz_t m1_pow;
+	mpz_t m0c;
 
-	mpz_init(gmp_n); 
-	mp2gmp(n, gmp_n);
-	gmp_poly_mod_q(alg_sqrt, gmp_n, alg_sqrt);
-	mpz_clear(gmp_n);
+	mpz_init_set(m1_pow, m1);
+	mpz_poly_mod_q(alg_sqrt, n, alg_sqrt);
 
-	mp_copy(&m1->num, &m1_tmp);
-	if (m1->sign == NEGATIVE)
-		mp_sub(n, &m1_tmp, &m1_tmp);
-	mp_copy(&m1_tmp, &m1_pow);
-
-	mp_modmul(&m0->num, c, n, &m0_tmp);
-	if (m0->sign == POSITIVE)
-		mp_sub(n, &m0_tmp, &m0_tmp);
+	mpz_init_set_ui(m0c, 0);
+	mpz_submul(m0c, m0, c);
+	mpz_mod(m0c, m0c, n);
 
 	i = alg_sqrt->degree;
-	gmp2mp(alg_sqrt->coeff[i], res);
-
-	for (i--; (int32)i >= 0; i--) {
-		mp_modmul(res, &m0_tmp, n, res);
-		gmp2mp(alg_sqrt->coeff[i], &next_coeff);
-		mp_modmul(&next_coeff, &m1_pow, n, &next_coeff);
-		mp_add(res, &next_coeff, res);
-		if (i > 0)
-			mp_modmul(&m1_pow, &m1_tmp, n, &m1_pow);
+	mpz_set(res, alg_sqrt->coeff[i]);
+	while (--i) {
+		mpz_mul(res, res, m0c);
+		mpz_addmul(res, m1_pow, alg_sqrt->coeff[i]);
+		mpz_mul(m1_pow, m1_pow, m1);
 	}
-	if (mp_cmp(res, n) > 0)
-		mp_sub(res, n, res);
+	mpz_mul(res, res, m0c);
+	mpz_addmul(res, m1_pow, alg_sqrt->coeff[i]);
+	mpz_mod(res, res, n);
+
+	mpz_clear(m1_pow);
+	mpz_clear(m0c);
 }
 
 /*-------------------------------------------------------------------*/
-void alg_square_root(msieve_obj *obj, mp_poly_t *mp_alg_poly, 
-			mp_t *n, mp_t *c, signed_mp_t *m1, 
-			signed_mp_t *m0, abpair_t *rlist, 
+void alg_square_root(msieve_obj *obj, mpz_poly_t *alg_poly, 
+			mpz_t n, mpz_t c, mpz_t m1, 
+			mpz_t m0, abpair_t *rlist, 
 			uint32 num_relations, uint32 check_q,
-			mp_t *sqrt_a) {
+			mpz_t sqrt_a) {
 	
 	/* external interface for computing the algebraic
 	   square root */
 
 	uint32 i;
-	gmp_poly_t alg_poly;
-	gmp_poly_t d_alg_poly;
-	gmp_poly_t prod;
-	gmp_poly_t alg_sqrt;
+	mpz_poly_t d_alg_poly;
+	mpz_poly_t prod;
+	mpz_poly_t alg_sqrt;
 	relation_prod_t prodinfo;
 	double log2_prodsize;
 	mpz_t q;
@@ -667,26 +605,21 @@ void alg_square_root(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 	/* initialize */
 
 	mpz_init(q);
-	gmp_poly_init(&alg_poly);
-	gmp_poly_init(&d_alg_poly);
-	gmp_poly_init(&prod);
-	gmp_poly_init(&alg_sqrt);
+	mpz_poly_init(&d_alg_poly);
+	mpz_poly_init(&prod);
+	mpz_poly_init(&alg_sqrt);
 
-	/* convert the algebraic poly to arbitrary precision */
-
-	for (i = 0; i < mp_alg_poly->degree; i++) {
-		signed_mp_t *coeff = mp_alg_poly->coeff + i;
-		mp2gmp(&coeff->num, alg_poly.coeff[i]);
-		if (coeff->sign == NEGATIVE)
-			mpz_neg(alg_poly.coeff[i], alg_poly.coeff[i]);
+	if (mpz_cmp_ui(alg_poly->coeff[alg_poly->degree], 1) != 0) {
+		printf("error: sqrt requires input poly to be monic\n");
+		exit(-1);
 	}
-	alg_poly.degree = mp_alg_poly->degree - 1;
+	alg_poly->degree--;
 
 	/* multiply all the relations together */
 
-	prodinfo.monic_poly = &alg_poly;
+	prodinfo.monic_poly = alg_poly;
 	prodinfo.rlist = rlist;
-	prodinfo.c = c;
+	mpz_init_set(prodinfo.c, c);
 
 	logprintf(obj, "multiplying %u relations\n", num_relations);
 	multiply_relations(&prodinfo, 0, num_relations - 1, &prod);
@@ -697,8 +630,9 @@ void alg_square_root(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 	/* perform a sanity check on the result */
 
 	i = verify_product(&prod, rlist, num_relations, 
-				check_q, c, mp_alg_poly);
+				check_q, c, alg_poly);
 	free(rlist);
+	mpz_clear(prodinfo.c);
 	if (i == 0) {
 		logprintf(obj, "error: relation product is incorrect\n");
 		goto finished;
@@ -710,9 +644,9 @@ void alg_square_root(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 	   If we didn't do this, we run the risk of the main Newton
 	   iteration not converging */
 
-	gmp_poly_monic_derivative(&alg_poly, &d_alg_poly);
-	gmp_poly_mul(&d_alg_poly, &d_alg_poly, &alg_poly, 0);
-	gmp_poly_mul(&prod, &d_alg_poly, &alg_poly, 1);
+	mpz_poly_monic_derivative(alg_poly, &d_alg_poly);
+	mpz_poly_mul(&d_alg_poly, &d_alg_poly, alg_poly, 0);
+	mpz_poly_mul(&prod, &d_alg_poly, alg_poly, 1);
 
 	/* pick the initial small prime to start the Newton iteration.
 	   To save both time and memory, choose an initial prime 
@@ -741,20 +675,20 @@ void alg_square_root(msieve_obj *obj, mp_poly_t *mp_alg_poly,
 
 	/* get the initial inverse square root */
 
-	if (!get_initial_inv_sqrt(obj, mp_alg_poly, 
+	if (!get_initial_inv_sqrt(obj, alg_poly, 
 				&prod, &alg_sqrt, q)) {
 		goto finished;
 	}
 
 	/* compute the actual square root */
 
-	if (get_final_sqrt(obj, &alg_poly, &prod, &alg_sqrt, q))
+	if (get_final_sqrt(obj, alg_poly, &prod, &alg_sqrt, q))
 		convert_to_integer(&alg_sqrt, n, c, m1, m0, sqrt_a);
 
 finished:
-	gmp_poly_clear(&prod);
-	gmp_poly_clear(&alg_sqrt);
-	gmp_poly_clear(&alg_poly);
-	gmp_poly_clear(&d_alg_poly);
+	mpz_poly_free(&prod);
+	mpz_poly_free(&alg_sqrt);
+	mpz_poly_free(&d_alg_poly);
 	mpz_clear(q);
+	alg_poly->degree++;
 }

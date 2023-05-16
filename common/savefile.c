@@ -55,7 +55,7 @@ void savefile_free(savefile_t *s) {
 /*--------------------------------------------------------------------*/
 void savefile_open(savefile_t *s, uint32 flags) {
 	
-#if defined(WIN32) || defined(_WIN64)
+#if defined(NO_ZLIB) && (defined(WIN32) || defined(_WIN64))
 	DWORD access_arg, open_arg;
 
 	if (flags & SAVEFILE_READ)
@@ -93,9 +93,17 @@ void savefile_open(savefile_t *s, uint32 flags) {
 
 #else
 	char *open_string;
+#ifndef NO_ZLIB
+	char name_gz[256];
+	#if defined(WIN32) || defined(_WIN64)
+	struct _stati64 dummy;
+	#else
+	struct stat dummy;
+	#endif
+#endif
 
 	if (flags & SAVEFILE_APPEND)
-		open_string = "a+";
+		open_string = "a";
 	else if ((flags & SAVEFILE_READ) && (flags & SAVEFILE_WRITE))
 		open_string = "r+w";
 	else if (flags & SAVEFILE_READ)
@@ -103,9 +111,59 @@ void savefile_open(savefile_t *s, uint32 flags) {
 	else
 		open_string = "w";
 
-	s->fp = fopen(s->name, open_string);
+	s->is_a_FILE = s->isCompressed = 0;
+
+#ifndef NO_ZLIB
+	sprintf(name_gz, "%s.gz", s->name);
+	#if defined(WIN32) || defined(_WIN64)
+	if (_stati64(name_gz, &dummy) == 0) {
+		if (_stati64(s->name, &dummy) == 0) {
+	#else
+	if (stat(name_gz, &dummy) == 0) {
+		if (stat(s->name, &dummy) == 0) {
+	#endif
+			printf("error: both '%s' and '%s' exist. "
+			       "Remove the wrong one and restart\n",
+				s->name, name_gz);
+			exit(-1);
+		}
+		s->isCompressed = 1;
+		s->fp = gzopen(name_gz, open_string);
+		if (s->fp == NULL) {
+			printf("error: cannot open '%s'\n", name_gz);
+			exit(-1);
+		}
+		/* fprintf(stderr, "using compressed '%s'\n", name_gz); */
+	} else if (flags & SAVEFILE_APPEND) {
+		/* Unfortunately, append is not intuitive in zlib */
+		/* Note: the .dat file may be a compressed file   */
+		/*       we are using UNIX philosophy here:       */
+		/*       it is the content, not filename, that matters */
+		uint8 header[4];
+		FILE *fp;
+		int n;
+
+		if((fp = fopen(s->name, "r"))) {
+			if((n = fread(header, sizeof(uint8), 3, fp)) && 
+		   	   (n != 3 || header[0]!=31 || header[1]!=139 || header[2]!=8))
+				s->is_a_FILE = 1; 
+			/* exists, non-empty and not gzipped,
+			   so we will fopen a FILE to append plainly */
+			fclose(fp);
+		}
+		if (s->is_a_FILE) {
+			s->fp = (gzFile *)fopen(s->name, "a");
+		} else {
+			s->fp = gzopen(s->name, "a");
+			s->isCompressed = 1;
+		}
+	} else
+#endif
+	{
+		s->fp = gzopen(s->name, open_string);
+	}
 	if (s->fp == NULL) {
-		printf("error: cannot open '%s'", s->name);
+		printf("error: cannot open '%s'\n", s->name);
 		exit(-1);
 	}
 #endif
@@ -117,11 +175,11 @@ void savefile_open(savefile_t *s, uint32 flags) {
 /*--------------------------------------------------------------------*/
 void savefile_close(savefile_t *s) {
 	
-#if defined(WIN32) || defined(_WIN64)
+#if defined(NO_ZLIB) && (defined(WIN32) || defined(_WIN64))
 	CloseHandle(s->file_handle);
 	s->file_handle = INVALID_HANDLE_VALUE;
 #else
-	fclose(s->fp);
+	s->is_a_FILE ? fclose((FILE *)s->fp) : gzclose(s->fp);
 	s->fp = NULL;
 #endif
 }
@@ -129,10 +187,10 @@ void savefile_close(savefile_t *s) {
 /*--------------------------------------------------------------------*/
 uint32 savefile_eof(savefile_t *s) {
 	
-#if defined(WIN32) || defined(_WIN64)
+#if defined(NO_ZLIB) && (defined(WIN32) || defined(_WIN64))
 	return (s->buf_off == s->read_size && s->eof);
 #else
-	return feof(s->fp);
+	return (s->is_a_FILE ? feof((FILE *)s->fp) : gzeof(s->fp));
 #endif
 }
 
@@ -140,8 +198,8 @@ uint32 savefile_eof(savefile_t *s) {
 uint32 savefile_exists(savefile_t *s) {
 	
 #if defined(WIN32) || defined(_WIN64)
-	struct _stat dummy;
-	return (_stat(s->name, &dummy) == 0);
+	struct _stati64 dummy;
+	return (_stati64(s->name, &dummy) == 0);
 #else
 	struct stat dummy;
 	return (stat(s->name, &dummy) == 0);
@@ -151,7 +209,7 @@ uint32 savefile_exists(savefile_t *s) {
 /*--------------------------------------------------------------------*/
 void savefile_read_line(char *buf, size_t max_len, savefile_t *s) {
 
-#if defined(WIN32) || defined(_WIN64)
+#if defined(NO_ZLIB) && (defined(WIN32) || defined(_WIN64))
 	size_t i, j;
 	char *sbuf = s->buf;
 
@@ -190,7 +248,7 @@ void savefile_read_line(char *buf, size_t max_len, savefile_t *s) {
 	buf[j] = 0;
 	s->buf_off = i;
 #else
-	fgets(buf, (int)max_len, s->fp);
+	gzgets(s->fp, buf, (int)max_len);
 #endif
 }
 
@@ -206,7 +264,7 @@ void savefile_write_line(savefile_t *s, char *buf) {
 /*--------------------------------------------------------------------*/
 void savefile_flush(savefile_t *s) {
 
-#if defined(WIN32) || defined(_WIN64)
+#if defined(NO_ZLIB) && (defined(WIN32) || defined(_WIN64))
 	if (s->buf_off) {
 		DWORD num_write; /* required because of NULL arg below */
 		WriteFile(s->file_handle, s->buf, 
@@ -214,8 +272,12 @@ void savefile_flush(savefile_t *s) {
 	}
 	FlushFileBuffers(s->file_handle);
 #else
-	fprintf(s->fp, "%s", s->buf);
-	fflush(s->fp);
+	if (s->is_a_FILE) {
+		fprintf((FILE *)s->fp, "%s", s->buf);
+		fflush((FILE *)s->fp);
+	} else {
+		gzputs(s->fp, s->buf);
+	}
 #endif
 
 	s->buf_off = 0;
@@ -225,7 +287,7 @@ void savefile_flush(savefile_t *s) {
 /*--------------------------------------------------------------------*/
 void savefile_rewind(savefile_t *s) {
 
-#if defined(WIN32) || defined(_WIN64)
+#if defined(NO_ZLIB) && (defined(WIN32) || defined(_WIN64))
 	LARGE_INTEGER fileptr;
 	fileptr.QuadPart = 0;
 	SetFilePointerEx(s->file_handle, fileptr, NULL, FILE_BEGIN);
@@ -233,7 +295,7 @@ void savefile_rewind(savefile_t *s) {
 	s->buf_off = 0;
 	s->eof = 0;
 #else
-	rewind(s->fp);
+	s->is_a_FILE ? rewind((FILE *)s->fp) : gzrewind(s->fp);
 #endif
 }
 

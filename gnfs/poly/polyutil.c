@@ -35,6 +35,41 @@ static void get_bernstein_combined_score(poly_select_t *poly,
 }
 
 /*------------------------------------------------------------------*/
+static void poly_select_copy(poly_select_t *dest,
+		  poly_select_t *src) {
+
+	uint32 i;
+
+	dest->size_score = src->size_score;
+	dest->root_score = src->root_score;
+	dest->combined_score = src->combined_score;
+	dest->skewness = src->skewness;
+	dest->num_real_roots = src->num_real_roots;
+
+	dest->rpoly.degree = src->rpoly.degree;
+	for (i = 0; i <= src->rpoly.degree; i++)
+		mpz_set(dest->rpoly.coeff[i], src->rpoly.coeff[i]);
+
+	dest->apoly.degree = src->apoly.degree;
+	for (i = 0; i <= src->apoly.degree; i++)
+		mpz_set(dest->apoly.coeff[i], src->apoly.coeff[i]);
+}
+
+/*------------------------------------------------------------------*/
+static void poly_select_init(poly_select_t *s) {
+
+	memset(s, 0, sizeof(poly_select_t));
+	mpz_poly_init(&s->rpoly);
+	mpz_poly_init(&s->apoly);
+}
+
+static void poly_select_free(poly_select_t *s) {
+
+	mpz_poly_free(&s->rpoly);
+	mpz_poly_free(&s->apoly);
+}
+
+/*------------------------------------------------------------------*/
 void save_poly(poly_config_t *config, poly_select_t *poly) {
 
 	/* save the polynomial if its combined score is the 
@@ -47,9 +82,8 @@ void save_poly(poly_config_t *config, poly_select_t *poly) {
 	   few such polynomials would then be subjected to 
 	   sieving experiments */
 
-	if (poly->combined_score > config->heap[0]->combined_score) {
-		memcpy(config->heap[0], poly, sizeof(poly_select_t));
-	}
+	if (poly->combined_score > config->heap[0]->combined_score)
+		poly_select_copy(config->heap[0], poly);
 }
 
 /*------------------------------------------------------------------*/
@@ -66,8 +100,8 @@ void analyze_poly(poly_config_t *config, poly_select_t *poly) {
 	uint32 i;
 	double root_score_r, root_score_a;
 	ddpoly_t ddr, dda;
-	mp_poly_t *rpoly = &poly->rpoly;
-	mp_poly_t *apoly = &poly->apoly;
+	mpz_poly_t *rpoly = &poly->rpoly;
+	mpz_poly_t *apoly = &poly->apoly;
 
 	poly->size_score = 0.0;
 	poly->root_score = 0.0;
@@ -78,11 +112,11 @@ void analyze_poly(poly_config_t *config, poly_select_t *poly) {
 
 	ddr.degree = rpoly->degree;
 	for (i = 0; i <= rpoly->degree; i++)
-		ddr.coeff[i] = dd_signed_mp2dd(rpoly->coeff + i);
+		ddr.coeff[i] = dd_gmp2dd(rpoly->coeff[i]);
 
 	dda.degree = apoly->degree;
 	for (i = 0; i <= apoly->degree; i++)
-		dda.coeff[i] = dd_signed_mp2dd(apoly->coeff + i);
+		dda.coeff[i] = dd_gmp2dd(apoly->coeff[i]);
 
 	if (analyze_poly_roots(&poly->rpoly, PRIME_BOUND, &root_score_r))
 		return;
@@ -105,7 +139,7 @@ void analyze_poly(poly_config_t *config, poly_select_t *poly) {
 
 /*------------------------------------------------------------------*/
 void analyze_one_poly(msieve_obj *obj,
-		      mp_poly_t *rpoly, mp_poly_t *apoly,
+		      mpz_poly_t *rpoly, mpz_poly_t *apoly,
 		      double skewness) {
 
 	uint32 i;
@@ -120,22 +154,29 @@ void analyze_one_poly(msieve_obj *obj,
 	}
 
 	poly_config_init(&config);
-	memcpy(&s.rpoly, rpoly, sizeof(mp_poly_t));
-	memcpy(&s.apoly, apoly, sizeof(mp_poly_t));
+	poly_select_init(&s);
+
 	s.skewness = skewness;
+
+	s.rpoly.degree = rpoly->degree;
+	for (i = 0; i <= rpoly->degree; i++)
+		mpz_set(s.rpoly.coeff[i], rpoly->coeff[i]);
+
+	s.apoly.degree = apoly->degree;
+	for (i = 0; i <= apoly->degree; i++)
+		mpz_set(s.apoly.coeff[i], apoly->coeff[i]);
+
 	analyze_poly(&config, &s);
 
 	for (i = 0; i <= rpoly->degree; i++) {
-		logprintf(obj, "R%u: %c%s\n", i,
-			(rpoly->coeff[i].sign == POSITIVE? ' ' : '-'),
-			mp_sprintf(&rpoly->coeff[i].num, 10,
-						obj->mp_sprintf_buf));
+		gmp_sprintf(obj->mp_sprintf_buf, 
+				"R%u: %Zd\n", i, rpoly->coeff[i]);
+		logprintf(obj, "%s", obj->mp_sprintf_buf);
 	}
 	for (i = 0; i <= apoly->degree; i++) {
-		logprintf(obj, "A%u: %c%s\n", i,
-			(apoly->coeff[i].sign == POSITIVE? ' ' : '-'),
-			mp_sprintf(&apoly->coeff[i].num, 10,
-						obj->mp_sprintf_buf));
+		gmp_sprintf(obj->mp_sprintf_buf, 
+				"A%u: %Zd\n", i, apoly->coeff[i]);
+		logprintf(obj, "%s", obj->mp_sprintf_buf);
 	}
 	logprintf(obj, "skew %.2lf, size %.3e, "
 			"alpha %.3lf, combined = %.3e rroots = %u\n",
@@ -143,6 +184,7 @@ void analyze_one_poly(msieve_obj *obj,
 			s.root_score, s.combined_score,
 			s.num_real_roots);
 	poly_config_free(&config);
+	poly_select_free(&s);
 
 	if (prec_changed)
 		dd_clear_precision(prec);
@@ -159,6 +201,7 @@ void poly_config_init(poly_config_t *config) {
 	for (i = 0; i < POLY_HEAP_SIZE; i++) {
 		config->heap[i] = (poly_select_t *)xcalloc((size_t)1, 
 					sizeof(poly_select_t));
+		poly_select_init(config->heap[i]);
 	}
 
 	integrate_init(&config->integ_aux, SIZE_EPS,
@@ -172,8 +215,10 @@ void poly_config_free(poly_config_t *config) {
 
 	uint32 i;
 
-	for (i = 0; i < POLY_HEAP_SIZE; i++)
+	for (i = 0; i < POLY_HEAP_SIZE; i++) {
+		poly_select_free(config->heap[i]);
 		free(config->heap[i]);
+	}
 	integrate_free(&config->integ_aux);
 	dickman_free(&config->dickman_aux);
 }

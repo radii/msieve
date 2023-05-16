@@ -19,34 +19,42 @@ $Id$
 #include <dd.h>
 #include <ddcomplex.h>
 #include <integrate.h>
+#include <polyroot.h>
 #include "gnfs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if MAX_POLY_DEGREE < 6
+#error "Polynomial generation assumes degree <= 6 allowed"
+#endif
+
+/* parameters */
+typedef struct {
+	double digits;
+	double stage1_norm;
+	double stage2_norm;
+	double final_norm;
+	uint32 deadline;
+} poly_param_t;
+
 /* used if polynomials will ever be generated in parallel */
-#define POLY_HEAP_SIZE 5
+#define POLY_HEAP_SIZE 1
 
 /* when analyzing a polynomial's root properties, the
    bound on factor base primes that are checked */
 #define PRIME_BOUND 2000
 
 typedef struct {
-	mp_poly_t rpoly;
-	mp_poly_t apoly;
+	mpz_poly_t rpoly;
+	mpz_poly_t apoly;
 	double size_score;
 	double root_score;
 	double combined_score;
 	double skewness;
 	uint32 num_real_roots;
 } poly_select_t;
-
-/* extended-precision polynomial rootfinder */
-
-#define MAX_ROOTFINDER_DEGREE 10
-
-uint32 find_poly_roots(dd_t *poly, uint32 degree, dd_complex_t *roots);
 
 /* main structure for poly selection */
 
@@ -63,11 +71,16 @@ void poly_config_free(poly_config_t *config);
 
 #define SIZE_EPS 1e-6
 
-/* main routine */
+/* main routines */
 
-void find_poly_skew(msieve_obj *obj, mp_t *n,
+void get_poly_params(msieve_obj *obj, mpz_t n,
+			uint32 *degree_out, 
+			poly_param_t *params_out);
+
+void find_poly_core(msieve_obj *obj, mpz_t n,
+			poly_param_t *params,
 			poly_config_t *config,
-			uint32 deadline);
+			uint32 degree);
 
 typedef struct {
 	uint32 degree;
@@ -89,10 +102,10 @@ uint32 analyze_poly_murphy(integrate_t *integ_aux, dickman_t *dickman_aux,
 			double skewness, double *result,
 			uint32 *num_real_roots);
 
-uint32 analyze_poly_roots(mp_poly_t *poly, uint32 prime_bound,
+uint32 analyze_poly_roots(mpz_poly_t *poly, uint32 prime_bound,
 				double *result);
 
-uint32 analyze_poly_roots_projective(mp_poly_t *poly, 
+uint32 analyze_poly_roots_projective(mpz_poly_t *poly, 
 				uint32 prime_bound,
 				double *result);
 

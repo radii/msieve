@@ -223,7 +223,7 @@ xdata_alloc(sieve_prime_t *lattice_primes,
 							sizeof(xprog_t));
 		curr_xdata->sieve = (uint16 *)xmalloc(p * sizeof(uint16));
 
-		cutoff += curr_xdata->contrib * MIN(4, num_roots - 1);
+		cutoff += curr_xdata->contrib * MIN(3, num_roots - 1);
 	}
 
 	return cutoff;
@@ -327,28 +327,6 @@ find_hits(root_sieve_t *rs, xdata_t *xdata,
 }
 
 /*-------------------------------------------------------------------------*/
-void
-sieve_x_alloc(sieve_x_t *x)
-{
-	mpz_init(x->mp_lattice_size);
-	mpz_init(x->resclass);
-	mpz_init(x->crt0);
-	mpz_init(x->crt1);
-	mpz_init(x->tmp1);
-}
-
-/*-------------------------------------------------------------------------*/
-void
-sieve_x_free(sieve_x_t *x)
-{
-	mpz_clear(x->mp_lattice_size);
-	mpz_clear(x->resclass);
-	mpz_clear(x->crt0);
-	mpz_clear(x->crt1);
-	mpz_clear(x->tmp1);
-}
-
-/*-------------------------------------------------------------------------*/
 static int 
 compare_xlines(const void *x, const void *y)
 {
@@ -358,7 +336,7 @@ compare_xlines(const void *x, const void *y)
 }
 
 void
-sieve_x_run(root_sieve_t *rs)
+sieve_x_run_deg6(root_sieve_t *rs)
 {
 	uint32 i;
 	sieve_xy_t *xy = &rs->xydata;
@@ -372,7 +350,7 @@ sieve_x_run(root_sieve_t *rs)
 	xline_heap_t xline_heap;
 	uint32 cutoff_score;
 
-	compute_line_size_deg6(rs->max_norm, &xy->apoly,
+	compute_line_size(rs->max_norm, &xy->apoly,
 			rs->dbl_p, rs->dbl_d, direction,
 			-10000, 10000, &line_min, &line_max);
 	if (line_min > line_max)
@@ -427,7 +405,7 @@ sieve_x_run(root_sieve_t *rs)
 		x->apoly = xy->apoly;
 		x->apoly.coeff[2] += mpz_get_d(rs->curr_y) * rs->dbl_p;
 		x->apoly.coeff[1] -= mpz_get_d(rs->curr_y) * rs->dbl_d;
-		compute_line_size_deg6(rs->max_norm, &x->apoly,
+		compute_line_size(rs->max_norm, &x->apoly,
 				rs->dbl_p, rs->dbl_d, direction,
 				x->last_line_min, x->last_line_max,
 				&line_min, &line_max);

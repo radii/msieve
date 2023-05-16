@@ -98,6 +98,7 @@ typedef struct {
 	uint32 num_ideals;            /* number of unique ideals that must
 					 be merged */
 	uint32 num_extra_relations;   /* number of excess relsets required */
+	double target_density;        /* target number of nonzeros per cycle */
 	double avg_cycle_weight;      /* the avg number of nonzeros per cycle */
 	uint32 max_relations;         /* largest relations in a relation set */
 	relation_set_t *relset_array; /* current list of relation sets */

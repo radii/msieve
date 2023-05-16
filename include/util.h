@@ -17,24 +17,33 @@ $Id$
 
 /* system-specific stuff ---------------------------------------*/
 
-#if defined(WIN32)
-	#define WIN32_LEAN_AND_MEAN
-#endif
-
 #if defined(WIN32) || defined(_WIN64)
+	#define WIN32_LEAN_AND_MEAN
 
 	#include <windows.h>
 	#include <process.h>
-
 #else
-
 	#include <fcntl.h>
 	#include <unistd.h>
 	#include <errno.h>
 	#include <pthread.h>
 	#include <sys/resource.h>
 	#include <float.h>
+	#include <dlfcn.h>
+#endif
 
+#ifdef NO_ZLIB
+	#define gzFile   FILE
+	#define gzopen   fopen
+	#define gzclose  fclose
+	#define gzeof    feof
+	#define gzrewind rewind
+	#define gzprintf fprintf
+	#define gzputs(f,b)   fprintf(f, "%s", b)
+	#define gzgets(f,b,l) fgets(b,l,f)
+	#define gzflush(f,b)  fflush(f)
+#else
+	#include <zlib.h>
 #endif
 
 /* system-independent header files ------------------------------------*/
@@ -93,6 +102,12 @@ extern "C" {
 	#endif
 #endif
 
+#if defined(WIN32) || defined(_WIN64)
+	typedef HMODULE libhandle_t;
+#else
+	typedef void * libhandle_t;
+#endif
+
 /* useful functions ---------------------------------------------------*/
 
 #define MIN(a,b) ((a) < (b)? (a) : (b))
@@ -100,12 +115,16 @@ extern "C" {
 
 #if defined(_MSC_VER)
     
-    #include <float.h>
+	#include <float.h>
 	#define INLINE __inline
 	#define getpid _getpid
+	#define ftello _ftelli64
+	#define fseeko _fseeki64
 
+#if _MSC_VER < 1900
 	int64 strtoll(const char *nptr, char **endptr, int base);
 	uint64 strtoull(const char *nptr, char **endptr, int base);
+#endif
 
     __inline double rint(double x)
     {
@@ -169,6 +188,10 @@ double get_cpu_time(void);
 void set_idle_priority(void);
 uint64 get_file_size(char *name);
 uint64 get_ram_size(void);
+
+libhandle_t load_dynamic_lib(const char *libname);
+void unload_dynamic_lib(libhandle_t h);
+void * get_lib_symbol(libhandle_t h, const char *symbol_name);
 
 #ifndef M_LN2
 #define M_LN2 0.69314718055994530942
@@ -255,6 +278,13 @@ enum cpu_type get_cpu_type(void);
 	#if !defined(WIN32) && !defined(__i386__)
 		#define HAS_MANY_REGISTERS
 	#endif
+#endif
+
+#if !defined(HAS_SSE) && defined(__x86_64__)
+	#define HAS_SSE
+#endif
+#if !defined(HAS_SSE2) && defined(__x86_64__)
+	#define HAS_SSE2
 #endif
 
 /* this byzantine complexity sets up the correct assembly

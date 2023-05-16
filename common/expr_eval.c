@@ -373,7 +373,7 @@ static int mp_evaluate(char *str, mp_t *res) {
 int32 evaluate_expression(char *expr, mp_t *res) {
 
 	int status;
-	char postfix[500];
+	char postfix[BIGNUM_BUF_SIZE];
 	char *tmp;
 
 	/* fast path: if expr is an ascii integer, convert
@@ -392,8 +392,8 @@ int32 evaluate_expression(char *expr, mp_t *res) {
 		tmp++;
 	}
 	if (*tmp == 0) {
-		if (tmp - expr >= 300) {
-			printf("input integers must be under 300 digits\n");
+		if (tmp - expr >= 311) {
+			printf("input integers must be under 311 digits\n");
 			return INTEGER_OVERFLOW;
 		}
 		mp_str2mp(expr, res, 0);

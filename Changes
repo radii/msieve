@@ -1,4 +1,190 @@
-Version 1.46:
+Version 1.53:
+	- Replaced the GPU sorting library with calls to CUB; this is more
+		compatible with the latest GPU models and works with CUDA
+		toolkits more recent than v5.5, which the old library was
+		stuck with
+	- Added primality proving of factors found (thanks David Cleaver /
+		Brian Gladman)
+	- Added a primality test for factors of NFS relations; apparently
+		the sieving tools will occasionally output relations with 
+		factors that are composite, and this may be the cause of
+		mysterious problems with extremely large jobs
+	- Modified the matrix build in the NFS linear algebra to always use
+		quadratic characters near 2^32, to always choose them so they
+		do not occur in relations, and to decide the number of 
+		characters at runtime with a compiled-in maximum. This paranoia
+		should prevent huge factorizations from failing in the
+		square root, like almost happened to Greg Childers
+	- Added an old fix for potential memory corruption doing NFS filtering
+		with extremely large datasets, since the patch actually
+		saved a factorization from failing (thanks Greg Childers)
+	- Fixed a memory corruption bug in the linear algebra when using many 
+		MPI processes (thanks Ilya Popovyan)
+	- Fixed a bug in factor base generation that stopped NFS line sieving
+		from working (thanks DDEM)
+	- Fixed more problems with >4GB files in windows (thanks Nooby)
+	- Fixed a bug in the NFS line sieve (thanks Erik Branger)
+	- Simplify the inner loop of the QS hashtable sieving code;
+		modern processors run QS noticeably faster now
+		(thanks Mick Francis)
+	- Added a slight speedup for NFS relation parsing (thanks Lionel Debroux)
+	- Added an option to go straight to NFS skipping all preprocessing
+		(thanks Paul Zimmermann / Catalin Patulea)
+	- Fix a buffer overflow rating degree-8 polynomials (thanks jyb)
+        - Capped the number of GPU poly select stage 1 threads at 4
+	- Made the default compile flags include '-march=native' since it's
+		unlikely Apple's gcc still doesn't support it
+
+Version 1.52: 2/4/14
+	- Added a major overhaul of the liner algebra; this uses the
+		thread pool with tighter coordination between threads
+		and much-reduced memory use. On a fast modern processor 
+		with big caches the new code is 30% faster, and the speedup 
+		increases with more threads
+	- Added the ability to start the NFS linear algebra after using
+		the CADO-NFS suite for filtering (thanks Paul Zimmermann)
+	- Fixed a bug in the MPI code that makes Nx1 and 1xN grids work again
+	- Fixed 32-bit overflow problems in the NFS square root (thanks Greg 
+		Childers)
+	- Fixed problems parsing arguments in the NFS square root (thanks
+		Carlos Pinho / Lionel Debroux)
+	- Fixed a typo in the threadpool that caused races when shutting down
+	- Turned off asm in QS when compiling debug builds
+	- Fixed a buffer overflow parsing large inputs (thanks Ryan Propper)
+	- Fixed Windows CPU time measurement (thanks Roman Rusakov)
+	- Modified makefiles to account for environment vars in CUDA 5.5
+
+
+Version 1.51: 2/17/13
+	- Performed another massive overhaul of the GPU polynomial selection
+		code; stage 1 now runs dozens to *hundreds* of times faster
+		on a GPU
+	- Added a thread pool implementation, and made GPU polynomial 
+		selection multithread-capable. Eventually the CPU code should
+		be overhauled to look more like the GPU code, it will 
+		probably be able to run several times faster
+	- Split stage 2 of NFS polynomial selection into the size optimization
+		and root optimization portions, which can be invoked inde-
+		pendently from the demo binary
+	- Added a caching layer for reading in the matrix, to reduce the
+		amount of disk IO required by an MPI grid (thanks Greg Childers)
+	- Changed the main API to allow free-text strings for configuring NFS,
+		then allowed all the parameters for polynomial selection to be
+		specified when calling the library
+	- Finally overhauled the Makefile to avoid everyone having to edit it
+	- Fixed a potential 32-bit overflow in the hashtable code, that could
+		occur for extremely large problems (thanks Paul Zimmermann)
+	- Fixed the computation of alpha value when polynomials are linear
+		(thanks Paul Zimmermann / Shi Bai)
+	- Fixed a line sieve initialization problem (thanks Ilya Popovyan)
+
+
+Version 1.50: 2/3/12
+	- NFS polynomial selection changes:
+		- Added a massive overhaul of the stage 1 GPU code by Jayson
+		  King, making it both much simpler and much faster
+		- Added a second size optimization pass when searching for
+		  degree 6 polynomials. This makes stage 2 much more
+		  reliable for very large problems
+		- Fixed a bug translating the degree 6 root sieve to
+		  degree 5
+		- Fixed a long-standing problem initializing the root
+		  sieve so that it will correctly detect roots modulo
+		  small prime powers
+		- Patches from Jayson King: use a custom hashtable structure
+		  to greatly speed up the stage 1 CPU code
+		- Patches from Jayson King: use a sieve to find larger 
+		  leading algebraic coefficients
+		- Patch from Jayson King: allow stage 2 to be interrupted
+		  with Ctrl-C
+	- Modified the NFS code to remove almost all dependencies on mp_t
+		functions, using GMP instead
+	- Patch from Ilya Popovyan: make all MPI processes contribute to
+		a single vector-vector operation in the liner algebra,
+		instead of just the MPI processes in a single grid row.
+		This makes the entire Lanczos iteration up to 20% faster
+		for very large problems and grid sizes
+	- Patch from Brian Gladman: add ZLIB code to windows build
+	- Patches from Brian Gladman: lots of changes to the Visual Studio
+		projects; only MSVC10 is supported now
+	- Patch from Jayson King: fix longstanding problems that would
+		crop up rarely in tinyQS code
+
+
+Version 1.49: 6/16/11
+	- Generalized the degree 6 root sieve to also handle degree
+		4 and 5. This makes stage 2 of NFS polyomial selection
+		hugely faster for very large problems
+	- Allowed the target matrix density within NFS filtering to
+		be specified from the demo binary (multiple people have
+		asked for this and I'd been too lazy to supply it)
+	- Modified the MPI code to flag in-place gather and scatter
+		operations as such (thanks Greg Childers)
+	- Performed a major overhaul of the various Readme files
+	- Fixed an erroneous error check in the MPI code (thanks
+		Ilya Popovyan)
+	- Fixed an MPI race condition in the Lanczos restart code
+		(thanks Jeff Gilchrist)
+	- From Brian Gladman: added build fixes for the latest CUDA tools
+	- Modified the NFS square root to print out factors as they are
+		found (thanks Paul Leyland)
+	- Made the library report the current SVN revision, determined at
+		compile time. This should finally end the confusion about
+		exactly which revision of the demo binary is running 
+	- Added the (current) linux CUDA include and library paths to
+		the Makefile (thanks Paul Leyland)
+
+Version 1.48: 1/8/11
+	- Performed a massive overhaul of the stage 1 NFS polynomial
+		selection, with a huge amount of help from Jayson King.
+		Once this is tuned a little better, polynomial selection
+		should become massively faster, especially on CPUs.
+		The GPU code is much simpler and more flexible now too
+	- Added a fast MPI parallel all-against-all xor implementation
+		courtesy of Ilya Popovyan
+	- Added more cache size detection for Intel processors
+	- Added a fix to prevent potential overflow in the hashtable code
+	- Increased the maximum input size to 1024 bits
+	- Changes from Brian Gladman:
+	   - Corrected a bug in Windows win32 inline assembler code 
+	   - Removed the unmaintained Visual Studioo 2008 build projects
+	   - Updated Visual Studio 2010 CUDA build for NVIDIA Parallel
+	       Nsight 1.5 and the CUDA 3.2 toolkit
+
+Version 1.47: 9/18/10
+	- Fixed several bugs in the linear algebra (thanks Serge
+		Batalov and many mersenneforum testers)
+	- Patches from Jayson King: tune some of the choices for NFS
+		polynomial selection
+	- Patches from Serge Batalov: fix some portability problems 
+		dealing with the hodgepodge of zlib versions everybody
+		has on their unix systems
+	- Added a little optimization for Fermi GPUs
+	- Patch from Brian Gladman: fix bad printf format string
+	- Fixed other format string problems introduced in v1.46
+
+
+Version 1.46: 7/31/10
+	The polynomial selection work in this release has benefitted
+	greatly from a week-long visit to Paul Zimmermann's CARAMEL group
+	in Nancy, France
+
+	The MPI changes in this release were made possible by generous
+	support from a startup allocation of CPU time on the National
+	Science Foundation's Teragrid system (TG-DMS100013), courtesy
+       	of Greg Childers at Cal State Fullerton
+
+	- NFS linear algebra changes:
+		- Added MPI support to the linear algebra. Still a work in 
+		  progress, but for large problems the speedup from using 
+		  many nodes of a parallel system is just incredible
+		- Added multithreading to the vector-vector operations
+		- Patch from Serge Batalov: use larger structures to represent
+		  matrix blocks; the larger blocks that are possible make
+		  matrix multiplies run noticeably faster at the expense of
+		  needing more memory to represent the matrix
+		- Made the linear algebra use actual time measurements to
+		  decide how often a checkpoint file gets written
 	- NFS poly selection changes:
 		- Added a high-performance root sieve for degree 6 problems
 		- Allowed stage 1 and stage 2 to be run separately,
@@ -11,9 +197,16 @@ Version 1.46:
 		  Paul Zimmermann)
 		- When rating poynomials, remember the number of real roots
 		  (thanks Paul Zimmermann)
+		- Patch from Jayson King: resolve a GPU race condition
+		- Patch from Jayson King: start overhaul of the arithmetic
+		  progression generator
+	- Patches from Serge Batalov: use zlib to allow QS or NFS relations 
+		to be compressed on unix systems
+	- Patch from Brian Gladman: add support for MSVC 10
 	- Reduced the number of clique removal passes when there is a large
 		amount of excess (thanks Greg Childers)
 	- Optimized the power detection code in the main driver (thanks axn)
+	- The demo binary now uses GMP 5.0.1 and GMP-ECM 6.3
 
 
 Version 1.45: 4/21/10

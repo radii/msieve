@@ -30,6 +30,7 @@ typedef struct {
 	mpz_t gmp_c[MAX_POLY_DEGREE + 1];
 	mpz_t gmp_lina[2];
 	mpz_t gmp_linb[2];
+	mpz_t gmp_linc[2];
 	mpz_t gmp_help1;
 	mpz_t gmp_help2;
 	mpz_t gmp_help3;
@@ -57,9 +58,13 @@ uint32 stage2_root_score(uint32 deg1, mpz_t *coeff1,
 /*-----------------------------------------------------------------------*/
 /* routines for optimizing polynomials */
 
-void optimize_initial(poly_stage2_t *data, double *pol_norm);
+void optimize_initial(curr_poly_t *data, uint32 deg, double *pol_norm,
+			uint32 skew_only);
 
-void optimize_final(mpz_t x, mpz_t y, int64 z, poly_stage2_t *data);
+double optimize_initial_deg6(double best[MAX_VARS], 
+			curr_poly_t *c, uint32 degree);
+
+void optimize_final(mpz_t x, mpz_t y, int64 z, poly_rootopt_t *data);
 
 double optimize_basic(dpoly_t *apoly, double *best_skewness,
 				double *best_translation);
@@ -70,6 +75,7 @@ double optimize_basic(dpoly_t *apoly, double *best_skewness,
 #define MAX_SIEVE_PRIME 100
 #define ROOT_HEAP_SIZE 200
 #define LOG_SCALE_FACTOR 1000
+#define ROOT_SCORE_COARSE_MIN (-4.0)
 
 typedef struct {
 	uint16 resclass;
@@ -96,34 +102,20 @@ typedef struct {
 } sieve_prime_t;
 
 typedef struct {
-	int64 x;
-	int32 y;
-	uint16 score;
-} rotation_t;
-
-typedef struct {
 	mpz_t x;
 	mpz_t y;
 	int64 z;
 	double score;
-} mp_rotation_t;
+} rotation_t;
 
 typedef struct {
 	uint32 num_entries;
 	uint32 max_entries;
-
 	rotation_t *entries;
-	mp_rotation_t *mp_entries;
-
-	rotation_t cutoffs[2];
-	uint32 default_cutoff;
 	void *extra;
-
-	mpz_t x;
-	mpz_t y;
 } root_heap_t;
 
-/* definitions for degree 6 root sieve */
+/* definitions for root sieve */
 
 #define MAX_CRT_FACTORS 10
 
@@ -147,7 +139,7 @@ typedef struct {
 void compute_lattices(hit_t *hitlist, uint32 num_lattice_primes,
 			lattice_t *lattices, uint64 lattice_size,
 			uint32 num_lattices, uint32 dim);
-void compute_line_size_deg6(double max_norm, dpoly_t *apoly,
+void compute_line_size(double max_norm, dpoly_t *apoly,
 		  double dbl_p, double dbl_d, double direction[3],
 		  double last_line_min_in, double last_line_max_in,
 		  double *line_min, double *line_max);
@@ -179,20 +171,27 @@ typedef struct {
 	sieve_prime_t lattice_primes[MAX_CRT_FACTORS];
 	uint32 num_lattice_primes;
 
-	dpoly_t apoly;
-
-	uint16 curr_score;
-
 	mpz_t y_base;
 	uint32 y_blocks;
 
 	mpz_t mp_lattice_size;
 	double dbl_lattice_size;
+
+	/* degree 6 only */
+	uint16 curr_score;
+	dpoly_t apoly;
 	mpz_t crt0;
 	mpz_t crt1;
 	mpz_t resclass_x;
 	mpz_t resclass_y;
 	mpz_t tmp1, tmp2, tmp3, tmp4;
+
+	/* degree 4 and 5 only */
+	uint32 num_lattices;
+	lattice_t *lattices;
+	double *x_line_min;
+	double *x_line_max;
+
 } sieve_xy_t;
 
 void sieve_xy_alloc(sieve_xy_t *xy);
@@ -230,6 +229,8 @@ void sieve_x_free(sieve_x_t *x);
 #define DEFAULT_BLOCK_SIZE  8192
 
 typedef struct {
+	poly_rootopt_t *data;
+
 	uint32 num_primes;
 	sieve_prime_t *primes;
 
@@ -244,8 +245,6 @@ typedef struct {
 	double max_norm;
 
 	root_heap_t root_heap;
-	root_heap_t lattice_heap;
-	root_heap_t tmp_lattice_heap;
 
 	sieve_xyz_t xyzdata;
 	sieve_xy_t xydata;
@@ -257,21 +256,33 @@ typedef struct {
 
 void root_sieve_init(root_sieve_t *rs);
 void root_sieve_free(root_sieve_t *rs);
-void root_sieve_run(poly_stage2_t *data, double curr_norm,
+void root_sieve_run(poly_rootopt_t *data, double curr_norm,
 				double alpha_proj);
 
-void root_sieve_run_deg6(poly_stage2_t *data, double curr_norm,
-				double alpha_proj);
-void sieve_xyz_run(root_sieve_t *rs);
-void sieve_xy_run(root_sieve_t *rs);
-void sieve_x_run(root_sieve_t *rs);
+uint64 find_lattice_size_z(double line_length);
+void sieve_xyz_run_deg6(root_sieve_t *rs, uint64 lattice_size,
+			double line_min, double line_max);
+
+uint64 find_lattice_size_y(double line_length);
+void sieve_xy_run_deg5(root_sieve_t *rs, uint64 lattice_size,
+			double line_min, double line_max);
+void sieve_xy_run_deg6(root_sieve_t *rs);
+
+uint64 find_lattice_size_x(mpz_t prev_lattice_size,
+				double line_length);
+void sieve_x_run_deg4(root_sieve_t *rs, uint64 lattice_size,
+			double line_min, double line_max);
+void sieve_x_run_deg5(root_sieve_t *rs);
+void sieve_x_run_deg6(root_sieve_t *rs);
+
 void root_sieve_line(root_sieve_t *rs);
-void save_mp_rotation(root_heap_t *heap, mpz_t x, mpz_t y,
+
+void save_rotation(root_heap_t *heap, mpz_t x, mpz_t y,
 		int64 z, float score);
 
 /*-------------------------------------------------------------------------*/
 
-/* data for optimizing a single (a5, p, d) triplet */
+/* data for optimizing a single (ad, p, d) triplet */
 
 typedef struct {
 	curr_poly_t curr_poly;

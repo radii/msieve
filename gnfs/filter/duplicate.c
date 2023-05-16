@@ -256,10 +256,12 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 	uint32 num_relations;
 	uint32 num_collisions;
 	uint32 num_skipped_b;
+	uint32 num_composite;
 	uint8 *hashtable;
 	uint32 blob[2];
 	uint32 log2_hashtable1_size;
 	double rel_size = estimate_rel_size(savefile);
+	mpz_t scratch;
 
 	uint8 *free_relation_bits;
 	uint32 *free_relations;
@@ -298,9 +300,18 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 	   relation size and then the number of relations */
 
 	log2_hashtable1_size = 28;
-	if (rel_size > 0.0)
-		log2_hashtable1_size = log(get_file_size(savefile->name) *
-					10.0 / rel_size) / M_LN2 + 0.5;
+	if (rel_size > 0.0) {
+		double num_rels; /* estimated */
+#if 0 /* WAS: !defined(WIN32) && !defined(_WIN64) */
+		if (savefile->isCompressed) {
+			char name_gz[256];
+			sprintf(name_gz, "%s.gz", savefile->name);
+			num_rels = get_file_size(name_gz) / 0.55 / rel_size;
+		} else 
+#endif /* get_file_size( ) will now do the same internally */
+			num_rels = get_file_size(savefile->name) / rel_size;
+		log2_hashtable1_size = log(num_rels * 10.0) / M_LN2 + 0.5;
+	}
 	if (log2_hashtable1_size < 25)
 		log2_hashtable1_size = 25;
 	if (log2_hashtable1_size > 31)
@@ -325,6 +336,8 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 	num_relations = 0;
 	num_collisions = 0;
 	num_skipped_b = 0;
+	num_composite = 0;
+	mpz_init(scratch);
 	savefile_read_line(buf, sizeof(buf), savefile);
 	while (!savefile_eof(savefile)) {
 
@@ -345,7 +358,8 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 		if (max_relations && curr_relation >= max_relations)
 			break;
 
-		status = nfs_read_relation(buf, fb, &tmp_rel, &array_size, 1);
+		status = nfs_read_relation(buf, fb, &tmp_rel, 
+					&array_size, 1, scratch, 1);
 		if (status != 0) {
 
 			/* save the line number of bad relations (hopefully
@@ -355,6 +369,8 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 					sizeof(uint32), bad_relation_fp);
 			if (status == -99)
 				num_skipped_b++;
+			else if (status == -98)
+				num_composite++;
 			else
 			    logprintf(obj, "error %d reading relation %u\n",
 					status, curr_relation);
@@ -444,6 +460,7 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 		savefile_read_line(buf, sizeof(buf), savefile);
 	}
 
+	mpz_clear(scratch);
 	free(hashtable);
 	savefile_close(savefile);
 	fclose(bad_relation_fp);
@@ -452,23 +469,30 @@ uint32 nfs_purge_duplicates(msieve_obj *obj, factor_base_t *fb,
 	if (num_skipped_b > 0)
 		logprintf(obj, "skipped %d relations with b > 2^32\n",
 				num_skipped_b);
+	if (num_composite > 0)
+		logprintf(obj, "skipped %d relations with composite factors\n",
+				num_composite);
 	logprintf(obj, "found %u hash collisions in %u relations\n", 
 				num_collisions, num_relations);
 
-	/* cancel out any free relations that are 
-	   already present in the dataset, then add
-	   free relations that remain */
+	if (max_relations == 0 || max_relations > curr_relation + 1) {
 
-	for (i = 0; i < num_free_relations; i++) {
-		uint32 p = free_relations[i];
+		/* cancel out any free relations that are 
+		   already present in the dataset, then add
+		   free relations that remain */
 
-		if (p < FREE_RELATION_LIMIT) {
-			p = p / 2;
-			free_relation_bits[p / 8] &= ~hashmask[p % 8];
+		for (i = 0; i < num_free_relations; i++) {
+			uint32 p = free_relations[i];
+
+			if (p < FREE_RELATION_LIMIT) {
+				p = p / 2;
+				free_relation_bits[p / 8] &= ~hashmask[p % 8];
+			}
 		}
+		num_relations += add_free_relations(obj, fb,
+					free_relation_bits);
 	}
 	free(free_relations);
-	num_relations += add_free_relations(obj, fb, free_relation_bits);
 	free(free_relation_bits);
 
 	if (num_collisions == 0) {

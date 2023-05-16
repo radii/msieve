@@ -15,6 +15,10 @@ $Id$
 #include <msieve.h>
 #include <signal.h>
 
+#ifdef HAVE_MPI
+#include <mpi.h>
+#endif
+
 msieve_obj *g_curr_factorization = NULL;
 
 /*--------------------------------------------------------------------*/
@@ -77,8 +81,9 @@ void get_random_seeds(uint32 *seed1, uint32 *seed2) {
 /*--------------------------------------------------------------------*/
 void print_usage(char *progname) {
 
-	printf("\nMsieve v. %d.%02d\n", MSIEVE_MAJOR_VERSION, 
-					MSIEVE_MINOR_VERSION);
+	printf("\nMsieve v. %d.%02d (SVN %s)\n", MSIEVE_MAJOR_VERSION, 
+					MSIEVE_MINOR_VERSION,
+					MSIEVE_SVN_VERSION);
 
 	printf("\nusage: %s [options] [one_number]\n", progname);
 	printf("\nnumbers starting with '0' are treated as octal,\n"
@@ -92,9 +97,6 @@ void print_usage(char *progname) {
 		 "             <name> (default worktodo.ini) instead of\n"
 		 "             from the command line\n"
 		 "   -m        manual mode: enter numbers via standard input\n"
-		 "   -mb <num> hint for number of megabytes of memory for\n"
-		 "             postprocessing (set automatically if unspec-\n"
-		 "             ified or zero)\n"
 	         "   -q        quiet: do not generate any log information,\n"
 		 "             only print any factors found\n"
 	         "   -d <min>  deadline: if still sieving after <min>\n"
@@ -103,40 +105,83 @@ void print_usage(char *progname) {
 		 "   -p        run at idle priority\n"
 	         "   -v        verbose: write log information to screen\n"
 		 "             as well as to logfile\n"
+		 "   -z        you are Paul Zimmermann\n"
 #ifdef HAVE_CUDA
 		 "   -g <num>  use GPU <num>, 0 <= num < (# graphics cards)>\n"
 #endif
-	         "   -t <num>  use at most <num> threads\n\n"
+	         "   -t <num>  use at most <num> threads\n"
+		 "\n"
 		 " elliptic curve options:\n"
 		 "   -e        perform 'deep' ECM, seek factors > 15 digits\n\n"
 		 " quadratic sieve options:\n"
 		 "   -c        client: only perform sieving\n\n"
-		 " number field sieve options:\n"
+		 " number field sieve options:\n\n"
+		 "           [nfs_phase] \"arguments\"\n\n"
+		 " where the first part is one or more of:\n"
 		 "   -n        use the number field sieve (80+ digits only;\n"
 		 "             performs all NFS tasks in order)\n"
 	         "   -nf <name> read from / write to NFS factor base file\n"
 		 "             <name> instead of the default %s\n"
-		 "   -np [X,Y] perform only NFS polynomial selection; if\n"
-		 "             specified, only cover leading coefficients\n"
-		 "             in the range from X to Y inclusive\n"
-		 "   -np1 [X,Y] perform stage 1 of NFS polynomial selection; if\n"
-		 "             specified, only cover leading coefficients\n"
-		 "             in the range from X to Y inclusive\n"
-		 "   -np2      perform stage 2 of NFS polynomial selection\n"
-		 "   -ns [X,Y] perform only NFS sieving; if specified,\n"
-		 "             handle sieve lines X to Y inclusive\n"
+		 "   -np       perform only NFS polynomial selection\n"
+		 "   -np1      perform stage 1 of NFS polynomial selection\n"
+		 "   -nps      perform NFS polynomial size optimization\n"
+		 "   -npr      perform NFS polynomial root optimization\n"
+		 "   -ns       perform only NFS sieving\n"
 		 "   -nc       perform only NFS combining (all phases)\n"
-		 "   -nc1 [X,Y] perform only NFS filtering. Filtering will\n"
-		 "             track ideals >= X (determined automatically\n"
-		 "             if 0 or unspecified) and will only use the \n"
-		 "             first Y relations (or all relations, if 0 \n"
-		 "             or unspecified)\n"
+		 "   -nc1      perform only NFS filtering\n"
 		 "   -nc2      perform only NFS linear algebra\n"
 		 "   -ncr      perform only NFS linear algebra, restarting\n"
 		 "             from a previous checkpoint\n"
-		 "   -nc3 [X,Y] perform only NFS square root (compute \n"
-		 "             dependency numbers X through Y, 1<=X<=Y<=64)\n",
-		 MSIEVE_DEFAULT_SAVEFILE, MSIEVE_DEFAULT_LOGFILE,
+		 "   -nc3      perform only NFS square root\n\n"
+		 " the arguments are a space-delimited list of:\n"
+		 " polynomial selection options:\n"
+#ifdef HAVE_CUDA
+		 "   sortlib=X       use GPU sorting library X\n"
+		 "   gpu_mem_mb=X    use X megabytes of GPU memory\n"
+#endif
+		 "   polydegree=X    select polynomials with degree X\n"
+		 "   min_coeff=X     minimum leading coefficient to search\n"
+		 "                   in stage 1\n"
+		 "   max_coeff=X     maximum leading coefficient to search\n"
+		 "                   in stage 1\n"
+		 "   stage1_norm=X   the maximum norm value for stage 1\n"
+		 "   stage2_norm=X   the maximum norm value for stage 2\n"
+		 "   min_evalue=X    the minimum score of saved polyomials\n"
+		 "   poly_deadline=X stop searching after X seconds (0 means\n"
+		 "                   search forever)\n"
+		 "   X,Y             same as 'min_coeff=X max_coeff=Y'\n"
+		 " line sieving options:\n"
+		 "   X,Y             handle sieve lines X to Y inclusive\n"
+		 " filtering options:\n"
+		 "   filter_mem_mb=X  try to limit filtering memory use to\n"
+		 "                    X megabytes\n"
+		 "   filter_maxrels=X limit the filtering to using the first\n"
+		 "                    X relations in the data file\n"
+		 "   filter_lpbound=X have filtering start by only looking\n"
+		 "                    at ideals of size X or larger\n"
+		 "   target_density=X attempt to produce a matrix with X\n"
+		 "                    entries per column\n"
+		 "   X,Y              same as 'filter_lpbound=X filter_maxrels=Y'\n"
+		 " linear algebra options:\n"
+		 "   skip_matbuild=1  start the linear algebra but skip building\n"
+		 "                    the matrix (assumes it is built already)\n"
+		 "   la_block=X       use a block size of X (512<=X<=65536)\n"
+		 "   la_superblock=X  use a superblock size of X\n"
+		 "   cado_filter=1    assume filtering used the CADO-NFS suite\n"
+#ifdef HAVE_MPI
+		 "   mpi_nrows=X      use a grid with X rows\n"
+		 "   mpi_ncols=X      use a grid with X columns\n"
+		 "   X,Y              same as 'mpi_nrows=X mpi_ncols=Y'\n"
+		 "                    (if unspecified, default grid is\n"
+		 "                    1 x [argument to mpirun])\n"
+#endif
+		 " square root options:\n"
+		 "   dep_first=X start with dependency X, 1<=X<=64\n"
+		 "   dep_last=Y  end with dependency Y, 1<=Y<=64\n"
+		 "   X,Y         same as 'dep_first=X dep_last=Y'\n"
+		 ,
+		 MSIEVE_DEFAULT_SAVEFILE, 
+		 MSIEVE_DEFAULT_LOGFILE,
 		 MSIEVE_DEFAULT_NFS_FBFILE);
 }
 
@@ -147,14 +192,12 @@ void factor_integer(char *buf, uint32 flags,
 		    char *nfs_fbfile_name,
 		    uint32 *seed1, uint32 *seed2,
 		    uint32 max_relations,
-		    uint64 nfs_lower,
-		    uint64 nfs_upper,
 		    enum cpu_type cpu,
 		    uint32 cache_size1,
 		    uint32 cache_size2,
 		    uint32 num_threads,
-		    uint32 mem_mb,
-		    uint32 which_gpu) {
+		    uint32 which_gpu,
+		    const char *nfs_args) {
 	
 	char *int_start, *last;
 	msieve_obj *obj;
@@ -179,9 +222,9 @@ void factor_integer(char *buf, uint32 flags,
 					savefile_name, logfile_name,
 					nfs_fbfile_name,
 					*seed1, *seed2, max_relations,
-					nfs_lower, nfs_upper, cpu,
-					cache_size1, cache_size2,
-					num_threads, mem_mb, which_gpu);
+					cpu, cache_size1, cache_size2,
+					num_threads, which_gpu,
+					nfs_args);
 	if (g_curr_factorization == NULL) {
 		printf("factoring initialization failed\n");
 		return;
@@ -265,7 +308,7 @@ void *countdown_thread(void *pminutes) {
 /*--------------------------------------------------------------------*/
 int main(int argc, char **argv) {
 
-	char buf[400];
+	char buf[500];
 	uint32 seed1, seed2;
 	char *savefile_name = NULL;
 	char *logfile_name = NULL;
@@ -276,14 +319,12 @@ int main(int argc, char **argv) {
 	int i;
 	int32 deadline = 0;
 	uint32 max_relations = 0;
-	uint64 nfs_lower = 0;
-	uint64 nfs_upper = 0;
 	enum cpu_type cpu;
 	uint32 cache_size1; 
 	uint32 cache_size2; 
 	uint32 num_threads = 0;
-	uint32 mem_mb = 0;
 	uint32 which_gpu = 0;
+	const char *nfs_args = NULL;
 		
 	get_cache_sizes(&cache_size1, &cache_size2);
 	cpu = get_cpu_type();
@@ -296,10 +337,16 @@ int main(int argc, char **argv) {
 	        printf("could not install handler on SIGTERM\n");
 	        return -1;
 	}     
-
-	if (!isatty(1)) {
-		setlinebuf(stdout);
+#ifdef HAVE_MPI
+	{
+		int32 level;
+		if ((i = MPI_Init_thread(&argc, &argv,
+				MPI_THREAD_FUNNELED, &level)) != MPI_SUCCESS) {
+			printf("error %d initializing MPI, aborting\n", i);
+			MPI_Abort(MPI_COMM_WORLD, i);
+		}
 	}
+#endif
 
 	flags = MSIEVE_FLAG_USE_LOGFILE;
 
@@ -307,7 +354,7 @@ int main(int argc, char **argv) {
 	buf[0] = 0;
 	while (i < argc) {
 		if (argv[i][0] == (char)('-')) {
-			switch(tolower(argv[i][1])) {
+			switch(argv[i][1]) {
 			case 'h':
 			case '?':
 				print_usage(argv[0]);
@@ -316,14 +363,20 @@ int main(int argc, char **argv) {
 			case 'i':
 			case 's':
 			case 'l':
-				if (i + 1 < argc && 
-				    argv[i+1][0] != '-') {
+				if (i + 1 < argc && argv[i+1][0] != '-') {
 					if (tolower(argv[i][1]) == 'i')
 						infile_name = argv[i+1];
-					else if (tolower(argv[i][1]) == 's')
+					else if (tolower(argv[i][1]) == 's') {
+						char *p;
 						savefile_name = argv[i+1];
-					else
+						if((p=strstr(savefile_name, ".gz"))) {
+							savefile_name = strdup(argv[i+1]);
+							savefile_name[p-argv[i+1]] = 0;
+						}
+					} 
+					else {
 						logfile_name = argv[i+1];
+					}
 					i += 2;
 				}
 				else {
@@ -333,15 +386,8 @@ int main(int argc, char **argv) {
 				break;
 					
 			case 'm':
-				if (argv[i][2] == 'b' &&
-				    i + 1 < argc && isdigit(argv[i+1][0])) {
-					mem_mb = atol(argv[i+1]);
-					i += 2;
-				}
-				else {
 					manual_mode = 1;
 					i++;
-				}
 				break;
 
 			case 'e':
@@ -349,63 +395,77 @@ int main(int argc, char **argv) {
 				i++;
 				break;
 
+			case 'z':
+				flags |= MSIEVE_FLAG_NFS_ONLY;
+				i++;
+				break;
+
 			case 'n':
-				if (argv[i][2] == 'p') {
-					if (argv[i][3] == '1')
-						flags |= MSIEVE_FLAG_NFS_POLY1;
-					else if (argv[i][3] == '2')
-						flags |= MSIEVE_FLAG_NFS_POLY2;
-					else
-						flags |= MSIEVE_FLAG_NFS_POLY1 |
-							 MSIEVE_FLAG_NFS_POLY2;
-				}
-				else if (argv[i][2] == 's') {
-					flags |= MSIEVE_FLAG_NFS_SIEVE;
-				}
-				else if (argv[i][2] == 'c') {
-					if (argv[i][3] == '1')
-						flags |= MSIEVE_FLAG_NFS_FILTER;
-					else if (argv[i][3] == '2')
-						flags |= MSIEVE_FLAG_NFS_LA;
-					else if (argv[i][3] == 'r')
-						flags |= 
-						     MSIEVE_FLAG_NFS_LA |
-						     MSIEVE_FLAG_NFS_LA_RESTART;
-					else if (argv[i][3] == '3')
-						flags |= MSIEVE_FLAG_NFS_SQRT;
-					else if (argv[i][3] == 0)
-						flags |= 
-						     MSIEVE_FLAG_NFS_FILTER |
-						     MSIEVE_FLAG_NFS_LA |
-						     MSIEVE_FLAG_NFS_SQRT;
-				}
-				else if (argv[i][2] == 0) {
+				switch (argv[i][2]) {
+				case 0:
 					flags |= MSIEVE_FLAG_NFS_POLY1 |
-						 MSIEVE_FLAG_NFS_POLY2 |
+						 MSIEVE_FLAG_NFS_POLYSIZE |
+						 MSIEVE_FLAG_NFS_POLYROOT |
 						 MSIEVE_FLAG_NFS_SIEVE |
 						 MSIEVE_FLAG_NFS_FILTER |
 						 MSIEVE_FLAG_NFS_LA |
 						 MSIEVE_FLAG_NFS_SQRT;
+					break;
+
+				case 'f':
+					break;
+
+				case 'p':
+					if (argv[i][3] == '1')
+						flags |= MSIEVE_FLAG_NFS_POLY1;
+					else if (argv[i][3] == 's')
+						flags |= MSIEVE_FLAG_NFS_POLYSIZE;
+					else if (argv[i][3] == 'r')
+						flags |= MSIEVE_FLAG_NFS_POLYROOT;
+					else
+						flags |= MSIEVE_FLAG_NFS_POLY1 |
+							 MSIEVE_FLAG_NFS_POLYSIZE |
+							 MSIEVE_FLAG_NFS_POLYROOT;
+					break;
+				
+				case 's':
+					flags |= MSIEVE_FLAG_NFS_SIEVE;
+					break;
+
+				case 'c':
+					switch (argv[i][3]) {
+					case 0:
+						flags |= MSIEVE_FLAG_NFS_FILTER |
+						         MSIEVE_FLAG_NFS_LA |
+						         MSIEVE_FLAG_NFS_SQRT;
+						break;
+
+					case '1':
+						flags |= MSIEVE_FLAG_NFS_FILTER;
+						break;
+
+					case 'r':
+						flags |= MSIEVE_FLAG_NFS_LA_RESTART;
+					case '2': /* fall through */
+						flags |= MSIEVE_FLAG_NFS_LA;
+						break;
+
+					case '3':
+						flags |= MSIEVE_FLAG_NFS_SQRT;
+						break;
+				}
+					break;
+
+				default:
+					print_usage(argv[0]);
+					return -1;
 				}
 
 				if (i + 1 < argc && argv[i+1][0] != '-') {
-					if (argv[i][2] == 'f') {
-						nfs_fbfile_name = argv[i+1];
-						i++;
-					}
-					else if ((argv[i][2] == 's' ||
-						  argv[i][2] == 'c' ||
-						  argv[i][2] == 'p') &&
-						  strchr(argv[i+1], ',') != 
-						  		NULL ) {
-						char *tmp;
-						nfs_lower = (uint64)strtod(
-							argv[i+1], &tmp);
-						tmp++;
-						nfs_upper = (uint64)strtod(
-							tmp, NULL);
-						i++;
-					}
+					if (argv[i][2] == 'f')
+						nfs_fbfile_name = argv[++i];
+					else
+						nfs_args = argv[++i];
 				}
 				i++;
 				break;
@@ -506,9 +566,9 @@ int main(int argc, char **argv) {
 				logfile_name, nfs_fbfile_name,
 				&seed1, &seed2,
 				max_relations, 
-				nfs_lower, nfs_upper, cpu,
-				cache_size1, cache_size2,
-				num_threads, mem_mb, which_gpu);
+				cpu, cache_size1, cache_size2,
+				num_threads, which_gpu,
+				nfs_args);
 	}
 	else if (manual_mode) {
 		while (1) {
@@ -520,9 +580,8 @@ int main(int argc, char **argv) {
 					logfile_name, nfs_fbfile_name,
 					&seed1, &seed2,
 					max_relations, 
-					nfs_lower, nfs_upper, cpu,
-					cache_size1, cache_size2,
-					num_threads, mem_mb, which_gpu);
+					cpu, cache_size1, cache_size2,
+					num_threads, which_gpu, nfs_args);
 			if (feof(stdin))
 				break;
 		}
@@ -541,14 +600,16 @@ int main(int argc, char **argv) {
 					logfile_name, nfs_fbfile_name,
 					&seed1, &seed2,
 					max_relations, 
-					nfs_lower, nfs_upper, cpu,
-					cache_size1, cache_size2,
-					num_threads, mem_mb, which_gpu);
+					cpu, cache_size1, cache_size2,
+					num_threads, which_gpu, nfs_args);
 			if (feof(infile))
 				break;
 		}
 		fclose(infile);
 	}
 
+#ifdef HAVE_MPI
+	MPI_Finalize();
+#endif
 	return 0;
 }

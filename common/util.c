@@ -88,7 +88,7 @@ get_cpu_time(void) {
 	FILETIME kernel_time = {0, 0};
 	FILETIME user_time = {0, 0};
 
-	GetProcessTimes(GetCurrentProcess(),
+	GetThreadTimes(GetCurrentThread(),
 			&create_time,
 			&exit_time,
 			&kernel_time,
@@ -99,7 +99,11 @@ get_cpu_time(void) {
 #else
 	struct rusage r_usage;
 
+	#if 0 /* use for linux 2.6.26+ */
+	getrusage(RUSAGE_THREAD, &r_usage);
+	#else
 	getrusage(RUSAGE_SELF, &r_usage);
+	#endif
 
 	return ((uint64)r_usage.ru_utime.tv_sec * 1000000 +
 	               r_usage.ru_utime.tv_usec) / 1000000.0;
@@ -122,6 +126,26 @@ void set_idle_priority(void) {
 #define DEFAULT_L1_CACHE_SIZE (32 * 1024)
 #define DEFAULT_L2_CACHE_SIZE (512 * 1024)
 
+typedef union {
+	uint32 data;
+
+	struct {
+		uint32 cache_type : 5;
+		uint32 cache_level : 3;
+		uint32 i_dont_care : 24;
+	} s;
+} cache_type_t;
+
+typedef union {
+	uint32 data;
+
+	struct {
+		uint32 line_size : 12;
+		uint32 num_lines : 10;
+		uint32 ways : 10;
+	} s;
+} cache_size_t;
+
 /* macro to execute the x86 CPUID instruction. Note that
    this is more verbose than it needs to be; Intel Macs reserve
    the EBX or RBX register for the PIC base address, and so
@@ -137,6 +161,14 @@ void set_idle_priority(void) {
 			"movl %%esi, %%ebx   \n\t"		\
 			:"=a"(a), "=m"(b), "=c"(c), "=d"(d) 	\
 			:"0"(code) : "%esi")
+	#define CPUID2(code1, code2, a, b, c, d) 			\
+		ASM_G volatile(					\
+			"movl %%ebx, %%esi   \n\t"		\
+			"cpuid               \n\t"		\
+			"movl %%ebx, %1      \n\t"		\
+			"movl %%esi, %%ebx   \n\t"		\
+			:"=a"(a), "=m"(b), "=c"(c), "=d"(d) 	\
+			:"0"(code1), "2"(code2) : "%esi")
 
 #elif defined(GCC_ASM64X)
 	#define HAS_CPUID
@@ -148,17 +180,33 @@ void set_idle_priority(void) {
 			"movq %%rsi, %%rbx   \n\t"		\
 			:"=a"(a), "=m"(b), "=c"(c), "=d"(d) 	\
 			:"0"(code) : "%rsi")
+	#define CPUID2(code1, code2, a, b, c, d)		\
+		ASM_G volatile(					\
+			"movq %%rbx, %%rsi   \n\t"		\
+			"cpuid               \n\t"		\
+			"movl %%ebx, %1      \n\t"		\
+			"movq %%rsi, %%rbx   \n\t"		\
+			:"=a"(a), "=m"(b), "=c"(c), "=d"(d) 	\
+			:"0"(code1), "2"(code2) : "%rsi")
 
 #elif defined(_MSC_VER)
 	#include <intrin.h>
 	#define HAS_CPUID
 	#define CPUID(code, a, b, c, d)	\
-	{	uint32 _z[4]; 		\
-		__cpuid(_z, code); 	\
-		a = _z[0];    		\
-		b = _z[1]; 		\
-		c = _z[2]; 		\
-		d = _z[3];		\
+	{	uint32 _z[4]; \
+		__cpuid(_z, code); \
+		a = _z[0]; \
+		b = _z[1]; \
+		c = _z[2]; \
+		d = _z[3]; \
+	}
+	#define CPUID2(code1, code2, a, b, c, d) \
+	{	uint32 _z[4]; \
+		__cpuidex(_z, code1, code2); \
+		a = _z[0]; \
+		b = _z[1]; \
+		c = _z[2]; \
+		d = _z[3]; \
 	}
 #endif
 
@@ -200,12 +248,40 @@ void get_cache_sizes(uint32 *level1_size_out,
 		uint32 j1 = 0;
 		uint32 j2 = 0;
 
-		/* handle newer Intel (L2 cache only) */
+		/* handle newer Intel */
+
+		if (a >= 4) {
+			for (i = 0; i < 100; i++) {
+				uint32 num_sets;
+				cache_type_t type;
+				cache_size_t size;
+
+				CPUID2(4, i, type.data, size.data, num_sets, d);
+
+				/* must be data cache or unified cache */
+
+				if (type.s.cache_type == 0)
+					break;
+				else if (type.s.cache_type != 1 &&
+					 type.s.cache_type != 3)
+					continue;
+
+				d = (size.s.line_size + 1) *
+				    (size.s.num_lines + 1) *
+				    (size.s.ways + 1) *
+				    (num_sets + 1);
+
+				if (type.s.cache_level == 1)
+					j1 = MAX(j1, d);
+				else
+					j2 = MAX(j2, d);
+			}
+		}
 
 		CPUID(0x80000000, max_special, b, c, d);
 		if (max_special >= 0x80000006) {
 			CPUID(0x80000006, a, b, c, d);
-			j2 = 1024 * (c >> 16);
+			j2 = MAX(j2, 1024 * (c >> 16));
 		}
 
 		/* handle older Intel, possibly overriding the above */
@@ -294,9 +370,14 @@ void get_cache_sizes(uint32 *level1_size_out,
 			case 0xe4:
 				j2 = MAX(j2, 8*1024*1024); break;
 			case 0x4c:
+			case 0xea:
 				j2 = MAX(j2, 12*1024*1024); break;
 			case 0x4d:
 				j2 = MAX(j2, 16*1024*1024); break;
+			case 0xeb:
+				j2 = MAX(j2, 18*1024*1024); break;
+			case 0xec:
+				j2 = MAX(j2, 24*1024*1024); break;
 			}
 		}
 		if (j1 > 0)
@@ -396,22 +477,28 @@ enum cpu_type get_cpu_type(void) {
 uint64 get_file_size(char *name) {
 
 #if defined(WIN32) || defined(_WIN64)
-	WIN32_FILE_ATTRIBUTE_DATA tmp;
+	struct _stati64 tmp;
 
-	if (GetFileAttributesEx((LPCTSTR)name, 
-			GetFileExInfoStandard, &tmp) == 0)
-		return 0;
-
-	return (uint64)tmp.nFileSizeHigh << 32 | tmp.nFileSizeLow;
-
+	if (_stati64(name, &tmp) != 0) {
+		char name_gz[256];
+		sprintf(name_gz, "%s.gz", name);
+		if (_stati64(name_gz, &tmp) != 0) 
+			return 0;
+		return (tmp.st_size / 11) * 20;
+	}
 #else
 	struct stat tmp;
 
-	if (stat(name, &tmp) != 0)
-		return 0;
+	if (stat(name, &tmp) != 0) {
+		char name_gz[256];
+		sprintf(name_gz, "%s.gz", name);
+		if (stat(name_gz, &tmp) != 0) 
+			return 0;
+		return (tmp.st_size / 11) * 20;
+	}
+#endif
 
 	return tmp.st_size;
-#endif
 }
 
 /*--------------------------------------------------------------------*/
@@ -445,4 +532,52 @@ uint64 get_ram_size(void) {
 
 	return 0;
 #endif
+}
+
+/*--------------------------------------------------------------------*/
+libhandle_t load_dynamic_lib(const char *libname)
+{
+#if defined(WIN32) || defined(_WIN64)
+	HMODULE h = LoadLibraryA((LPCSTR)libname);
+
+	if (h == NULL)
+		printf("cannot load library '%s', error %u\n", 
+				libname, (uint32)GetLastError());
+#else
+	void * h = dlopen(libname, RTLD_LAZY);
+
+	if (h == NULL)
+		printf("cannot load library '%s': %s\n", 
+				libname, dlerror());
+#endif
+	return h;
+}
+
+/*--------------------------------------------------------------------*/
+void unload_dynamic_lib(libhandle_t h)
+{
+#if defined(WIN32) || defined(_WIN64)
+	FreeLibrary(h);
+#else
+	dlclose(h);
+#endif
+}
+
+/*--------------------------------------------------------------------*/
+void * get_lib_symbol(libhandle_t h, const char *symbol_name)
+{
+#if defined(WIN32) || defined(_WIN64)
+	void *s = GetProcAddress(h, (LPCSTR)symbol_name);
+
+	if (s == NULL)
+		printf("cannot load symbol '%s', error %u\n", 
+				symbol_name, (uint32)GetLastError());
+#else
+	void * s = dlsym(h, symbol_name);
+
+	if (s == NULL)
+		printf("cannot load symbol '%s': %s\n", 
+				symbol_name, dlerror());
+#endif
+	return s;
 }

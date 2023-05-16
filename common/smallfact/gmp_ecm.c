@@ -67,7 +67,7 @@ typedef struct {
 #define NUM_TABLE_ENTRIES (sizeof(work_table) / sizeof(work_t))
 
 #define NUM_PM1_TRIALS 1
-#define NUM_PP1_TRIALS 3
+#define NUM_PP1_TRIALS 1
 #define NUM_NON_ECM (NUM_PM1_TRIALS + NUM_PP1_TRIALS)
 
 /* the number of times we can tolerate any algorithm
@@ -212,7 +212,7 @@ uint32 ecm_pp1_pm1(msieve_obj *obj, mp_t *n, mp_t *reduced_n,
 	mpz_init(gmp_factor);
 	for (i = 0; i < NUM_NON_ECM; i++) {
 		pm1_pp1_t *tmp = non_ecm_vals + i;
-		tmp->stage_1_done = 1.0;
+		tmp->stage_1_done = 1.001;
 		mpz_init_set_ui(tmp->start_val, (unsigned long)0);
 	}
 	ecm_init(params);
