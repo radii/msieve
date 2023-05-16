@@ -17,7 +17,7 @@ $Id$
 #define ROOT_BUF_SIZE 200
 
 /*------------------------------------------------------------------*/
-static double get_root_freq(mp_poly_t *poly, 
+static double get_root_freq(mpz_poly_t *poly, 
 			uint32 initial_root, uint32 p) {
 	
 	/* find the number of roots of poly mod p^k for
@@ -49,12 +49,8 @@ static double get_root_freq(mp_poly_t *poly,
 	/* compute poly mod power */
 
 	degree = poly->degree;
-	for (i = 0; i <= degree; i++) {
-		j = mp_mod_1(&(poly->coeff[i].num), power);
-		if (j > 0 && poly->coeff[i].sign == NEGATIVE)
-			j = power - j;
-		coeffs[i] = j;
-	}
+	for (i = 0; i <= degree; i++)
+		coeffs[i] = mpz_fdiv_ui(poly->coeff[i], power);
 	while (degree > 0 && coeffs[degree] == 0)
 		degree--;
 
@@ -116,7 +112,7 @@ static double get_root_freq(mp_poly_t *poly,
 /*------------------------------------------------------------------*/
 #define SMALL_PRIME_BOUND 100
 
-uint32 analyze_poly_roots(mp_poly_t *poly, uint32 prime_bound,
+uint32 analyze_poly_roots(mpz_poly_t *poly, uint32 prime_bound,
 				double *result) {
 
 	/* analyze a polynomial for root properties (i.e.
@@ -125,24 +121,29 @@ uint32 analyze_poly_roots(mp_poly_t *poly, uint32 prime_bound,
 	uint32 i, j;
 	double root_score;
 	uint32 prime;
-	mp_poly_t rev_poly;
+	mpz_poly_t rev_poly;
 
-	/* all linear polynomials have the same root properties */
+	/* all linear polynomials have the same root properties;
+	   note that we still must treat them as generating 
+	   homogeneous polynomial values and *not* as random
+	   numbers. A linear NFS polynomial will always have one
+	   root modulo each prime p, leading to a fixed but
+	   nonzero alpha value */
 
 	if (poly->degree == 1) {
-		*result = 0.0;
+		*result = 0.569959993064325;
 		return 0;
 	}
 
 	/* handling projective roots requires a reversed version
 	   of poly (we find roots of poly(1/x) instead of poly(x)) */
 
-	memset(&rev_poly, 0, sizeof(mp_poly_t));
+	mpz_poly_init(&rev_poly);
 	j = poly->degree;
 	for (i = 0; i <= j; i++) {
-		signed_mp_copy(poly->coeff + j - i, rev_poly.coeff + i);
+		mpz_set(rev_poly.coeff[i], poly->coeff[j-i]);
 	}
-	while (j && mp_is_zero(&rev_poly.coeff[j].num)) {
+	while (j && mpz_cmp_ui(rev_poly.coeff[j], 0) == 0) {
 		j--;
 	}
 	rev_poly.degree = j;
@@ -253,11 +254,12 @@ uint32 analyze_poly_roots(mp_poly_t *poly, uint32 prime_bound,
 	}
 
 	*result = root_score;
+	mpz_poly_free(&rev_poly);
 	return 0;
 }
 
 /*------------------------------------------------------------------*/
-uint32 analyze_poly_roots_projective(mp_poly_t *poly, 
+uint32 analyze_poly_roots_projective(mpz_poly_t *poly, 
 				uint32 prime_bound,
 				double *result) {
 
@@ -267,17 +269,17 @@ uint32 analyze_poly_roots_projective(mp_poly_t *poly,
 	uint32 i, j;
 	double root_score;
 	uint32 prime;
-	mp_poly_t rev_poly;
+	mpz_poly_t rev_poly;
 
 	/* handling projective roots requires a reversed version
 	   of poly (we find roots of poly(1/x) instead of poly(x)) */
 
-	memset(&rev_poly, 0, sizeof(mp_poly_t));
+	mpz_poly_init(&rev_poly);
 	j = poly->degree;
 	for (i = 0; i <= j; i++) {
-		signed_mp_copy(poly->coeff + j - i, rev_poly.coeff + i);
+		mpz_set(rev_poly.coeff[i], poly->coeff[j-i]);
 	}
-	while (j && mp_is_zero(&rev_poly.coeff[j].num)) {
+	while (j && mpz_cmp_ui(rev_poly.coeff[j], 0) == 0) {
 		j--;
 	}
 	rev_poly.degree = j;
@@ -291,12 +293,13 @@ uint32 analyze_poly_roots_projective(mp_poly_t *poly,
 
 		/* only projective roots contribute */
 
-		if (mp_mod_1(&poly->coeff[poly->degree].num, prime) == 0) {
+		if (mpz_fdiv_ui(poly->coeff[poly->degree], prime) == 0) {
 			root_score -= log((double)prime) *
 					get_root_freq(&rev_poly, 0, prime);
 		}
 	}
 
 	*result = root_score;
+	mpz_poly_free(&rev_poly);
 	return 0;
 }

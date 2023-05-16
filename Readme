@@ -1,6 +1,12 @@
-MSIEVE: A Library for Factoring Large Integers
-Jason Papadopoulos
+#MSIEVE: A Library for Factoring Large Integers by Jason Papadopoulos
 
+This is a fork of the [original libary](https://github.com/radii/msieve) 
+which is no longer maintained and and has gone state due to Visual Studio 2008
+dependencies, old GMP dependencies and out of support Cuda requirements.
+
+The intent of this repo is to update to the latest version of Visual Studio,
+GMP, and Cuda and potentially build a CI/CD pipeline to allow developers to
+pull and build the code without the headaches of the original project.
 
 Introduction
 ------------
@@ -8,7 +14,7 @@ Introduction
 Msieve is the result of my efforts to understand and optimize how integers 
 are factored using the most powerful modern algorithms.
 
-This documentation corresponds to version 1.46 of the Msieve library. Do not
+This documentation corresponds to version 1.53 of the Msieve library. Do not
 expect to become a factoring expert just by reading it. I've included a
 relatively complete list of references that you can and should look up if
 you want to treat the code as more than a black box to solve your factoring
@@ -43,39 +49,39 @@ to the quadratic sieve implementation is contained in Readme.qs, while the
 number field sieve variant is described in Readme.nfs
 
 The maximum size of numbers that can be given to the library is hardwired
-at compile time. Currently the code can handle numbers up to 275 digits;
+at compile time. Currently the code can handle numbers up to ~310 digits;
 however, you should bear in mind that I don't expect the library to be able
 to complete a factorization larger than about 120 digits by itself. 
 The larger size inputs can only really be handled by the number field
-sieve, and only part of the NFS code (the final part) is efficient and
-robust enough to deal with problems that large.
+sieve, and the NFS sieving code is not efficient or robust enough to deal 
+with problems larger than that. Msieve *can* complete very large NFS 
+factorizations as long as you use the NFS sieving tools from other open-
+source packages.
 
 Msieve was written with several goals in mind:
 
-	- To be as fast as possible. I claim (without proof) that for 
-	  completely factoring general inputs between 40 and 100 digits 
-	  in size, Msieve is faster than any other code implementing any 
-	  other algorithm. I realize that's a tall order, and that I'll 
-	  probably have to eat those words, but a *lot* of effort has gone 
-	  into making Msieve fast.
+	- To be fast. I originally started this project in 2003 because 
+	  I was dismayed at the lack of progress in high-performance 
+	  implementations of the quadratic sieve. By 2006 msieve was the
+	  fastest quadratic sieve available anywhere, by a wide margin.
+	  Libraries like YAFU have since pushed the performance envelope
+	  for the quadratic sieve much harder, and the focus in msieve
+	  has shifted to the number field sieve.
 
-	- To be as portable as possible. The code is written in C and is 
-	  completely self contained. It has its own basic multiple precision 
-	  library (which can be used in other applications) and is written 
-	  in as machine-independent a manner as possible. I've verified that 
-	  the source code compiles and runs correctly on 32- or 64-bit Intel 
-	  x86, 32- and 64-bit PowerPC, and 64-bit Alpha platforms. It's 
-	  reported to work in 32-bit mode on the RS6000. It works in Windows, 
-	  Linux (several flavors), Mac OS X, and AIX. Pretty much the only 
-	  requirement for building the code is that your compiler have a 
-	  native 64-bit data type.
+	- To be complete and comprehensive. I've tried to make as many
+	  parts of the library state-of-the-art as possible. Parts of
+	  the NFS code have turned into research platforms in their own
+	  right.
 
 	- To be simple to use. The only input is the integer to be factored.
-	  Everything else happens automatically.
+	  Everything else happens automatically, though a certain amount
+	  of user control is possible if you know what you're doing.
 
 	- To be free (as in beer). The entire code base is released into the
 	  public domain. This is hobby stuff for me, and the more it's used
-	  the better.
+	  the better. I have made every effort to avoid using external
+	  code that is licensed under the GPL, opting instead for less
+	  restrictive licenses.
 
 If you choose to use Msieve, please let me know how it goes. I welcome bug
 reports, suggestions, optimizations, ports to new platforms, complaints,
@@ -85,12 +91,14 @@ boasts, whatever.
 Getting Msieve
 --------------
 
-The latest version of Msieve can be found on my web page, www.boo.net/~jasonp.
-A precompiled Windows binary using the latest source (optimized for the AMD 
-athlon processor) is also available there.
+My web page (www.boo.net/~jasonp) used to be the main distribution venue
+for Msieve source and binaries. As the codebase has grown and more people
+have voluneered to help with it, it became less and less convenient to
+base things there, and so Msieve development and binary releases are now
+available on Sourceforge (www.msieve.sourceforge.net). 
 
 The source distribution comes with a unix makefile you can use if you want 
-to build msieve from source. If you have Microsoft Visual Studio 2007,
+to build msieve from source. If you have Microsoft Visual Studio 2010,
 Brian Gladman has kindly provided a set of build files that will generate
 Windows binaries.
 
@@ -150,7 +158,7 @@ same time. For a 100-digit quadratic sieve factorization, most of the time
 Msieve needs 55-65MB of memory, with the last stage of the factorization 
 needing 100-130MB. The final part of the number field sieve can use up 
 incredible amounts of memory; for example, completing the factorization of
-a 512-bit number like an RSA key needs 2-3GB of memory.
+a 512-bit number like an RSA key needs about 2GB of memory.
 
 
 Frequently Asked Questions
@@ -161,16 +169,32 @@ Q. I want to factor much bigger numbers. Can't Msieve solve problems
 Q. I'm trying to break my ex-girlfriend's RSA key with Msieve, and it's
    not working. What's wrong?
 A. The quadratic sieve really is not appropriate for factoring numbers
-   over ~110 digits in size, and the number field sieve implementation
-   isn't even close to done. On a fast modern CPU, a 110-digit factor-
+   over ~110 digits in size. On a fast modern CPU, a 110-digit QS factor-
    ization takes nearly 120 hours for Msieve, and the time increases
    steeply beyond that. If you have really big factorization needs, there
-   are essentially only two packages that you can use: GGNFS and the NFS
-   implementation by Chris Card. Both are hosted on SourceForge (see
-   www.sf.net/projects/ggnfs and www.sf.net/projects/factor-by-gnfs).
-   For the largest size problems, you have to use the number field sieve;
-   in fact, you have to use GGNFS for the first part of the factorization
-   and then msieve for the last part. 
+   are several packages that you can use to make up for the low-performance
+   parts of Msieve's NFS code:
+
+   	- CADO-NFS (cado-nfs.gforge.inria.fr) is a complete NFS suite
+	  that includes state-of-the-art (or nearly so) implementations 
+	  of all phases of the Number Field Sieve. The sieving tools in 
+	  CADO-NFS produce output compatible with GGNFS and Msieve, so it's
+	  up to you which package you want to use for a given phase of NFS.
+	  In addition, CADO-NFS is under constant very active development,
+	  and in my opinion represents the future of the high-performance
+	  NFS community.
+
+	- GGNFS (www.sf.net/projects/ggnfs) has state-of-the-art tools
+          for NFS sieving and NFS polynomial selection. Using the latter 
+	  is optional, since Msieve actually has very good NFS polynomial
+	  selection code, but the former is an absolute must if you 
+	  are factoring numbers larger than about 95 digits.
+
+	- Factor-by-GNFS (www.sf.net/projects/factor-by-gnfs) is an older,
+	  separate package that's not really compatible
+
+   See later for a list of web resources that give an idea of the largest
+   actual factorizations that Msieve has performed.
 
 Q. Can you make Msieve network aware? Can you make it a client-server thingy?
    Can I use the internet to factor numbers?
@@ -181,6 +205,15 @@ A. The demo application for the Msieve library is just that, a demo. I don't
    and I'll help as much as I can. The demo is good enough for people with
    a few machines on a small private LAN, and this is ~100% of the user
    community right now.
+
+Q. Where's all the documentation on how your library actually works?
+A. There really isn't any. Msieve is a spare-time project, and I have so
+   little spare time that if I tried to produce formal documents on the
+   internals of the library then I'd never have time to actually work on
+   those internals. The parts of the code that are relatively stable have
+   extensive in-line documentation, but whatever I happen to be working
+   on currently is pretty much comment-free. If you have specific questions
+   about how a specific part of the code works, just ask...
 
 Q. How can I modify Msieve to work on a cluster?
 A. Distributed sieving is so easy that you don't need high-performance
@@ -202,24 +235,26 @@ A. As described above, the really intensive part of the QS and NFS
 Q. Why put Msieve into the public domain and not make it GPL?
    Wouldn't GPL-ed code protect your work and encourage contributions?
 A. Msieve is a learning exercise, not a collaborative effort per se. 
-   I don't expect other developers to help, though several have and it's
+   I don't expect other developers to help, though many have and it's
    appreciated. As for protection, there's only one way to generate income 
    from this code: use it to win factoring contests. While the number field
    sieve can win factoring contests, you personally do not have the resources
-   to do so. Even if you did, this code just can't manage factorizations
-   that big. There's no reason to put licensing restrictions on this code.
+   to do so. So there's no reason to put licensing restrictions on this code.
 
 Q. Your multiple precision library sucks. Why didn't you use GMP?
 A. I know it sucks. Using GMP would have left MSVC users in the cold,
    and even building GMP is a major exercise that requires essentially a
-   complete and up-to-date unix environment. The latest GMP did not even build
-   on several (old, buggy or experimental) platforms that Msieve ran happily 
-   on. The nice thing about sieve-based factoring is that for big 
-   factorizations the actual multiple precision math takes about 1% of the 
-   total runtime. Since bignum performance isn't an issue but portability 
-   is, I decided against GMP. Latter-day versions of Msieve use a much-
-   improved multiple-precision library that probably manages most of the 
-   speed gains possible if GMP was used.
+   complete and up-to-date unix environment. The nice thing about sieve-
+   based factoring is that for big factorizations the actual multiple
+   precision math takes about 1% of the total runtime, so it actually 
+   doesn't matter all that much which low-level multiple precision 
+   library is used.
+
+   Actually, the parts of the code that use my own library are pretty old,
+   and new development does require GMP. This became necessary after 
+   modifications to the NFS code started to require arithmetic on very
+   large numbers, so GMP is now a requirement. One of my eventual goals
+   is to phase out (most of) my own bignum library in favor of GMP.
 
 Credits
 -------
@@ -234,8 +269,15 @@ I've frantically tried to keep up with them. If you try to use NFS and
 it just works, even when other programs fail, you primarily have these 
 guys to thank.
 
+Jayson King has donated huge amounts of time into seriously improving NFS
+polynomial selection.
+
 Jeff Gilchrist has done a lot of testing, feedback on 64-bit windows,
 and general documentation writing
+
+Brian Gladman contributed an expression evaluator, the Visual Studio build
+system, a lot of help with the numerical integration used in the NFS
+polynomial selector, and various portability fixes.
 
 Tom Cage (RIP) found lots of bugs and ground through hundreds of 
 factorizations with early versions of Msieve.
@@ -261,16 +303,41 @@ the NFS square root.
 
 Falk Hueffner and Francois Glineur found several nasty bugs in earlier versions.
 
-Brian Gladman contributed an expression evaluator, the Visual Studio build
-system, a lot of help with the numerical integration used in the NFS
-polynomial selector, and various portability fixes.
-
 J6M did the AIX port.
 
 Larry Soule did a lot of work incorporating GMP into the code, which I
 regrettably don't expect to use
 
 I know I left out people, but that's my fault and not theirs.
+
+
+Internet Factorization Resources
+--------------------------------
+
+There are lots of places on the internet that go into the details of
+factorization algorithms, but a few are very handy if you have large
+problems to solve.
+
+The best place to go for getting started with factorization is the Factoring
+subforum of www.mersenneforum.org; there is a thriving community there of
+people working on factoring, including quite a few professionals.
+
+A nice list of factoring software:
+http://mersenneforum.org/showthread.php?t=3255
+
+A nice list of internet-coordinated projects that factor numbers of
+all types, primarily of mathematical interest:
+http://mersenneforum.org/showthread.php?t=9611
+
+Jeff's factorization program guide is required reading if you want to
+use Msieve for large-size problems:
+http://gilchrist.ca/jeff/factoring/nfs_beginners_guide.html
+
+NFS@Home is a distributed computing project run by Greg Childers,
+that is tackling the largest public factoring projects. RSALS is
+another distributed project that handles somewhat smaller numbers:
+http://escatter11.fullerton.edu/nfs/
+http://boinc.unsads.com/rsals/
 
 
 Quadratic Sieve References
@@ -360,6 +427,9 @@ Sieve' is nice for historical interest
 reading for anybody who thinks it would be a fun and easy project to
 break a commercial RSA key.
 
+'On the Security of 1024-bit RSA and 160-bit Elliptic Curve
+Cryptography' is a 2010-era update to the previous paper
+
 Brian Murphy's thesis, 'Polynomial Selection for the Number Field
 Sieve Algorithm', is simply awesome. It goes into excruciating
 detail on a very undocumented subject.
@@ -367,6 +437,14 @@ detail on a very undocumented subject.
 Thorsten Kleinjung's 'On Polynomial Selection for the General Number 
 Field Sieve' explains in detail a number of improvements to 
 NFS polynomial selection developed since Murphy's thesis.
+
+Kleinjung's latest algorithmic ideas on NFS polynomial selection 
+are documented at the 2008 CADO Factoring Workshop:
+http://cado.gforge.inria.fr/workshop/abstracts.html
+
+My talk 'High-Performance Optimization of GNFS Polynomials' gives
+some details of my own research on NFS polynomial selection:
+http://event.cwi.nl/wcnt2011/program.html
 
 Jason Gower's 'Rotations and Translations of Number Field Sieve
 Polynomials' describes some very promising improvements to the
@@ -393,12 +471,18 @@ Bob Silverman's 'Optimal Parametrization of SNFS' has lots of detail on
 parameter selection and implementation details for building a line
 siever
 
+Ekkelkamp's 'On the amount of Sieving in Factorization Methods' 
+goes into a lot of detail on simulating NFS postprocessing
+
 Cavallar's 'Strategies in Filtering in the Number Field Sieve'
 is really the only documentation on NFS postprocessing
 
+My talk 'A Self-Tuning Filtering Implementation for the Number
+Field Sieve' describes research that went into Msieve's filtering code.
+
 Denny and Muller's extended abstract 'On the Reduction of Composed
 Relations from the Number Field Sieve' is an early attempt at NFS
-filtering that's been completely forgotten by now, but their techniques
+filtering that's been almost forgotten by now, but their techniques
 can work on top of ordinary NFS filtering
 
 Montgomery's 'Square Roots of Products of Algebraic Numbers' describes

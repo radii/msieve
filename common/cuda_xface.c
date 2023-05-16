@@ -111,4 +111,106 @@ gpu_init(gpu_config_t *config)
 	}
 }
 
+/*------------------------------------------------------------------------*/
+void gpu_launch_init(CUmodule gpu_module, const char *func_name,
+			const gpu_arg_type_list_t *arg_desc,
+			gpu_launch_t *launch)
+{
+	uint32 i;
+	int32 j;
+
+	memset(launch, 0, sizeof(gpu_launch_t));
+
+	CUDA_TRY(cuModuleGetFunction(&launch->kernel_func,
+			gpu_module, func_name))
+
+	CUDA_TRY(cuFuncGetAttribute(&launch->threads_per_block,
+			CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
+			launch->kernel_func))
+
+	launch->arg_desc = *arg_desc;
+
+	for (i = 0, j = 0; i < arg_desc->num_args; i++) {
+
+		switch(arg_desc->arg_type[i]) {
+		case GPU_ARG_PTR: 
+			CUDA_ALIGN_PARAM(j, __alignof(void *));
+			launch->arg_offsets[i] = j;
+			j += sizeof(void *);
+			break;
+
+		case GPU_ARG_INT32: 
+		case GPU_ARG_UINT32: 
+			CUDA_ALIGN_PARAM(j, __alignof(uint32));
+			launch->arg_offsets[i] = j;
+			j += sizeof(uint32);
+			break;
+
+		case GPU_ARG_INT64:
+		case GPU_ARG_UINT64:
+			CUDA_ALIGN_PARAM(j, __alignof(uint64));
+			launch->arg_offsets[i] = j;
+			j += sizeof(uint64);
+			break;
+
+		default:
+			printf("unknown GPU argument type\n");
+			exit(-1);
+		}
+	}
+
+	CUDA_TRY(cuParamSetSize(launch->kernel_func, j))
+}
+
+/*------------------------------------------------------------------------*/
+void gpu_launch_set(gpu_launch_t *launch, gpu_arg_t *args)
+{
+	uint32 i;
+
+	for (i = 0; i < launch->arg_desc.num_args; i++) {
+
+		switch(launch->arg_desc.arg_type[i]) {
+
+		case GPU_ARG_PTR: 
+		{
+			void *gpu_ptr = (void *)(size_t)(args[i].ptr_arg);
+			CUDA_TRY(cuParamSetv(launch->kernel_func,
+					launch->arg_offsets[i],
+					&gpu_ptr, sizeof(gpu_ptr)))
+			break;
+		}
+
+		case GPU_ARG_INT64:
+			CUDA_TRY(cuParamSetv(launch->kernel_func,
+					launch->arg_offsets[i],
+					&args[i].int64_arg, 
+					sizeof(args[i].int64_arg)))
+			break;
+
+		case GPU_ARG_UINT64:
+			CUDA_TRY(cuParamSetv(launch->kernel_func,
+					launch->arg_offsets[i],
+					&args[i].uint64_arg, 
+					sizeof(args[i].uint64_arg)))
+			break;
+
+		case GPU_ARG_INT32: 
+			CUDA_TRY(cuParamSeti(launch->kernel_func,
+					launch->arg_offsets[i],
+					args[i].int32_arg))
+			break;
+
+		case GPU_ARG_UINT32: 
+			CUDA_TRY(cuParamSeti(launch->kernel_func,
+					launch->arg_offsets[i],
+					(int)args[i].uint32_arg))
+			break;
+
+		default:
+			printf("unknown GPU argument type\n");
+			exit(-1);
+		}
+	}
+}
+
 #endif

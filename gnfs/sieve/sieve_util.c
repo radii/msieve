@@ -70,16 +70,15 @@ uint32 fplog(uint32 k, double log_of_base) {
 }
 
 /*------------------------------------------------------------------*/
-int32 fplog_eval_poly(int64 a, uint32 b, 
-			mp_poly_t *f, double log_base,
+int32 fplog_eval_poly(int64 a, uint32 b, mpz_t scratch,
+			mpz_poly_t *f, double log_base,
 			uint32 *bits) { 
 
 	/* Compute f(a,b) and take its logarithm in the
 	   current base of sieve logarithms, rounding down */
 
-	signed_mp_t norm;
-	eval_poly(&norm, a, b, f);
-	*bits = mp_bits(&norm.num);
+	eval_poly(scratch, a, b, f);
+	*bits = mpz_sizeinbase(scratch, 2);
 	return (uint32)((*bits) * M_LN2 / log_base);
 }
 
@@ -89,7 +88,7 @@ int32 fplog_eval_poly(int64 a, uint32 b,
 
 #define LOG_TARGET 220
 
-double get_log_base(mp_poly_t *poly, 
+double get_log_base(mpz_poly_t *poly, 
 			int64 a0, int64 a1, uint32 b) { 
 
 	/* Decide on a base for the logs of one polynomial. 
@@ -107,30 +106,34 @@ double get_log_base(mp_poly_t *poly,
 	   the rational poly */
 
 	double t;
-	signed_mp_t tmp1, tmp2;
+	mpz_t tmp1, tmp2;
 
-	eval_poly(&tmp1, a0, b, poly);
-	eval_poly(&tmp2, a1, b, poly);
+	mpz_init(tmp1);
+	mpz_init(tmp2);
+	eval_poly(tmp1, a0, b, poly);
+	eval_poly(tmp2, a1, b, poly);
 
-	if (mp_cmp(&tmp2.num, &tmp1.num) > 0) 
-		t = mp_bits(&tmp1.num);
+	if (mpz_cmp(tmp2, tmp1) > 0) 
+		t = mpz_sizeinbase(tmp1, 2);
 	else
-		t = mp_bits(&tmp2.num);
+		t = mpz_sizeinbase(tmp2, 2);
 
 	/* the base to use is a number x such that 
 	   log_x (2^t) = LOG_TARGET. After much re-
 	   arranging, x amounts to: */
 
+	mpz_clear(tmp1);
+	mpz_clear(tmp2);
 	return pow(2.0, t / LOG_TARGET);
 }
 
 /*------------------------------------------------------------------*/
-uint32 read_last_line(msieve_obj *obj, mp_t *n) {
+uint32 read_last_line(msieve_obj *obj, mpz_t n) {
 
 	uint32 last_line = 0;
 	char buf[LINE_BUF_SIZE];
 	FILE *linefile;
-	mp_t read_n;
+	mpz_t read_n;
 
 	sprintf(buf, "%s.line", obj->savefile.name);
 	linefile = fopen(buf, "r");
@@ -138,20 +141,21 @@ uint32 read_last_line(msieve_obj *obj, mp_t *n) {
 		return last_line;
 
 	fgets(buf, (int)sizeof(buf), linefile);
-	mp_clear(&read_n);
+	mpz_init_set_ui(read_n, 0);
 	if (buf[0] == 'N')
-		mp_str2mp(buf + 2, &read_n, 10);
-	if (mp_cmp(n, &read_n) == 0) {
+		gmp_sscanf(buf + 2, "%Zd", read_n);
+	if (mpz_cmp(n, read_n) == 0) {
 		fgets(buf, (int)sizeof(buf), linefile);
 		last_line = atoi(buf);
 	}
 
 	fclose(linefile);
+	mpz_clear(read_n);
 	return last_line;
 }
 
 /*------------------------------------------------------------------*/
-void write_last_line(msieve_obj *obj, mp_t *n, uint32 b) {
+void write_last_line(msieve_obj *obj, mpz_t n, uint32 b) {
 
 	char buf[LINE_BUF_SIZE];
 	FILE *linefile;
@@ -163,7 +167,7 @@ void write_last_line(msieve_obj *obj, mp_t *n, uint32 b) {
 		exit(-1);
 	}
 
-	fprintf(linefile, "N %s\n", mp_sprintf(n, 10, obj->mp_sprintf_buf));
+	gmp_fprintf(linefile, "N %Zd\n", n);
 	fprintf(linefile, "%u\n", b);
 	fclose(linefile);
 }

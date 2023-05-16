@@ -40,44 +40,50 @@ static sieve_param_t prebuilt_params[] = {
 
 static void get_sieve_params(uint32 bits, sieve_param_t *params);
 
-static uint32 nfs_init_savefile(msieve_obj *obj, mp_t *n);
+static uint32 nfs_init_savefile(msieve_obj *obj, mpz_t n);
 
 /*--------------------------------------------------------------------*/
-uint32 factor_gnfs(msieve_obj *obj, mp_t *n,
+uint32 factor_gnfs(msieve_obj *obj, mp_t *input_n,
 			factor_list_t *factor_list) {
 
 	int32 status;
 	uint32 bits;
 	sieve_param_t params;
-	mp_poly_t rat_poly;
-	mp_poly_t alg_poly;
+	mpz_t n;
+	mpz_poly_t rat_poly;
+	mpz_poly_t alg_poly;
 	uint32 relations_found = 0;
 	uint32 max_relations = 0;
 	uint32 factor_found = 0;
 
+	mpz_init(n);
+	mp2gmp(input_n, n);
+
 	/* Calculate the factor base bound */
 
-	bits = mp_bits(n);
+	bits = mpz_sizeinbase(n, 2);
 	get_sieve_params(bits, &params);
 
+	gmp_sprintf(obj->mp_sprintf_buf, "%Zd", n);
 	logprintf(obj, "commencing number field sieve (%d-digit input)\n",
-			strlen(mp_sprintf(n, 10, obj->mp_sprintf_buf)));
+			strlen(obj->mp_sprintf_buf));
 
 	/* generate or read in the NFS polynomials */
 
-	memset(&rat_poly, 0, sizeof(rat_poly));
-	memset(&alg_poly, 0, sizeof(alg_poly));
+	mpz_poly_init(&rat_poly);
+	mpz_poly_init(&alg_poly);
 	status = read_poly(obj, n, &rat_poly, &alg_poly, &params.skewness);
 	if (status != 0 && 
 	   (obj->flags & (MSIEVE_FLAG_NFS_POLY1 | 
-			  MSIEVE_FLAG_NFS_POLY2))) {
+			  MSIEVE_FLAG_NFS_POLYSIZE |
+			  MSIEVE_FLAG_NFS_POLYROOT))) {
 		status = find_poly(obj, n);
 		status = read_poly(obj, n, &rat_poly, 
 					&alg_poly, &params.skewness);
 	}
 	if (status != 0) {
 		printf("error generating or reading NFS polynomials\n");
-		return 0;
+		goto finished;
 	}
 	analyze_one_poly(obj, &rat_poly, &alg_poly, params.skewness);
 
@@ -86,7 +92,7 @@ uint32 factor_gnfs(msieve_obj *obj, mp_t *n,
 	    		    MSIEVE_FLAG_NFS_FILTER |
 			    MSIEVE_FLAG_NFS_LA |
 			    MSIEVE_FLAG_NFS_SQRT))) {
-		return 0;
+		goto finished;
 	}
 
 	/* if we're supposed to be sieving, 
@@ -136,11 +142,11 @@ uint32 factor_gnfs(msieve_obj *obj, mp_t *n,
 			if (relations_found == 0)
 				break;
 			if (!(obj->flags & MSIEVE_FLAG_NFS_FILTER))
-				return 0;
+				goto finished;
 		}
 
 		if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
-			return 0;
+			goto finished;
 
 		if (obj->flags & MSIEVE_FLAG_NFS_FILTER) {
 
@@ -150,7 +156,7 @@ uint32 factor_gnfs(msieve_obj *obj, mp_t *n,
 			logprintf(obj, "filtering wants %u more relations\n",
 							max_relations);
 			if (!(obj->flags & MSIEVE_FLAG_NFS_SIEVE))
-				return 0;
+				goto finished;
 			max_relations += relations_found;
 		}
 	}
@@ -161,6 +167,10 @@ uint32 factor_gnfs(msieve_obj *obj, mp_t *n,
 	if (obj->flags & MSIEVE_FLAG_NFS_SQRT)
 		factor_found = nfs_find_factors(obj, n, factor_list);
 
+finished:
+	mpz_poly_free(&rat_poly);
+	mpz_poly_free(&alg_poly);
+	mpz_clear(n);
 	return factor_found;
 }
 
@@ -231,82 +241,27 @@ static void get_sieve_params(uint32 bits, sieve_param_t *params) {
 }
 
 /*--------------------------------------------------------------------*/
-void eval_poly(signed_mp_t *res, int64 a, uint32 b, mp_poly_t *poly) {
+void eval_poly(mpz_t res, int64 a, uint32 b, mpz_poly_t *poly) {
 
 	/* Evaluate one polynomial at 'a' and 'b' */
 
-	mp_t power, tmp;
-	uint32 rsign, asign, csign;
-	uint64 abs_a;
-	mp_t mp_abs_a;
-	int32 d = poly->degree;
-	int32 comparison;
+	uint32 d = poly->degree;
 
-	power.nwords = power.val[0] = 1;
-	abs_a = a;
-	asign = POSITIVE;
-	if (a < 0) {
-		abs_a = -a;
-		asign = NEGATIVE;
+	int64_2gmp(a, poly->tmp1);
+	mpz_set_ui(poly->tmp2, b);
+	mpz_set(res, poly->coeff[d]);
+
+	while (--d) {
+		mpz_mul(res, res, poly->tmp1);
+		mpz_addmul(res, poly->coeff[d], poly->tmp2);
+		mpz_mul_ui(poly->tmp2, poly->tmp2, b);
 	}
-
-	mp_abs_a.val[0] = (uint32)abs_a;
-	mp_abs_a.val[1] = (uint32)(abs_a >> 32);
-	mp_abs_a.nwords = 0;
-	if (mp_abs_a.val[1])
-		mp_abs_a.nwords = 2;
-	else if (mp_abs_a.val[0])
-		mp_abs_a.nwords = 1;
-
-	mp_mul(&poly->coeff[d].num, &mp_abs_a, &res->num);
-	rsign = poly->coeff[d].sign ^ asign;
-
-	while (--d >= 0) {
-		mp_mul_1(&power, b, &power);
-		mp_mul(&power, &poly->coeff[d].num, &tmp);
-		csign = poly->coeff[d].sign;
-
-		switch (2 * rsign + csign) {
-		case 0:
-		case 3:
-			mp_add(&res->num, &tmp, &tmp);
-			break;
-		case 1:
-			comparison = mp_cmp(&res->num, &tmp);
-			if (comparison > 0) {
-				mp_sub(&res->num, &tmp, &tmp);
-			}
-			else {
-				mp_sub(&tmp, &res->num, &tmp);
-				if (!mp_is_zero(&tmp))
-					rsign = NEGATIVE;
-			}
-			break;
-		case 2:
-			comparison = mp_cmp(&res->num, &tmp);
-			if (comparison > 0) {
-				mp_sub(&res->num, &tmp, &tmp);
-			}
-			else {
-				mp_sub(&tmp, &res->num, &tmp);
-				rsign = POSITIVE;
-			}
-			break;
-		}
-
-		if (d > 0) {
-			mp_mul(&tmp, &mp_abs_a, &res->num);
-			rsign = rsign ^ asign;
-		}
-		else {
-			mp_copy(&tmp, &res->num);
-		}
-	}
-	res->sign = rsign;
+	mpz_mul(res, res, poly->tmp1);
+	mpz_addmul(res, poly->coeff[d], poly->tmp2);
 }
 
 /*------------------------------------------------------------------*/
-static uint32 nfs_init_savefile(msieve_obj *obj, mp_t *n) {
+static uint32 nfs_init_savefile(msieve_obj *obj, mpz_t n) {
 
 	char buf[LINE_BUF_SIZE];
 	uint32 relations_found = 0;
@@ -322,10 +277,13 @@ static uint32 nfs_init_savefile(msieve_obj *obj, mp_t *n) {
 		buf[0] = 0;
 		savefile_read_line(buf, sizeof(buf), savefile);
 		if (buf[0] == 'N') {
-			mp_t read_n;
-			mp_str2mp(buf + 2, &read_n, 10);
-			if (mp_cmp(n, &read_n) == 0)
+			mpz_t read_n;
+
+			mpz_init(read_n);
+			gmp_sscanf(buf + 2, "%Zd", read_n);
+			if (mpz_cmp(n, read_n) == 0)
 				update = 0;
+			mpz_clear(read_n);
 		}
 		savefile_close(savefile);
 	}
@@ -336,7 +294,7 @@ static uint32 nfs_init_savefile(msieve_obj *obj, mp_t *n) {
 		   up savefiles you wanted! */
 
 		savefile_open(savefile, SAVEFILE_WRITE);
-		sprintf(buf, "N %s\n", mp_sprintf(n, 10, obj->mp_sprintf_buf));
+		gmp_sprintf(buf, "N %Zd\n", n);
 		savefile_write_line(savefile, buf);
 		savefile_flush(savefile);
 		savefile_close(savefile);

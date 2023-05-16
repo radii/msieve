@@ -85,9 +85,9 @@ void *hashtable_find(hashtable_t *h, void *blob,
 		h->match_array_alloc *= 2;
 		match_array = h->match_array = (uint32 *)xrealloc(
 						h->match_array,
+						sizeof(uint32) *
 						h->match_array_alloc *
-						(blob_words + 1) *
-						sizeof(uint32));
+						(blob_words + 1));
 	}
 
 	/* pre-emptively grow the hashtable size if it's
@@ -135,7 +135,7 @@ void *hashtable_find(hashtable_t *h, void *blob,
 
 	offset = hashtable[hashval];
 	while (offset != 0) {
-		entry = match_array + offset * (blob_words + 1);
+		entry = match_array + (size_t)offset * (blob_words + 1);
 		for (i = 0; i < hash_words; i++) {
 			if (entry[i] != key[i])
 				break;
@@ -156,7 +156,9 @@ void *hashtable_find(hashtable_t *h, void *blob,
 
 		/* not found; add it */
 
-		entry = match_array + h->match_array_size * (blob_words + 1);
+		entry = match_array + 
+			(size_t)h->match_array_size * (blob_words + 1);
+
 		for (i = 0; i < hash_words; i++) {
 			entry[i] = key[i];
 		}

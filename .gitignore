@@ -1,0 +1,8 @@
+msieve
+libmsieve.a
+*.o
+*.qo
+*.no
+.vs/
+*.user
+/build.vc14/common/x64/Debug

@@ -73,7 +73,7 @@ typedef struct {
 	
 /* main structure controlling rational or algebraic sieving */
 typedef struct {
-	mp_poly_t *poly;	/* the sieve polynomial */
+	mpz_poly_t *poly;	/* the sieve polynomial */
 
 	uint8 *sieve_block;	/* piece of sieve interval (one block worth) */
 	uint32 *bucket_list; /* head of linked list of updates (per bucket) */
@@ -83,13 +83,17 @@ typedef struct {
 
 	uint32 cutoff2;	 	/* fudge factor for trial factoring */
 	uint32 scaled_cutoff2;	/* fudge factor for trial factoring */
-	mp_t LP2_min;		/* double large prime min bound */
-	mp_t LP2_max;		/* double large prime max bound */
+	mpz_t LP2_min;		/* double large prime min bound */
+	mpz_t LP2_max;		/* double large prime max bound */
 
 	uint32 cutoff3;	 	/* fudge factor for trial factoring */
 	uint32 scaled_cutoff3;	/* fudge factor for trial factoring */
-	mp_t LP3_min;		/* triple large prime min bound */
-	mp_t LP3_max;		/* triple large prime max bound */
+	mpz_t LP3_min;		/* triple large prime min bound */
+	mpz_t LP3_max;		/* triple large prime max bound */
+
+	mpz_t res;     /* temporaries */
+	mpz_t tmp2;
+	mpz_t tmp3;
 
 	double base;	/* base used for logs of sieve values and primes */
 	double log_base;	/* logarithm of the above */
@@ -152,7 +156,8 @@ static void fill_one_block(sieve_t *sieve_fb,
 			uint32 block, uint32 num_buckets);
 
 static uint32 do_factoring(sieve_job_t *job,
-			int64 block_start, uint32 b);
+			int64 block_start, uint32 b,
+			mpz_t log_scratch);
 
 static uint32 do_resieve(sieve_job_t *job, uint32 low_offset,
 			uint32 high_offset, uint32 num_resieve, 
@@ -166,20 +171,36 @@ static uint32 do_one_factoring(sieve_job_t *job,
 				resieve_t *sieve_value,
 				int64 block_start, uint32 b);
 
-static uint32 do_one_tf(sieve_t *sieve_fb, mp_t *res, 
-			resieve_t *resieve, uint32 *factors, 
-			uint32 *num_factors_out, uint32 offset, uint32 b);
+static uint32 do_one_tf(sieve_t *sieve_fb, resieve_t *resieve, 
+			uint32 *factors, uint32 *num_factors_out, 
+			uint32 offset, uint32 b);
 
 /*------------------------------------------------------------------*/
-uint32 do_line_sieving(msieve_obj *obj, sieve_param_t *params, mp_t *n,
+uint32 do_line_sieving(msieve_obj *obj, sieve_param_t *params, mpz_t n,
 			uint32 relations_found, uint32 max_relations) {
 
 	uint32 i;
 	sieve_job_t job;
 	factor_base_t fb;
+	const char *lower_limit = NULL;
+	const char *upper_limit = NULL;
 
 	if (relations_found >= max_relations)
 		return relations_found;
+
+	/* parse arguments */
+
+	if (obj->nfs_args != NULL) {
+		upper_limit = strchr(obj->nfs_args, ',');
+		if (upper_limit != NULL) {
+			lower_limit = upper_limit - 1;
+			while (lower_limit > obj->nfs_args &&
+				isdigit(lower_limit[-1])) {
+				lower_limit--;
+			}
+			upper_limit++;
+		}
+	}
 
 	/* generate or read the factor base */
 
@@ -200,16 +221,16 @@ uint32 do_line_sieving(msieve_obj *obj, sieve_param_t *params, mp_t *n,
 
 	/* set user-specified limits, if any */
 
-	if (obj->nfs_lower != 0 && obj->nfs_upper != 0) {
-		if (obj->nfs_lower > obj->nfs_upper) {
+	if (lower_limit != NULL && upper_limit != NULL) {
+		job.min_b = strtoul(lower_limit, NULL, 10);
+		job.max_b = strtoul(upper_limit, NULL, 10);
+		if (job.min_b > job.max_b) {
 			printf("lower bound on b must be <= upper bound\n");
 			return 0;
 		}
-		job.min_b = obj->nfs_lower;
-		job.max_b = obj->nfs_upper;
 	}
-	else if ((obj->nfs_lower == 0 && obj->nfs_upper != 0) ||
-		 (obj->nfs_lower != 0 && obj->nfs_upper == 0) ) {
+	else if ((lower_limit == NULL && upper_limit != NULL) ||
+		 (lower_limit != NULL && upper_limit == NULL) ) {
 		printf("lower/upper bounds on b must both be specified\n");
 		return 0;
 	}
@@ -343,7 +364,6 @@ static void init_one_fb(msieve_obj *obj, fb_side_t *fb, sieve_t *out_fb,
 	uint32 i, j, k;
 	uint32 largest_p = fb->max_prime;
 	uint32 high_bound;
-	signed_mp_t tmp;
 	fb_entry_t *aliased;
 
 	out_fb->poly = &fb->poly;
@@ -364,6 +384,9 @@ static void init_one_fb(msieve_obj *obj, fb_side_t *fb, sieve_t *out_fb,
 
 	/* allocate the rest of the data structures */
 
+	mpz_init(out_fb->res);
+	mpz_init(out_fb->tmp2);
+	mpz_init(out_fb->tmp3);
 	out_fb->sieve_block = (uint8 *)xmalloc(BLOCK_SIZE * sizeof(uint8));
 	out_fb->bucket_list = (uint32 *)xmalloc(num_buckets * sizeof(uint32));
 	out_fb->num_updates_alloc = 10000;
@@ -375,30 +398,24 @@ static void init_one_fb(msieve_obj *obj, fb_side_t *fb, sieve_t *out_fb,
 
 	out_fb->LP1_max = lp_size;
 
-	out_fb->LP2_min.nwords = 1;
-	out_fb->LP2_min.val[0] = largest_p;
-	mp_mul_1(&out_fb->LP2_min, largest_p, &out_fb->LP2_min);
+	mpz_init_set_ui(out_fb->LP2_min, largest_p);
+	mpz_mul_ui(out_fb->LP2_min, out_fb->LP2_min, largest_p);
 
-	out_fb->LP2_max.nwords = 1;
-	out_fb->LP2_max.val[0] = lp_size;
-	mp_mul_1(&out_fb->LP2_max, lp_size, &out_fb->LP2_max);
-	mp_rshift(&out_fb->LP2_max, 3, &out_fb->LP2_max);
+	mpz_init_set_ui(out_fb->LP2_max, lp_size);
+	mpz_mul_ui(out_fb->LP2_max, out_fb->LP2_max, lp_size);
+	mpz_tdiv_q_2exp(out_fb->LP2_max, out_fb->LP2_max, 3);
 
 	/* we accept triple-large-prime cofactors if they are
 	   somewhat smaller than lp_size^3 and somewhat larger
 	   than (factor base limit)^3 */
 
-	out_fb->LP3_min.nwords = 1;
-	out_fb->LP3_min.val[0] = largest_p;
-	mp_mul_1(&out_fb->LP3_min, largest_p, &out_fb->LP3_min);
-	mp_mul_1(&out_fb->LP3_min, largest_p, &out_fb->LP3_min);
-	mp_mul_1(&out_fb->LP3_min, 5, &out_fb->LP3_min);
+	mpz_init_set_ui(out_fb->LP3_min, largest_p);
+	mpz_pow_ui(out_fb->LP3_min, out_fb->LP3_min, 3);
+	mpz_mul_ui(out_fb->LP3_min, out_fb->LP3_min, 5);
 
-	out_fb->LP3_max.nwords = 1;
-	out_fb->LP3_max.val[0] = lp_size;
-	mp_mul_1(&out_fb->LP3_max, lp_size, &out_fb->LP3_max);
-	mp_mul_1(&out_fb->LP3_max, lp_size, &out_fb->LP3_max);
-	mp_rshift(&out_fb->LP3_max, 3, &out_fb->LP3_max);
+	mpz_init_set_ui(out_fb->LP3_max, lp_size);
+	mpz_pow_ui(out_fb->LP3_max, out_fb->LP3_max, 3);
+	mpz_tdiv_q_2exp(out_fb->LP3_max, out_fb->LP3_max, 3);
 
 	/* Determine the cutoff for log values. Sieve offsets whose
 	   unfactored log value is smaller than this will have trial 
@@ -407,11 +424,11 @@ static void init_one_fb(msieve_obj *obj, fb_side_t *fb, sieve_t *out_fb,
 	   leeway for roundoff errors compared to the true log value */
 
 	high_bound = (uint32)(2.6 * log((double)largest_p) / M_LN2 + 0.5);
-	out_fb->cutoff2 = 4 + mp_bits(&out_fb->LP2_max);
+	out_fb->cutoff2 = 4 + mpz_sizeinbase(out_fb->LP2_max, 2);
 	out_fb->cutoff2 = MAX(out_fb->cutoff2, high_bound);
 
 	high_bound = (uint32)(3.9 * log((double)largest_p) / M_LN2 + 0.5);
-	out_fb->cutoff3 = 4 + mp_bits(&out_fb->LP3_max);
+	out_fb->cutoff3 = 4 + mpz_sizeinbase(out_fb->LP3_max, 2);
 	out_fb->cutoff3 = MAX(out_fb->cutoff3, high_bound);
 
 	/* Make factor base entries out of the powers of all the factor
@@ -433,8 +450,9 @@ static void init_one_fb(msieve_obj *obj, fb_side_t *fb, sieve_t *out_fb,
 
 		for (power = p * p; power < 1400; power *= p) {
 			for (j = 0; j < power; j++) {
-				eval_poly(&tmp, (int64)j, 1, out_fb->poly);
-				if (mp_mod_1(&tmp.num, power) != 0)
+				eval_poly(out_fb->res, (int64)j, 
+						1, out_fb->poly);
+				if (mpz_fdiv_ui(out_fb->res, power) != 0)
 					continue;
 
 				if (out_fb->powers_fb_size >= 
@@ -512,17 +530,25 @@ static void init_one_fb(msieve_obj *obj, fb_side_t *fb, sieve_t *out_fb,
 			(uint32)(log((double)largest_p)/M_LN2 + 0.5),
 			(uint32)(log((double)out_fb->LP1_max)/M_LN2 + 0.5));
 	logprintf(obj, "double large prime %s range: %u - %u bits\n", string,
-			mp_bits(&out_fb->LP2_min), 
-			mp_bits(&out_fb->LP2_max));
+			mpz_sizeinbase(out_fb->LP2_min, 2), 
+			mpz_sizeinbase(out_fb->LP2_max, 2));
 	logprintf(obj, "triple large prime %s range: %u - %u bits\n", string,
-			mp_bits(&out_fb->LP3_min), 
-			mp_bits(&out_fb->LP3_max));
+			mpz_sizeinbase(out_fb->LP3_min, 2), 
+			mpz_sizeinbase(out_fb->LP3_max, 2));
 	logprintf(obj, "\n");
 }
 
 /*------------------------------------------------------------------*/
 static void free_one_sieve_fb(sieve_t *out_fb) {
+
 	out_fb->fb_entries = NULL;
+	mpz_clear(out_fb->res);
+	mpz_clear(out_fb->tmp2);
+	mpz_clear(out_fb->tmp3);
+	mpz_clear(out_fb->LP2_min);
+	mpz_clear(out_fb->LP2_max);
+	mpz_clear(out_fb->LP3_min);
+	mpz_clear(out_fb->LP3_max);
 	free(out_fb->sieve_block);
 	free(out_fb->bucket_list);
 	free(out_fb->update_list);
@@ -543,6 +569,7 @@ static uint32 do_one_line(sieve_job_t *job, uint32 b_offset)
 	uint32 b = min_b + b_offset;
 	int64 block_base = min_a;
 	uint32 num_buckets = job->num_buckets;
+	mpz_t log_scratch;
 
 	/* finish off the factor base initialization and fill
 	   in the initial values of all the sieve updates */
@@ -551,6 +578,7 @@ static uint32 do_one_line(sieve_job_t *job, uint32 b_offset)
 			min_a, max_a, min_b, b_offset);
 	init_one_sieve(&job->sieve_afb, num_buckets, 
 			min_a, max_a, min_b, b_offset);
+	mpz_init(log_scratch);
 
 	while (min_a < max_a) {
 
@@ -565,7 +593,7 @@ static uint32 do_one_line(sieve_job_t *job, uint32 b_offset)
 
 			/* scan it for values to trial factor */
 
-			rels += do_factoring(job, block_base, b);
+			rels += do_factoring(job, block_base, b, log_scratch);
 			if (b % 2 == 0)
 				block_base += 2 * BLOCK_SIZE;
 			else
@@ -580,6 +608,7 @@ static uint32 do_one_line(sieve_job_t *job, uint32 b_offset)
 		min_a = block_base;
 	}
 
+	mpz_clear(log_scratch);
 	return rels;
 }
 
@@ -728,7 +757,7 @@ static void init_one_sieve(sieve_t *out_fb,
 	   their combined log value. This is added to the cutoff
 	   for the entire sieve later */
 
-	common = mp_mod_1(&out_fb->poly->coeff[out_fb->poly->degree].num, b);
+	common = mpz_fdiv_ui(out_fb->poly->coeff[out_fb->poly->degree], b);
 	common = mp_gcd_1(common, b);
 	out_fb->proj_bias = fplog(common, out_fb->log_base);
 }
@@ -864,7 +893,8 @@ static void fill_one_block(sieve_t *sieve_fb,
 
 /*------------------------------------------------------------------*/
 static uint32 do_factoring(sieve_job_t *job, 
-			int64 block_start, uint32 b) {
+			int64 block_start, uint32 b,
+			mpz_t log_scratch) {
 
 	/* scan a sieve block for smooth numbers */
 
@@ -902,11 +932,13 @@ static uint32 do_factoring(sieve_job_t *job,
 	   computed once for this block */
 
 	a = block_start;
-	cutoffL_r = fplog_eval_poly(a, b, rfb->poly, rfb->log_base, &rbits);
-	cutoffR_r = fplog_eval_poly(a + real_block_length, b, 
+	cutoffL_r = fplog_eval_poly(a, b, log_scratch,
+				rfb->poly, rfb->log_base, &rbits);
+	cutoffR_r = fplog_eval_poly(a + real_block_length, b, log_scratch, 
 				rfb->poly, rfb->log_base, &rbits);
 
-	cutoffL_a = fplog_eval_poly(a, b, afb->poly, afb->log_base, &abits);
+	cutoffL_a = fplog_eval_poly(a, b, log_scratch, 
+				afb->poly, afb->log_base, &abits);
 
 	for (i = 0; i < BLOCK_SIZE; i += num_scanned) {
 
@@ -914,7 +946,7 @@ static uint32 do_factoring(sieve_job_t *job,
 		   num_scanned sieve values */
 
 		a += A_SAMPLE_RATE;
-		cutoffR_a = fplog_eval_poly(a, b, afb->poly, 
+		cutoffR_a = fplog_eval_poly(a, b, log_scratch, afb->poly, 
 						afb->log_base, &abits);
 
 		cutoff_r = (cutoffL_r + cutoffR_r) / 2;
@@ -1171,8 +1203,6 @@ static void do_one_resieve(sieve_t *fb, resieve_t *resieve_array,
 }
 
 /*------------------------------------------------------------------*/
-static mp_t two = {1, {2}};
-
 static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 				int64 block_start, uint32 b) {
 
@@ -1186,9 +1216,7 @@ static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 	uint32 factors_r[100];
 	uint32 num_factors_a;
 	uint32 factors_a[100];
-	signed_mp_t r_res, a_res;
-	mp_t exponent, tmp; 
-	mp_t *small, *large;
+	sieve_t *small, *large;
 
 	if (b % 2 == 0)
 		a = block_start + 2 * offset + 1;
@@ -1200,14 +1228,18 @@ static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 	   vast majority of such trial factoring attempts
 	   will not succeed */
 
-	eval_poly(&a_res, a, b, afb->poly);
-	if (!do_one_tf(afb, &a_res.num, sieve_value, 
-				factors_a, &num_factors_a, offset, b))
+	eval_poly(afb->res, a, b, afb->poly);
+	mpz_abs(afb->res, afb->res);
+
+	if (!do_one_tf(afb, sieve_value, 
+			factors_a, &num_factors_a, offset, b))
 		return 0;
 
-	eval_poly(&r_res, a, b, rfb->poly);
-	if (!do_one_tf(rfb, &r_res.num, sieve_value + 1, 
-				factors_r, &num_factors_r, offset, b))
+	eval_poly(rfb->res, a, b, rfb->poly);
+	mpz_abs(rfb->res, rfb->res);
+
+	if (!do_one_tf(rfb, sieve_value + 1, 
+			factors_r, &num_factors_r, offset, b))
 		return 0;
 
 	/* continue only if the cofactors remaining after 
@@ -1225,26 +1257,29 @@ static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 	   until we're sure it's needed, and to do the smallest
 	   of the two tests first */
 		 
-	small = &r_res.num;
-	large = &a_res.num;
-	if (mp_cmp(small, large) > 0) {
-		small = &a_res.num;
-		large = &r_res.num;
+	small = rfb;
+	large = afb;
+	if (mpz_cmp(small->res, large->res) > 0) {
+		small = afb;
+		large = rfb;
 	}
-	if (small->nwords > 1) {
-		mp_sub_1(small, 1, &exponent);
-		mp_expo(&two, &exponent, small, &tmp);
-		if (mp_is_one(&tmp))
+	if (mpz_cmp_ui(small->res, (uint32)(-1)) > 0) {
+		mpz_set_ui(small->tmp2, 2);
+		mpz_sub_ui(small->tmp3, small->res, 1);
+		mpz_powm(small->tmp2, small->tmp2, small->tmp3, small->res);
+		if (mpz_cmp_ui(small->tmp2, 1) == 0)
 			return 0;
 	}
-	if (large->nwords > 1) {
-		mp_sub_1(large, 1, &exponent);
-		mp_expo(&two, &exponent, large, &tmp);
-		if (mp_is_one(&tmp))
+	if (mpz_cmp_ui(large->res, (uint32)(-1)) > 0) {
+		mpz_set_ui(large->tmp2, 2);
+		mpz_sub_ui(large->tmp3, large->res, 1);
+		mpz_powm(large->tmp2, large->tmp2, large->tmp3, large->res);
+		if (mpz_cmp_ui(large->tmp2, 1) == 0)
 			return 0;
 	}
 
-	if (a_res.num.nwords == 1 && r_res.num.nwords == 1) {
+	if (mpz_cmp_ui(rfb->res, (uint32)(-1)) < 0 &&
+	    mpz_cmp_ui(afb->res, (uint32)(-1)) < 0) {
 
 		/* No extra cofactors in this relation, so just
 		   save it immediately */
@@ -1253,8 +1288,8 @@ static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 		uint32 lp_r[MAX_LARGE_PRIMES];
 		uint32 lp_a[MAX_LARGE_PRIMES];
 		
-		lp_r[0] = r_res.num.val[0];
-		lp_a[0] = a_res.num.val[0];
+		lp_r[0] = mpz_get_ui(rfb->res);
+		lp_a[0] = mpz_get_ui(afb->res);
 		for (i = 1; i < MAX_LARGE_PRIMES; i++)
 			lp_r[i] = lp_a[i] = 1;
 
@@ -1266,8 +1301,8 @@ static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 
 	/* schedule the relation to be factored later */
 
-	relation_batch_add(a, b, factors_r, num_factors_r, &r_res.num, 
-				factors_a, num_factors_a, &a_res.num,
+	relation_batch_add(a, b, factors_r, num_factors_r, rfb->res,
+				factors_a, num_factors_a, afb->res,
 				&job->relation_batch);
 
 	/* if enough unfactored relations have accumulated,
@@ -1281,16 +1316,27 @@ static uint32 do_one_factoring(sieve_job_t *job, resieve_t *sieve_value,
 }
 
 /*------------------------------------------------------------------*/
-static uint32 do_one_tf(sieve_t *sieve_fb, 
-			mp_t *res, resieve_t *resieve,
+static void divide_out_p(sieve_t *fb, uint32 p) {
+
+	uint32 rem;
+
+	while (1) {
+		rem = mpz_tdiv_q_ui(fb->tmp2, fb->res, p);
+		if (rem != 0)
+			return;
+		mpz_swap(fb->res, fb->tmp2);
+	}
+}
+
+static uint32 do_one_tf(sieve_t *sieve_fb, resieve_t *resieve,
 			uint32 *factors, uint32 *num_factors_out,
 			uint32 offset, uint32 b) {
 
-	/* Trial factor a sieve value using the primes in
-	   one factor base */
+	/* Trial factor a sieve value (in sieve_fb->res) using 
+	   the primes in one factor base */
 
 	uint32 num_factors = 0;
-	uint32 i, j;
+	uint32 i;
 	uint32 small_fb_size = sieve_fb->small_fb_size;
 	uint32 med_fb_size = sieve_fb->med_fb_size;
 	fb_sieve_entry_t *factor_base = sieve_fb->fb_entries;
@@ -1325,10 +1371,7 @@ static uint32 do_one_tf(sieve_t *sieve_fb,
 		if (r % p == 0) {
 			if (p >= MAX_SKIPPED_FACTOR)
 				factors[num_factors++] = p;
-			do {
-				mp_divrem_1(res, p, res);
-				j = mp_mod_1(res, p);
-			} while (j == 0);
+			divide_out_p(sieve_fb, p);
 		}
 	}
 
@@ -1341,10 +1384,7 @@ static uint32 do_one_tf(sieve_t *sieve_fb,
 		for (i = 0; i < num_resieve_factors; i++) {
 			uint32 p = resieve->factors[i];
 			factors[num_factors++] = p;
-			do {
-				mp_divrem_1(res, p, res);
-				j = mp_mod_1(res, p);
-			} while (j == 0);
+			divide_out_p(sieve_fb, p);
 		}
 	}
 	else {
@@ -1362,10 +1402,7 @@ static uint32 do_one_tf(sieve_t *sieve_fb,
 			r = (uint32)entry->offset + BLOCK_SIZE - offset;
 			if (r % p == 0) {
 				factors[num_factors++] = p;
-				do {
-					mp_divrem_1(res, p, res);
-					j = mp_mod_1(res, p);
-				} while (j == 0);
+				divide_out_p(sieve_fb, p);
 			}
 		}
 	
@@ -1386,10 +1423,7 @@ static uint32 do_one_tf(sieve_t *sieve_fb,
 			if (offset == list_offset) {
 				uint32 p = update_list[i].p;
 				factors[num_factors++] = p;
-				do {
-					mp_divrem_1(res, p, res);
-					j = mp_mod_1(res, p);
-				} while (j == 0);
+				divide_out_p(sieve_fb, p);
 			}
 		}
 	}
@@ -1410,33 +1444,30 @@ static uint32 do_one_tf(sieve_t *sieve_fb,
 		if (b % p == 0) {
 			if (p >= MAX_SKIPPED_FACTOR)
 				factors[num_factors++] = p;
-			do {
-				mp_divrem_1(res, p, res);
-				j = mp_mod_1(res, p);
-			} while (j == 0);
+			divide_out_p(sieve_fb, p);
 		}
 	}
 
 	/* continue only if the cofactor remaining after 
 	   trial division is small, or the right size 
-	   for large primes. */
+	   for large primes */
 		 
 	if (sieve_fb->curr_num_lp == 3) {
-		if (mp_cmp(res, &sieve_fb->LP3_max) > 0)
+		if (mpz_cmp(sieve_fb->res, sieve_fb->LP3_max) > 0)
 			return 0;
 
-		if (mp_cmp(res, &sieve_fb->LP3_min) < 0 &&
-		mp_cmp(res, &sieve_fb->LP2_max) > 0) {
+		if (mpz_cmp(sieve_fb->res, sieve_fb->LP3_min) < 0 &&
+		    mpz_cmp(sieve_fb->res, sieve_fb->LP2_max) > 0) {
 			return 0;
 		}
 	}
 	else {
-		if (mp_cmp(res, &sieve_fb->LP2_max) > 0)
+		if (mpz_cmp(sieve_fb->res, sieve_fb->LP2_max) > 0)
 			return 0;
 	}
 
-	if (mp_cmp(res, &sieve_fb->LP2_min) < 0 &&
-	    (res->nwords > 1 || res->val[0] > sieve_fb->LP1_max)) {
+	if (mpz_cmp_ui(sieve_fb->res, sieve_fb->LP1_max) > 0 &&
+	    mpz_cmp(sieve_fb->res, sieve_fb->LP2_min) < 0) {
 		return 0;
 	}
 

@@ -20,7 +20,7 @@ $Id$
 #define NUM_PRIME_RETRIES 100
 
 /*--------------------------------------------------------------------*/
-uint32 get_prime_for_sqrt(mp_poly_t *alg_poly,
+uint32 get_prime_for_sqrt(mpz_poly_t *alg_poly,
 			  uint32 min_value,
 			  uint32 *q_out) {
 
@@ -74,42 +74,33 @@ uint32 get_prime_for_sqrt(mp_poly_t *alg_poly,
 }
 
 /*--------------------------------------------------------------------*/
-static void eval_poly_derivative(mp_poly_t *poly, 
-				signed_mp_t *m1, signed_mp_t *m0, 
-				mp_t *n, mp_t *res) {
+static void eval_poly_derivative(mpz_poly_t *poly, 
+				mpz_t m1, mpz_t m0, 
+				mpz_t n, mpz_t res) {
 	uint32 i;
-	mp_t next_coeff;
-	mp_t m1_pow, m1_tmp, m0_tmp;
+	mpz_t m1_pow;
+	mpz_t tmp;
 
-	mp_copy(&m1->num, &m1_tmp);
-	if (m1->sign == NEGATIVE)
-		mp_sub(n, &m1_tmp, &m1_tmp);
-	mp_copy(&m1_tmp, &m1_pow);
-
-	mp_copy(&m0->num, &m0_tmp);
-	if (m0->sign == POSITIVE)
-		mp_sub(n, &m0_tmp, &m0_tmp);
+	mpz_init_set(m1_pow, m1);
+	mpz_init(tmp);
 
 	i = poly->degree;
-	mp_mul_1(&poly->coeff[i].num, i, res);
+	mpz_mul_ui(res, poly->coeff[i], i);
 
-	while (--i) {
-		signed_mp_t *coeff = poly->coeff + i;
-
-		mp_modmul(res, &m0_tmp, n, res);
-
-		mp_mul_1(&coeff->num, i, &next_coeff);
-		if (coeff->sign == NEGATIVE)
-			mp_sub(n, &next_coeff, &next_coeff);
-		mp_modmul(&next_coeff, &m1_pow, n, &next_coeff);
-		mp_add(res, &next_coeff, res);
-
-		if (i > 1)
-			mp_modmul(&m1_pow, &m1_tmp, n, &m1_pow);
+	mpz_neg(m0, m0);
+	while (--i > 1) {
+		mpz_mul(res, res, m0);
+		mpz_mul_ui(tmp, poly->coeff[i], i);
+		mpz_addmul(res, tmp, m1_pow);
+		mpz_mul(m1_pow, m1_pow, m1);
 	}
+	mpz_mul(res, res, m0);
+	mpz_addmul(res, poly->coeff[i], m1_pow);
+	mpz_neg(m0, m0);
 
-	if (mp_cmp(res, n) >= 0)
-		mp_sub(res, n, res);
+	mpz_clear(m1_pow);
+	mpz_clear(tmp);
+	mpz_mod(res, res, n);
 }
 
 /*--------------------------------------------------------------------*/
@@ -119,14 +110,18 @@ typedef struct {
 } rat_prime_t;
 
 static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
-				mp_t *n, mp_t *sqrt_r) {
+				mpz_t n, mpz_t sqrt_r) {
 	uint32 i, j, num_primes;
 	hashtable_t h;
 	uint32 already_seen;
 	uint32 array_size;
-	mp_t base, exponent, tmp;
+	mpz_t base, exponent, tmp;
 	uint32 status = 0;
 	rat_prime_t *curr;
+
+	mpz_init(base);
+	mpz_init(exponent);
+	mpz_init(tmp);
 
 	/* count up the number of times each prime factor in
 	   rlist occurs */
@@ -151,9 +146,7 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 	/* verify all such counts are even, and form the 
 	   rational square root */
 
-	mp_clear(&base);
-	mp_clear(&exponent);
-	mp_clear(sqrt_r); sqrt_r->nwords = sqrt_r->val[0] = 1;
+	mpz_set_ui(sqrt_r, 1);
 	num_primes = hashtable_get_num(&h);
 	curr = hashtable_get_first(&h);
 
@@ -166,26 +159,19 @@ static uint32 rat_square_root(relation_t *rlist, uint32 num_relations,
 			break;
 		}
 		if (p > 0 && count > 0) {
-			base.val[0] = (uint32)p;
-			base.val[1] = (uint32)(p >> 32);
-			base.nwords = 2;
-			if (base.val[1] == 0)
-				base.nwords = 1;
-
-			count = count / 2;
-			exponent.val[0] = (uint32)count;
-			exponent.val[1] = (uint32)(count >> 32);
-			exponent.nwords = 2;
-			if (exponent.val[1] == 0)
-				exponent.nwords = 1;
-
-			mp_expo(&base, &exponent, n, &tmp);
-			mp_modmul(sqrt_r, &tmp, n, sqrt_r);
+			uint64_2gmp(p, base);
+			uint64_2gmp(count / 2, exponent);
+			mpz_powm(tmp, base, exponent, n);
+			mpz_mul(sqrt_r, sqrt_r, tmp);
+			mpz_tdiv_r(sqrt_r, sqrt_r, n);
 		}
 		curr = hashtable_get_next(&h, curr);
 	}
 
 	hashtable_free(&h);
+	mpz_clear(base);
+	mpz_clear(exponent);
+	mpz_clear(tmp);
 	return status;
 }
 
@@ -260,7 +246,7 @@ static uint32 verify_alg_ideal_powers(relation_t *rlist,
 }
 
 /*--------------------------------------------------------------------*/
-uint32 nfs_find_factors(msieve_obj *obj, mp_t *n, 
+uint32 nfs_find_factors(msieve_obj *obj, mpz_t n, 
 			factor_list_t *factor_list) {
 
 	/* external interface for the NFS square root */
@@ -268,11 +254,11 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 	uint32 i, j;
 	uint32 check_q;
 	factor_base_t fb;
-	mp_poly_t monic_alg_poly;
-	mp_t sqrt_r, sqrt_a;
-	mp_t c, tmp1, tmp2;
-	signed_mp_t *m0;
-	signed_mp_t *m1;
+	mpz_poly_t monic_alg_poly;
+	mpz_poly_t *rpoly;
+	mpz_poly_t *apoly;
+	mpz_t exponent, sqrt_r, sqrt_a;
+	mpz_t c, tmp1, tmp2;
 	uint32 dep_lower = 1;
 	uint32 dep_upper = 64;
 	uint32 factor_found = 0;
@@ -281,59 +267,94 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 	logprintf(obj, "\n");
 	logprintf(obj, "commencing square root phase\n");
 
+	memset(&fb, 0, sizeof(fb));
+	apoly = &fb.afb.poly;
+	rpoly = &fb.rfb.poly;
+	mpz_poly_init(rpoly);
+	mpz_poly_init(apoly);
+	mpz_poly_init(&monic_alg_poly);
+	mpz_init(exponent);
+	mpz_init(sqrt_r);
+	mpz_init(sqrt_a);
+	mpz_init(c);
+	mpz_init(tmp1);
+	mpz_init(tmp2);
+
 	/* read in the NFS polynomials */
 
 	cpu_time = time(NULL);
-	memset(&fb, 0, sizeof(fb));
-	if (read_poly(obj, n, &fb.rfb.poly, &fb.afb.poly, NULL)) {
+	if (read_poly(obj, n, rpoly, apoly, NULL)) {
 		logprintf(obj, "polynomials not found\n");
-		return 0;
+		goto finished;
 	}
 
 	/* find the values needed to convert the algebraic 
 	   square root back to an integer */
 
-	if (fb.rfb.poly.degree != 1) {
+	if (rpoly->degree != 1) {
 		logprintf(obj, "cannot handle non-linear polynomials\n");
-		return 0;
+		goto finished;
 	}
-	m0 = &fb.rfb.poly.coeff[0];
-	m1 = &fb.rfb.poly.coeff[1];
 
 	/* construct a monic version of the algebraic poly,
 	   saving off the leading coefficient separately */
 
-	j = fb.afb.poly.degree;
-	if (fb.afb.poly.coeff[j].sign == NEGATIVE) {
+	j = apoly->degree;
+	if (mpz_cmp_ui(apoly->coeff[j], 0) < 0) {
 		logprintf(obj, "cannot handle negative leading "
 				"algebraic polynomial coefficient\n");
-		return 0;
+		goto finished;
 	}
-	memset(&monic_alg_poly, 0, sizeof(mp_poly_t));
-	mp_copy(&fb.afb.poly.coeff[j].num, &c);
-	mp_copy(&c, &tmp1);
-	monic_alg_poly.coeff[j-1] = fb.afb.poly.coeff[j-1];
-	for (i = j - 2; (int32)i >= 0; i--) {
-		mp_mul(&fb.afb.poly.coeff[i].num, &tmp1,
-				&monic_alg_poly.coeff[i].num);
-		monic_alg_poly.coeff[i].sign = fb.afb.poly.coeff[i].sign;
 
-		if (i > 0) {
-			mp_mul(&c, &tmp1, &tmp2);
-			mp_copy(&tmp2, &tmp1);
-		}
+	mpz_set(c, apoly->coeff[j]);
+	mpz_set(tmp1, c);
+	mpz_set(monic_alg_poly.coeff[j-1], apoly->coeff[j-1]);
+	monic_alg_poly.degree = j;
+	mpz_set_ui(monic_alg_poly.coeff[j], 1);
+
+	for (i = j - 2; (int32)i >= 0; i--) {
+		mpz_mul(monic_alg_poly.coeff[i], apoly->coeff[i], tmp1);
+		if (i > 0)
+			mpz_mul(tmp1, tmp1, c);
 	}
-	monic_alg_poly.coeff[j].num.nwords = 1;
-	monic_alg_poly.coeff[j].num.val[0] = 1;
-	monic_alg_poly.degree = fb.afb.poly.degree;
 	get_prime_for_sqrt(&monic_alg_poly, (uint32)0x80000000, &check_q);
 
 	/* determine the list of dependencies to compute */
 
-	if (obj->nfs_lower && obj->nfs_upper) {
-		dep_lower = MIN(obj->nfs_lower, 64);
-		dep_upper = MIN(obj->nfs_upper, 64);
-		dep_upper = MAX(dep_lower, dep_upper);
+	if (obj->nfs_args != NULL) {
+
+		const char *tmp;
+		const char *lower_limit;
+		const char *upper_limit;
+
+		tmp = strstr(obj->nfs_args, "dep_first=");
+		if (tmp != NULL)
+			dep_lower = strtoul(tmp + 10, NULL, 10);
+
+		tmp = strstr(obj->nfs_args, "dep_last=");
+		if (tmp != NULL)
+			dep_upper = strtoul(tmp + 9, NULL, 10);
+
+		/* old-style 'X,Y' format */
+
+		upper_limit = strchr(obj->nfs_args, ',');
+		if (upper_limit != NULL) {
+			lower_limit = upper_limit - 1;
+			while (lower_limit > obj->nfs_args &&
+				isdigit(lower_limit[-1])) {
+				lower_limit--;
+			}
+			upper_limit++;
+			dep_lower = strtoul(lower_limit, NULL, 10);
+			dep_upper = strtoul(upper_limit, NULL, 10);
+		}
+
+		dep_lower = MAX(dep_lower, 1);
+		dep_upper = MAX(dep_upper, 1);
+		dep_lower = MIN(dep_lower, 64);
+		dep_upper = MIN(dep_upper, 64);
+		logprintf(obj, "handling dependencies %u to %i\n",
+				dep_lower, dep_upper);
 	}
 
 	/* for each dependency */
@@ -344,7 +365,6 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 		uint32 num_free_relations;
 		relation_t *rlist;
 		abpair_t *abpairs;
-		mp_t exponent;
 
 		logprintf(obj, "reading relations for dependency %u\n", i);
 
@@ -361,11 +381,15 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 		   to be valid */
 
 		if (num_relations % 2) {
-			/* the number of relations in the dependency must
-			   be even, because each relation represents a
-			   degree-1 polynomial, and the product of these
-			   relations will not have a square root unless the
-			   degree of the product is even */
+			/* the LA is supposed to force the number of 
+			   relations in the dependency to be even. 
+			   This isn't necessary if the leading coeff of
+			   both NFS polynomials are squares, or if both
+			   NFS polynomials are monic, since the 
+			   corrections below that need the number of 
+			   relations are avoided. But only a small 
+			   minority of NFS jobs would satisfy this condition */
+
 			logprintf(obj, "number of relations is not even\n");
 			nfs_free_relation_list(rlist, num_relations);
 			continue;
@@ -382,7 +406,7 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 			nfs_free_relation_list(rlist, num_relations);
 			continue;
 		}
-		if (rat_square_root(rlist, num_relations, n, &sqrt_r) != 0) {
+		if (rat_square_root(rlist, num_relations, n, sqrt_r) != 0) {
 			logprintf(obj, "rational side is not a square!\n");
 			nfs_free_relation_list(rlist, num_relations);
 			continue;
@@ -403,10 +427,11 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 		   Note that to conserve memory, abpairs is freed in
 		   the following call */
 
-		mp_clear(&sqrt_a);
-		alg_square_root(obj, &monic_alg_poly, n, &c, m1, m0, abpairs, 
-					num_relations, check_q, &sqrt_a);
-		if (mp_is_zero(&sqrt_a)) {
+		mpz_set_ui(sqrt_a, 0);
+		alg_square_root(obj, &monic_alg_poly, n, c, 
+				rpoly->coeff[1], rpoly->coeff[0], 
+				abpairs, num_relations, check_q, sqrt_a);
+		if (mpz_sgn(sqrt_a) == 0) {
 			logprintf(obj, "algebraic square root failed\n");
 			continue;
 		}
@@ -419,34 +444,40 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 		   free relations *do not* figure into it. This latter
 		   point is completely ignored in the literature! */
 
-		eval_poly_derivative(&fb.afb.poly, m1, m0, n, &tmp1);
-		mp_modmul(&tmp1, &sqrt_r, n, &sqrt_r);
+		eval_poly_derivative(apoly, rpoly->coeff[1], 
+					rpoly->coeff[0], n, tmp1);
+		mpz_mul(sqrt_r, sqrt_r, tmp1);
+		mpz_mod(sqrt_r, sqrt_r, n);
 
-		mp_clear(&exponent);
-		exponent.nwords = 1;
-		if (!mp_is_one(&c)) {
-			exponent.val[0] = num_relations/ 2 + 
-						fb.afb.poly.degree - 2;
-			mp_expo(&c, &exponent, n, &tmp2);
-			mp_modmul(&tmp2, &sqrt_r, n, &sqrt_r);
+		mpz_set_ui(exponent, 0);
+		if (mpz_cmp_ui(c, 1) != 0) {
+			mpz_set_ui(exponent, num_relations / 2 + 
+						apoly->degree - 2);
+			mpz_powm(tmp1, c, exponent, n);
+			mpz_mul(sqrt_r, sqrt_r, tmp1);
+			mpz_mod(sqrt_r, sqrt_r, n);
 		}
 
-		if (!mp_is_one(&m1->num)) {
-			exponent.val[0] = (num_relations -
-				       		num_free_relations) / 2;
-			mp_copy(&m1->num, &tmp1);
-			if (m1->sign == NEGATIVE)
-				mp_sub(n, &tmp1, &tmp1);
-			mp_expo(&tmp1, &exponent, n, &tmp2);
-			mp_modmul(&tmp2, &sqrt_a, n, &sqrt_a);
+		if (mpz_cmp_ui(rpoly->coeff[1], 1) != 0) {
+			mpz_set_ui(exponent, (num_relations -
+				       		num_free_relations) / 2);
+			mpz_set(tmp1, rpoly->coeff[1]);
+			if (mpz_sgn(tmp1) < 0)
+				mpz_add(tmp1, tmp1, n);
+
+			mpz_powm(tmp2, tmp1, exponent, n);
+			mpz_mul(sqrt_a, sqrt_a, tmp2);
+			mpz_mod(sqrt_a, sqrt_a, n);
 		}
 
 		/* a final sanity check: square the rational and algebraic 
 		   square roots, expecting the same value modulo n */
 
-		mp_modmul(&sqrt_r, &sqrt_r, n, &tmp1);
-		mp_modmul(&sqrt_a, &sqrt_a, n, &tmp2);
-		if (mp_cmp(&tmp1, &tmp2) != 0) {
+		mpz_mul(tmp1, sqrt_r, sqrt_r);
+		mpz_mul(tmp2, sqrt_a, sqrt_a);
+		mpz_mod(tmp1, tmp1, n);
+		mpz_mod(tmp2, tmp2, n);
+		if (mpz_cmp(tmp1, tmp2) != 0) {
 			logprintf(obj, "dependency does not form a "
 					"congruence of squares!\n");
 			continue;
@@ -454,9 +485,15 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 
 		/* look for a nontrivial factor of n */
 
-		mp_add(&sqrt_r, &sqrt_a, &tmp1);
-		mp_gcd(&tmp1, n, &tmp1);
-		if (!mp_is_one(&tmp1) && mp_cmp(n, &tmp1) != 0) {
+		mpz_add(tmp1, sqrt_r, sqrt_a);
+		mpz_gcd(tmp1, tmp1, n);
+		if (mpz_cmp_ui(tmp1, 1) == 0) {
+			logprintf(obj, "GCD is 1, no factor found\n");
+		}
+		else if (mpz_cmp(tmp1, n) == 0) {
+			logprintf(obj, "GCD is N, no factor found\n");
+		}
+		else {
 			/* factor found; add it to the list of factors. 
 			   Stop trying dependencies if the remaining
 			   composite is small enough that another method
@@ -467,14 +504,47 @@ uint32 nfs_find_factors(msieve_obj *obj, mp_t *n,
 			   avoid doing this because the MPQS code will run
 			   and wipe out all the NFS relations we've collected */
 
+			uint32 composite_bits;
+			mp_t junk;
+
+			gmp2mp(tmp1, &junk);
+			composite_bits = factor_list_add(obj, 
+						factor_list, &junk);
+
 			factor_found = 1;
-			if (factor_list_add(obj, factor_list, &tmp1) < 
-						SMALL_COMPOSITE_CUTOFF_BITS)
+			if (composite_bits < SMALL_COMPOSITE_CUTOFF_BITS) {
 				break;
+			}
+			else {
+				/* a single dependency could take hours,
+				   and if N has more than two factors then
+				   we'll need several dependencies to find
+				   them all. So at least report the smallest
+				   cofactor that we just found */
+
+				mpz_divexact(tmp2, n, tmp1);
+				gmp_sprintf(obj->mp_sprintf_buf, "%Zd",
+						(mpz_cmp(tmp1, tmp2) < 0) ? 
+						tmp1 : tmp2);
+				logprintf(obj, "found factor: %s\n",
+						obj->mp_sprintf_buf);
+			}
 		}
 	}
 
+finished:
 	cpu_time = time(NULL) - cpu_time;
 	logprintf(obj, "sqrtTime: %u\n", (uint32)cpu_time);
+
+	mpz_poly_free(&fb.rfb.poly);
+	mpz_poly_free(&fb.afb.poly);
+	mpz_poly_free(&monic_alg_poly);
+	mpz_clear(exponent);
+	mpz_clear(sqrt_r);
+	mpz_clear(sqrt_a);
+	mpz_clear(c);
+	mpz_clear(tmp1);
+	mpz_clear(tmp2);
+
 	return factor_found;
 }

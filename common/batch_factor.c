@@ -548,16 +548,22 @@ void relation_batch_free(relation_batch_t *rb) {
 /*------------------------------------------------------------------*/
 void relation_batch_add(int64 a, uint32 b, 
 			uint32 *factors_r, uint32 num_factors_r, 
-			mp_t *unfactored_r,
+			mpz_t unfactored_r_in,
 			uint32 *factors_a, uint32 num_factors_a, 
-			mp_t *unfactored_a,
+			mpz_t unfactored_a_in,
 			relation_batch_t *rb) {
 
 	uint32 i;
 	uint32 *f;
 	cofactor_t *c;
+	mp_t tmp1, tmp2;
+	mp_t *unfactored_r = &tmp1;
+	mp_t *unfactored_a = &tmp2;
 
 	/* add one relation to the batch */
+
+	gmp2mp(unfactored_r_in, unfactored_r);
+	gmp2mp(unfactored_a_in, unfactored_a);
 
 	if (rb->num_relations == rb->num_relations_alloc) {
 		rb->num_relations_alloc *= 2;

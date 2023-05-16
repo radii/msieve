@@ -73,6 +73,15 @@ $Id$
 	   These conditions together mean that deleting the entire 
 	   clique means reducing both X and Y by nearly the same 
 	   (large) amount. 
+
+	   A recent development on the scoring of cliques is due to
+	   Cyril Bouvier (http://hal.inria.fr/hal-00734654): if an ideal
+	   occurs n times in the dataset and m times in a clique, then
+	   the weight of the clique is the sum of m/n for each of the
+	   ideals of weight > 2. This actually produces slightly
+	   worse results at the end of the clique removal compared to
+	   Cavallar's weight function, but produces slightly smaller
+	   matrices (2-3% smaller) at the end of the merge phase.
 	   
 	   The clique processing here locates all of the cliques in a 
 	   list of NFS relations, saves a bunch of the heaviest ones, 
@@ -121,18 +130,6 @@ typedef struct {
 					 relation array of relations that
 					 occur in this clique */
 } clique_t;
-
-/* how much a single ideal contributes to the heaviness
-   of a clique. For an ideal of weight i > 2, the contribution
-   is ideal_score[i-2]. The score also has 1.0 added for
-   every relation in the clique */
-
-static const float ideal_score[] = {
-	1.0, 1.0/2, 1.0/4, 1.0/8, 1.0/16, 1.0/32, 1.0/64,
-	1.0/128, 1.0/256, 1.0/512, 1.0/1024, 1.0/2048,
-	1.0/4096, 1.0/8192
-};
-#define NUM_SCORES (sizeof(ideal_score) / sizeof(ideal_score[0]))
 
 /*--------------------------------------------------------------------*/
 
@@ -331,6 +328,13 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 	curr_relation = relation_array;
 	for (i = 0; i < num_relations; i++) {
 
+		uint64 relation_array_word = 
+				((uint32 *)curr_relation -
+				 (uint32 *)relation_array);
+
+		if (relation_array_word > (uint32)(-1))
+			break;
+
 		/* for each ideal in the relation */
 
 		for (j = 0; j < curr_relation->ideal_count; j++) {
@@ -350,8 +354,7 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 						sizeof(ideal_relation_t));
 			}
 			reverse_array[num_reverse].relation_array_word =
-					(uint32)((uint32 *)curr_relation -
-						(uint32 *)relation_array);
+						(uint32)relation_array_word;
 			reverse_array[num_reverse].next = 
 						ideal_map[ideal].payload;
 			ideal_map[ideal].payload = num_reverse++;
@@ -432,11 +435,8 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 					   to the score of the clique */
 
 					if (!map->clique) {
-						uint32 count = map->payload - 2;
-						if (count < NUM_SCORES) {
-							clique_score +=
-							ideal_score[count];
-						}
+						clique_score += 1.0 / 
+							map->payload;
 						continue;
 					}
 
@@ -488,7 +488,6 @@ static uint32 purge_cliques_core(msieve_obj *obj,
 		     num_clique_ideals > 65535)
 			continue;
 
-		clique_score += (double)num_clique_relations;
 		if (num_clique < clique_heap_size) {
 			/* heap not full; append this clique */
 			next_clique = clique_heap + num_clique;

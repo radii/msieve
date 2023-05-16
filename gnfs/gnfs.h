@@ -28,12 +28,6 @@ extern "C" {
 
 /*---------------------- general stuff ---------------------------*/
 
-/* the crossover point from degree 6 polynomials to
-   degree 7 is so huge (thousands of digits) that there's 
-   no point in allowing for the degree to exceed 5. 
-   However, we allow degree 7 for anyone who wants 
-   to experiment, and 8 for the desperados */
-
 #define MAX_POLY_DEGREE 8
 
 /* representation of polynomials with multiple-
@@ -43,14 +37,39 @@ extern "C" {
 
 typedef struct {
 	uint32 degree;
-	signed_mp_t coeff[MAX_POLY_DEGREE + 1];
-} mp_poly_t;
+	mpz_t coeff[MAX_POLY_DEGREE + 1];
+
+	/* scratch quantities for evaluating the homogeneous
+	   form of poly */
+	mpz_t tmp1, tmp2, tmp3;
+} mpz_poly_t;
+
+static INLINE void mpz_poly_init(mpz_poly_t * poly) {
+	uint32 i;
+
+	memset(poly, 0, sizeof(mpz_poly_t));
+
+	mpz_init(poly->tmp1);
+	mpz_init(poly->tmp2);
+	mpz_init(poly->tmp3);
+	for (i = 0; i <= MAX_POLY_DEGREE; i++)
+		mpz_init_set_ui(poly->coeff[i], 0);
+}
+
+static INLINE void mpz_poly_free(mpz_poly_t * poly) {
+	uint32 i;
+
+	mpz_clear(poly->tmp1);
+	mpz_clear(poly->tmp2);
+	mpz_clear(poly->tmp3);
+	for (i = 0; i <= MAX_POLY_DEGREE; i++)
+		mpz_clear(poly->coeff[i]);
+}
 
 /* evaluate the homogeneous form of poly(x). If poly has
    degree d, then res = (b ^ d) * poly(a / b) */
 
-void eval_poly(signed_mp_t *res, int64 a, uint32 b, mp_poly_t *poly);
-
+void eval_poly(mpz_t res, int64 a, uint32 b, mpz_poly_t *poly);
 
 typedef struct {
 	int64 a;
@@ -81,7 +100,7 @@ typedef struct {
    also returned in zeros[] */
 
 uint32 poly_get_zeros(uint32 *zeros, 
-			mp_poly_t *_f, 
+			mpz_poly_t *_f, 
 			uint32 p,
 			uint32 *high_coeff,
 			uint32 count_only);
@@ -91,7 +110,7 @@ uint32 poly_get_zeros(uint32 *zeros,
 
 uint32 poly_get_zeros_and_mult(uint32 *zeros, 
 			uint32 *mult,
-			mp_poly_t *_f, 
+			mpz_poly_t *_f, 
 			uint32 p,
 			uint32 *high_coeff);
 
@@ -99,15 +118,15 @@ uint32 poly_get_zeros_and_mult(uint32 *zeros,
    of some other polynomials with coefficients modulo p,
    zero otherwise */
 
-uint32 is_irreducible(mp_poly_t *poly, uint32 p);
+uint32 is_irreducible(mpz_poly_t *poly, uint32 p);
 
 /* compute the inverse square root of the polynomial s_in,
    modulo the monic polynomial f_in, with all coefficients
    reduced modulo q. Returns 1 if the root is found and 
    zero otherwise */
 
-uint32 inv_sqrt_mod_q(mp_poly_t *res, mp_poly_t *s_in, 
-			mp_poly_t *f_in, uint32 q, 
+uint32 inv_sqrt_mod_q(mpz_poly_t *res, mpz_poly_t *s_in, 
+			mpz_poly_t *f_in, uint32 q, 
 			uint32 *rand_seed1, uint32 *rand_seed2);
 
 /*---------------------- factor base stuff ---------------------------*/
@@ -124,7 +143,7 @@ typedef struct {
    the same as often as possible */
 
 typedef struct {
-	mp_poly_t poly;         /* rational or algebraic polynomial */
+	mpz_poly_t poly;        /* rational or algebraic polynomial */
 	uint32 max_prime;       /* largest prime in the factor base */
 	uint32 num_entries;     /* number of factor base entries */
 	uint32 num_alloc;       /* amount allocated for FB entries */
@@ -148,10 +167,10 @@ void create_factor_base(msieve_obj *obj,
 
 /* read / write / free a factor base */
 
-int32 read_factor_base(msieve_obj *obj, mp_t *n,
+int32 read_factor_base(msieve_obj *obj, mpz_t n,
 		     sieve_param_t *params, factor_base_t *fb);
 
-void write_factor_base(msieve_obj *obj, mp_t *n,
+void write_factor_base(msieve_obj *obj, mpz_t n,
 			sieve_param_t *params, factor_base_t *fb);
 
 void free_factor_base(factor_base_t *fb);
@@ -161,31 +180,31 @@ void free_factor_base(factor_base_t *fb);
 /* select NFS polynomials for factoring n, save
    in rat_poly and alg_poly */
 
-int32 find_poly(msieve_obj *obj, mp_t *n);
+int32 find_poly(msieve_obj *obj, mpz_t n);
 
 /* attempt to read NFS polynomials from the factor 
    base file, save them and return 0 if successful.
    Skewness is ignored if NULL */
 
-int32 read_poly(msieve_obj *obj, mp_t *n,
-	       mp_poly_t *rat_poly,
-	       mp_poly_t *alg_poly,
+int32 read_poly(msieve_obj *obj, mpz_t n,
+	       mpz_poly_t *rat_poly,
+	       mpz_poly_t *alg_poly,
 	       double *skewness);
 
 /* unconditionally write the input NFS polynomials
    to a new factor base file. Skewness is ignored
    if < 0 */
 
-void write_poly(msieve_obj *obj, mp_t *n,
-	       mp_poly_t *rat_poly,
-	       mp_poly_t *alg_poly,
+void write_poly(msieve_obj *obj, mpz_t n,
+	       mpz_poly_t *rat_poly,
+	       mpz_poly_t *alg_poly,
 	       double skewness);
 
 /* determine the size and root properties of one polynomial */
 
 void analyze_one_poly(msieve_obj *obj,
-	       mp_poly_t *rat_poly,
-	       mp_poly_t *alg_poly,
+	       mpz_poly_t *rat_poly,
+	       mpz_poly_t *alg_poly,
 	       double skewness);
 
 /*---------------------- sieving stuff ----------------------------------*/
@@ -196,7 +215,7 @@ void analyze_one_poly(msieve_obj *obj,
 
 uint32 do_line_sieving(msieve_obj *obj, 
 			sieve_param_t *params,
-			mp_t *n, uint32 start_relations,
+			mpz_t n, uint32 start_relations,
 			uint32 max_relations);
 
 /* the largest prime to be used in free relations */
@@ -218,7 +237,7 @@ uint32 add_free_relations(msieve_obj *obj, factor_base_t *fb,
    the estimated number of relations still needed before filtering
    could succeed is returned */
 
-uint32 nfs_filter_relations(msieve_obj *obj, mp_t *n);
+uint32 nfs_filter_relations(msieve_obj *obj, mpz_t n);
 
 /*---------------------- linear algebra stuff ----------------------------*/
 
@@ -230,7 +249,7 @@ uint32 nfs_filter_relations(msieve_obj *obj, mp_t *n);
 
 /* external interface for NFS linear algebra */
 
-void nfs_solve_linear_system(msieve_obj *obj, mp_t *n);
+void nfs_solve_linear_system(msieve_obj *obj, mpz_t n);
 
 /* The largest prime ideal that is stored in compressed format
    when the matrix is built. Setting this to zero will cause
@@ -240,7 +259,7 @@ void nfs_solve_linear_system(msieve_obj *obj, mp_t *n);
 
 /*------------------------ square root stuff --------------------------*/
 
-uint32 nfs_find_factors(msieve_obj *obj, mp_t *n, 
+uint32 nfs_find_factors(msieve_obj *obj, mpz_t n, 
 			factor_list_t *factor_list);
 
 /*------------------- relation processing stuff --------------------------*/
@@ -339,7 +358,8 @@ typedef struct {
 
 int32 nfs_read_relation(char *buf, factor_base_t *fb, 
 			relation_t *r, uint32 *array_size_out,
-			uint32 compress);
+			uint32 compress, mpz_t scratch,
+			uint32 test_primality);
 
 /* given a relation, find and list all of the rational
    ideals > filtmin_r and all of the algebraic ideals 
@@ -365,6 +385,8 @@ void nfs_read_cycles(msieve_obj *obj, factor_base_t *fb, uint32 *ncols,
 			uint32 dependency);
 
 void nfs_free_relation_list(relation_t *rlist, uint32 num_relations);
+
+void nfs_convert_cado_cycles(msieve_obj *obj);
 
 #ifdef __cplusplus
 }

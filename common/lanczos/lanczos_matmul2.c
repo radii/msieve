@@ -21,7 +21,7 @@ $Id$
 static void mul_trans_one_med_block(packed_block_t *curr_block,
 			uint64 *curr_row, uint64 *curr_b) {
 
-	uint16 *entries = curr_block->med_entries;
+	uint16 *entries = curr_block->d.med_entries;
 
 	while (1) {
 		uint64 t;
@@ -217,10 +217,8 @@ static void mul_trans_one_block(packed_block_t *curr_block,
 				uint64 *curr_row, uint64 *curr_b) {
 
 	uint32 i = 0;
-	uint32 j = 0;
-	uint32 k;
 	uint32 num_entries = curr_block->num_entries;
-	entry_idx_t *entries = curr_block->entries;
+	entry_idx_t *entries = curr_block->d.entries;
 
 	/* unroll by 16, i.e. the number of matrix elements
 	   in one cache line (usually). For 32-bit x86, we get
@@ -313,41 +311,71 @@ static void mul_trans_one_block(packed_block_t *curr_block,
 	#undef _txor
 
 	for (; i < num_entries; i++) {
-		j = entries[i].row_off;
-		k = entries[i].col_off;
-		curr_b[k] ^= curr_row[j];
+		curr_b[entries[i].col_off] ^= curr_row[entries[i].row_off];
 	}
 }
 
 /*-------------------------------------------------------------------*/
-void mul_trans_packed_core(thread_data_t *t) {
+void mul_trans_packed_core(void *data, int thread_num)
+{
+	la_task_t *task = (la_task_t *)data;
+	packed_matrix_t *p = task->matrix;
 
-	uint64 *x = t->x;
-	uint64 *b = t->b;
+	uint32 start_block_r = 1 + task->block_num * p->superblock_size;
+	uint32 num_blocks_r = MIN(p->superblock_size, 
+				p->num_block_rows - start_block_r);
+
+	packed_block_t *start_block = p->blocks + 
+				start_block_r * p->num_block_cols;
+	uint64 *x = p->x + (start_block_r - 1) * p->block_size +
+				p->first_block_size;
+	uint32 i, j;
+
+	for (i = task->task_num; i < p->num_block_cols; 
+					i += p->num_threads) {
+
+		packed_block_t *curr_block = start_block + i;
+		uint32 b_off = i * p->block_size;
+		uint64 *curr_x = x;
+		uint64 *b = p->b + b_off;
+
+		if (start_block_r == 1) {
+			memset(b, 0, MIN(p->block_size, p->ncols - b_off) * 
+						sizeof(uint64));
+			mul_trans_one_med_block(curr_block - 
+					p->num_block_cols, p->x, b);
+		}
+
+		for (j = 0; j < num_blocks_r; j++) {
+			mul_trans_one_block(curr_block, curr_x, b);
+			curr_block += p->num_block_cols;
+			curr_x += p->block_size;
+		}
+	}
+}
+
+/*-------------------------------------------------------------------*/
+void mul_trans_packed_small_core(void *data, int thread_num)
+{
+	/* multiply the densest few rows by x (in batches of 64 rows)
+	
+	   b doesn't need initializing since this is the last operation
+	   of a transpose multiply */
+
+	la_task_t *task = (la_task_t *)data;
+	packed_matrix_t *p = task->matrix;
+	uint32 vsize = p->ncols / p->num_threads;
+	uint32 off = vsize * task->task_num;
+	uint64 *x = p->x;
+	uint64 *b = p->b + off;
 	uint32 i;
 
-	/* you would think that doing the matrix multiply
-	   in column-major order would be faster, since this would
-	   also minimize dirty cache writes. Except that it's slower;
-	   it appears that row-major matrix access minimizes some
-	   kind of thrashing somewhere */
+	if (p->num_threads == 1)
+		vsize = p->ncols;
+	else if (task->task_num == p->num_threads - 1)
+		vsize = p->ncols - off;
 
-	for (i = 0; i < t->num_blocks; i++) {
-		packed_block_t *curr_block = t->blocks + i;
-		if (curr_block->med_entries)
-			mul_trans_one_med_block(curr_block, 
-					x + curr_block->start_row,
-					b + curr_block->start_col);
-		else
-			mul_trans_one_block(curr_block, 
-					x + curr_block->start_row,
-					b + curr_block->start_col);
-	}
-
-	/* multiply the densest few rows by x (in batches of 64 rows) */
-
-	for (i = 0; i < (t->num_dense_rows + 63) / 64; i++) {
-		mul_Nx64_64x64_acc(t->dense_blocks[i], x + 64 * i, 
-				   b + t->blocks[0].start_col, t->ncols);
-	}
+	for (i = 0; i < (p->num_dense_rows + 63) / 64; i++)
+		mul_Nx64_64x64_acc(p->dense_blocks[i] + off, 
+					x + 64 * i, b, vsize);
 }

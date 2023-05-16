@@ -14,6 +14,18 @@ $Id$
 
 #include "lanczos.h"
 
+#define DEFAULT_DUMP_INTERVAL 2000
+
+#ifdef HAVE_MPI
+	#define MPI_NODE_0_START if (obj->mpi_la_row_rank + \
+				obj->mpi_la_col_rank == 0) {
+
+	#define MPI_NODE_0_END }
+#else
+	#define MPI_NODE_0_START /* nothing */
+	#define MPI_NODE_0_END /* nothing */
+#endif
+
 #define BIT(x) ((uint64)(1) << (x))
 
 static const uint64 bitmask[64] = {
@@ -28,9 +40,10 @@ static const uint64 bitmask[64] = {
 };
 
 /*-------------------------------------------------------------------*/
-static uint64 * form_post_lanczos_matrix(msieve_obj *obj, uint32 *nrows, 
-				uint32 *dense_rows_out, uint32 ncols, 
-				la_col_t *cols) {
+static uint32 form_post_lanczos_matrix(msieve_obj *obj, uint32 *nrows, 
+				uint32 *dense_rows_out, 
+				uint32 ncols, la_col_t *cols,
+				uint64 **post_lanczos_matrix) {
 
 	uint32 i, j, k;
 	uint32 num_dense_rows = *dense_rows_out;
@@ -52,8 +65,17 @@ static uint64 * form_post_lanczos_matrix(msieve_obj *obj, uint32 *nrows,
 	   would finish quickly */
 
 	submatrix = NULL;
-	if (ncols >= MIN_NCOLS_TO_PACK ||
-	    (POST_LANCZOS_ROWS > 0 && ncols >= MIN_POST_LANCZOS_DIM)) {
+
+#ifdef HAVE_MPI
+	/* for a 2-D grid of MPI processes, only the top row
+	   of processes construct a post-lanczos matrix */
+
+	if (obj->mpi_la_row_rank != 0)
+		return 0;
+#endif
+
+	if (*nrows >= MIN_NROWS_TO_PACK ||
+	    (POST_LANCZOS_ROWS > 0 && *nrows >= MIN_POST_LANCZOS_DIM)) {
 
 		if (POST_LANCZOS_ROWS > 0) {
 			logprintf(obj, "saving the first %u matrix rows "
@@ -62,7 +84,7 @@ static uint64 * form_post_lanczos_matrix(msieve_obj *obj, uint32 *nrows,
 		}
 	}
 	else {
-		return NULL;
+		return 0;
 	}
 
 	mask = (uint64)(-1) >> (64 - POST_LANCZOS_ROWS);
@@ -141,8 +163,8 @@ static uint64 * form_post_lanczos_matrix(msieve_obj *obj, uint32 *nrows,
 
 	*nrows -= POST_LANCZOS_ROWS;
 	*dense_rows_out = new_dense_rows - POST_LANCZOS_ROWS;
-	count_matrix_nonzero(obj, *nrows, *dense_rows_out, ncols, cols);
-	return submatrix;
+	*post_lanczos_matrix = submatrix;
+	return (submatrix != NULL);
 }
 
 /*-------------------------------------------------------------------*/
@@ -189,292 +211,6 @@ static void transpose_64x64(uint64 *a, uint64 *b) {
 		}
 	}
 	memcpy(b, tmp, sizeof(tmp));
-}
-
-/*-------------------------------------------------------------------*/
-void mul_Nx64_64x64_acc(uint64 *v, uint64 *x,
-			uint64 *y, uint32 n) {
-
-	/* let v[][] be a n x 64 matrix with elements in GF(2), 
-	   represented as an array of n 64-bit words. Let c[][]
-	   be an 8 x 256 scratch matrix of 64-bit words.
-	   This code multiplies v[][] by the 64x64 matrix 
-	   x[][], then XORs the n x 64 result into y[][] */
-
-	uint32 i, j, k;
-	uint64 c[8 * 256];
-
-	/* fill c[][] with a bunch of "partial matrix multiplies". 
-	   For 0<=i<256, the j_th row of c[][] contains the matrix 
-	   product
-
-	   	( i << (8*j) ) * x[][]
-
-	   where the quantity in parentheses is considered a 
-	   1 x 64 vector of elements in GF(2). The resulting
-	   table will dramatically speed up matrix multiplies
-	   by x[][]. */
-
-	for (i = 0; i < 8; i++) {
-		uint64 *xtmp = x + 8 * i;
-		uint64 *ctmp = c + 256 * i;
-
-		for (j = 0; j < 256; j++) {
-			uint64 accum = 0;
-			uint32 index = j;
-
-			for (k = 0; k < 8; k++) {
-				if (index & ((uint32)1 << k))
-					accum ^= xtmp[k];
-			}
-			ctmp[j] = accum;
-		}
-	}
-
-#if defined(GCC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
-	i = 0;
-	ASM_G volatile(
-		     ALIGN_LOOP
-		     "0:                                   \n\t"
-		     "movq (%3,%0,8), %%mm0                \n\t"
-		     "movl (%1,%0,8), %%eax                \n\t"
-		     "incl %0                              \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "movq (%2,%%ecx,8), %%mm1             \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "pxor 1*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "shrl $16, %%eax                      \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "pxor 2*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "pxor 3*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movl 4-8(%1,%0,8), %%eax             \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "pxor 4*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "shrl $16, %%eax                      \n\t"
-		     "cmpl %4, %0                          \n\t"
-		     "pxor 5*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "pxor 6*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "pxor 7*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "pxor %%mm0, %%mm1                    \n\t"
-		     "movq %%mm1, -8(%3,%0,8)              \n\t"
-		     "jne 0b                               \n\t"
-		     "emms                                 \n\t"
-			:"+r"(i)
-			:"r"(v), "r"(c), "r"(y), "g"(n)
-			:"%eax", "%ecx", "%mm0", "%mm1", "memory");
-
-#elif defined(MSC_ASM32A)
-	i = 0;
-	ASM_M
-	{
-		push	ebx
-		mov	edi,y
-		lea	ebx,c
-		mov	esi,v
-		mov	ecx,i
-		align 16
-	L0:	movq	mm0,[edi+ecx*8]
-		mov	eax,[esi+ecx*8]
-		inc	ecx
-		movzx	edx, al
-		movq	mm1,[ebx+edx*8]
-		movzx	edx,ah
-		pxor	mm1,[1*256*8+ebx+edx*8]
-		shr	eax,16
-		movzx	edx,al
-		pxor	mm1,[2*256*8+ebx+edx*8]
-		movzx	edx,ah
-		pxor	mm1,[3*256*8+ebx+edx*8]
-		mov	eax,[4-8+esi+ecx*8]
-		movzx	edx,al
-		pxor	mm1,[4*256*8+ebx+edx*8]
-		movzx	edx,ah
-		shr	eax,16
-		cmp	ecx,n
-		pxor	mm1,[5*256*8+ebx+edx*8]
-		movzx	edx,al
-		pxor	mm1,[6*256*8+ebx+edx*8]
-		movzx	edx,ah
-		pxor	mm1,[7*256*8+ebx+edx*8]
-		pxor	mm1, mm0
-		movq	[-8+edi+ecx*8],mm1
-		jne	L0
-		pop	ebx
-		emms
-	}
-#else
-	for (i = 0; i < n; i++) {
-		uint64 word = v[i];
-		y[i] ^=  c[ 0*256 + ((uint8)(word >>  0)) ]
-		       ^ c[ 1*256 + ((uint8)(word >>  8)) ]
-		       ^ c[ 2*256 + ((uint8)(word >> 16)) ]
-		       ^ c[ 3*256 + ((uint8)(word >> 24)) ]
-		       ^ c[ 4*256 + ((uint8)(word >> 32)) ]
-		       ^ c[ 5*256 + ((uint8)(word >> 40)) ]
-		       ^ c[ 6*256 + ((uint8)(word >> 48)) ]
-		       ^ c[ 7*256 + ((uint8)(word >> 56)) ];
-	}
-#endif
-}
-
-/*-------------------------------------------------------------------*/
-void mul_64xN_Nx64(uint64 *x, uint64 *y,
-		   uint64 *xy, uint32 n) {
-
-	/* Let x and y be n x 64 matrices. This routine computes
-	   the 64 x 64 matrix xy[][] given by transpose(x) * y */
-
-	uint32 i;
-	uint64 c[8 * 256] = {0};
-
-	memset(xy, 0, 64 * sizeof(uint64));
-
-#if defined(GCC_ASM32A) && defined(HAS_MMX) && defined(NDEBUG)
-	i = 0;
-	ASM_G volatile(
-		     ALIGN_LOOP
-		     "0:                                   \n\t"
-		     "movq (%3,%0,8), %%mm0                \n\t"
-		     "movl (%1,%0,8), %%eax                \n\t"
-		     "incl %0                              \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor (%2,%%ecx,8), %%mm1             \n\t"
-		     "movq %%mm1, (%2,%%ecx,8)             \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor 1*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movq %%mm1, 1*256*8(%2,%%ecx,8)      \n\t"
-		     "shrl $16, %%eax                      \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor 2*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movq %%mm1, 2*256*8(%2,%%ecx,8)      \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor 3*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movq %%mm1, 3*256*8(%2,%%ecx,8)      \n\t"
-		     "movl 4-8(%1,%0,8), %%eax             \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor 4*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movq %%mm1, 4*256*8(%2,%%ecx,8)      \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "shrl $16, %%eax                      \n\t"
-		     "cmpl %4, %0                          \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor 5*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movq %%mm1, 5*256*8(%2,%%ecx,8)      \n\t"
-		     "movzbl %%al, %%ecx                   \n\t"
-		     "movq %%mm0, %%mm1                    \n\t"
-		     "pxor 6*256*8(%2,%%ecx,8), %%mm1      \n\t"
-		     "movq %%mm1, 6*256*8(%2,%%ecx,8)      \n\t"
-		     "movzbl %%ah, %%ecx                   \n\t"
-		     "pxor 7*256*8(%2,%%ecx,8), %%mm0      \n\t"
-		     "movq %%mm0, 7*256*8(%2,%%ecx,8)      \n\t"
-		     "jne 0b                               \n\t"
-		     "emms                                 \n\t"
-			:"+r"(i)
-			:"r"(x), "r"(c), "r"(y), "g"(n)
-			:"%eax", "%ecx", "%mm0", "%mm1", "memory");
-
-#elif defined(MSC_ASM32A)
-	i = 0;
-	ASM_M
-	{
-		push	ebx
-		mov	edi,y
-		lea	ebx,c
-		mov	esi,x
-		mov	ecx,i
-		align 16
-	L0:	movq	mm0,[edi+ecx*8]
-		mov	eax,[esi+ecx*8]
-		inc	ecx
-		movzx	edx,al
-		movq	mm1,mm0
-		pxor	mm1,[ebx+edx*8]
-		movq	[ebx+edx*8],mm1
-		movzx	edx,ah
-		movq	mm1, mm0
-		pxor	mm1,[1*256*8+ebx+edx*8]
-		movq	[1*256*8+ebx+edx*8],mm1
-		shr	eax,16
-		movzx	edx,al
-		movq	mm1,mm0
-		pxor	mm1,[2*256*8+ebx+edx*8]
-		movq	[2*256*8+ebx+edx*8],mm1
-		movzx	edx,ah
-		movq	mm1,mm0
-		pxor	mm1,[3*256*8+ebx+edx*8]
-		movq	[3*256*8+ebx+edx*8],mm1
-		mov	eax,[4-8+esi+ecx*8]
-		movzx	edx,al
-		movq	mm1,mm0
-		pxor	mm1,[4*256*8+ebx+edx*8]
-		movq	[4*256*8+ebx+edx*8],mm1
-		movzx	edx,ah
-		shr	eax,16
-		cmp	ecx,n
-		movq	mm1,mm0
-		pxor	mm1,[5*256*8+ebx+edx*8]
-		movq	[5*256*8+ebx+edx*8],mm1
-		movzx	edx,al
-		movq	mm1,mm0
-		pxor	mm1,[6*256*8+ebx+edx*8]
-		movq	[6*256*8+ebx+edx*8],mm1
-		movzx	edx,ah
-		pxor	mm0,[7*256*8+ebx+edx*8]
-		movq	[7*256*8+ebx+edx*8],mm0
-		jne	L0
-		emms
-		pop	ebx
-	}
-#else
-
-	for (i = 0; i < n; i++) {
-		uint64 xi = x[i];
-		uint64 yi = y[i];
-		c[ 0*256 + ((uint8) xi       ) ] ^= yi;
-		c[ 1*256 + ((uint8)(xi >>  8)) ] ^= yi;
-		c[ 2*256 + ((uint8)(xi >> 16)) ] ^= yi;
-		c[ 3*256 + ((uint8)(xi >> 24)) ] ^= yi;
-		c[ 4*256 + ((uint8)(xi >> 32)) ] ^= yi;
-		c[ 5*256 + ((uint8)(xi >> 40)) ] ^= yi;
-		c[ 6*256 + ((uint8)(xi >> 48)) ] ^= yi;
-		c[ 7*256 + ((uint8)(xi >> 56)) ] ^= yi;
-	}
-#endif
-
-	for(i = 0; i < 8; i++) {
-
-		uint32 j;
-		uint64 a0, a1, a2, a3, a4, a5, a6, a7;
-
-		a0 = a1 = a2 = a3 = 0;
-		a4 = a5 = a6 = a7 = 0;
-
-		for (j = 0; j < 256; j++) {
-			if ((j >> i) & 1) {
-				a0 ^= c[0*256 + j];
-				a1 ^= c[1*256 + j];
-				a2 ^= c[2*256 + j];
-				a3 ^= c[3*256 + j];
-				a4 ^= c[4*256 + j];
-				a5 ^= c[5*256 + j];
-				a6 ^= c[6*256 + j];
-				a7 ^= c[7*256 + j];
-			}
-		}
-
-		xy[ 0] = a0; xy[ 8] = a1; xy[16] = a2; xy[24] = a3;
-		xy[32] = a4; xy[40] = a5; xy[48] = a6; xy[56] = a7;
-		xy++;
-	}
 }
 
 /*-------------------------------------------------------------------*/
@@ -746,15 +482,104 @@ static uint32 combine_cols(uint32 ncols,
 
 /*-----------------------------------------------------------------------*/
 static void dump_lanczos_state(msieve_obj *obj, 
+			packed_matrix_t *packed_matrix,
 			uint64 *x, uint64 **vt_v0, uint64 **v, uint64 *v0,
 			uint64 **vt_a_v, uint64 **vt_a2_v, uint64 **winv,
-			uint32 n, uint32 dim_solved, uint32 iter,
+			uint32 n, uint32 max_n, uint32 dim_solved, uint32 iter,
 			uint32 s[2][64], uint32 dim1) {
 
 	char buf[256];
 	char buf_old[256];
 	FILE *dump_fp;
 	uint32 status = 1;
+
+#ifdef HAVE_MPI
+    
+	/* gather x, v[0], v[1], v[2] and v0 into MPI row 0 */
+
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : x,
+				packed_matrix->nsubcols, 
+				MPI_LONG_LONG, x,
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : v[0],
+				packed_matrix->nsubcols,  
+				MPI_LONG_LONG, v[0],
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : v[1],
+				packed_matrix->nsubcols,  
+				MPI_LONG_LONG, v[1],
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : v[2],
+				packed_matrix->nsubcols,  
+				MPI_LONG_LONG, v[2],
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : v0,
+				packed_matrix->nsubcols,  
+				MPI_LONG_LONG, v0,
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))	
+	
+	n = packed_matrix->ncols;	
+	
+	/* pull the full-size vectors into rank 0 */
+	if (obj->mpi_la_row_rank == 0) {
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : x,
+				n, MPI_LONG_LONG, x,
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : v[0],
+				n, MPI_LONG_LONG, v[0],
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : v[1],
+				n, MPI_LONG_LONG, v[1],
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : v[2],
+				n, MPI_LONG_LONG, v[2],
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : v0, 
+				n, MPI_LONG_LONG, v0,
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+	}
+#endif
+
+	MPI_NODE_0_START
 
 	sprintf(buf, "%s.chk0", obj->savefile.name);
 	sprintf(buf_old, "%s.chk", obj->savefile.name);
@@ -764,7 +589,7 @@ static void dump_lanczos_state(msieve_obj *obj,
 		exit(-1);
 	}
 
-	status &= (fwrite(&n, sizeof(uint32), (size_t)1, dump_fp)==1);
+	status &= (fwrite(&max_n, sizeof(uint32), (size_t)1, dump_fp)==1);
 	status &= (fwrite(&dim_solved, sizeof(uint32), (size_t)1, dump_fp)==1);
 	status &= (fwrite(&iter, sizeof(uint32), (size_t)1, dump_fp)==1);
 
@@ -778,11 +603,11 @@ static void dump_lanczos_state(msieve_obj *obj,
 	status &= (fwrite(s[1], sizeof(uint32), (size_t)64, dump_fp) == 64);
 	status &= (fwrite(&dim1, sizeof(uint32), (size_t)1, dump_fp) == 1);
 
-	status &= (fwrite(x, sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fwrite(v[0], sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fwrite(v[1], sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fwrite(v[2], sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fwrite(v0, sizeof(uint64), (size_t)n, dump_fp) == n);
+	status &= (fwrite(x, sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fwrite(v[0], sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fwrite(v[1], sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fwrite(v[2], sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fwrite(v0, sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
 	fclose(dump_fp);
 
 	/* only delete an old checkpoint file if the current 
@@ -795,19 +620,31 @@ static void dump_lanczos_state(msieve_obj *obj,
 		printf("error: previous checkpoint file not overwritten\n");
 		exit(-1);
 	}
+#if 1
+	{ /* let's keep two latest .chk files? */
+		char buf_bak[256];
+		sprintf(buf_bak, "%s.bak.chk", obj->savefile.name);
+		remove(buf_bak);
+		rename(buf_old, buf_bak);
+	}
+#else
 	remove(buf_old);
+#endif
 	if (rename(buf, buf_old)) {
 		printf("error: cannot update checkpoint file\n");
 		exit(-1);
 	}
+
+	MPI_NODE_0_END
 }
 
 /*-----------------------------------------------------------------------*/
 static void read_lanczos_state(msieve_obj *obj, 
+			packed_matrix_t *packed_matrix,
 			uint64 *x, uint64 **vt_v0, uint64 **v, uint64 *v0,
 			uint64 **vt_a_v, uint64 **vt_a2_v, uint64 **winv,
-			uint32 n, uint32 *dim_solved, uint32 *iter,
-			uint32 s[2][64], uint32 *dim1) {
+			uint32 n, uint32 max_n, uint32 *dim_solved, 
+			uint32 *iter, uint32 s[2][64], uint32 *dim1) {
 
 	uint32 read_n;
 	uint32 status;
@@ -823,7 +660,7 @@ static void read_lanczos_state(msieve_obj *obj,
 
 	status = 1;
 	fread(&read_n, sizeof(uint32), (size_t)1, dump_fp);
-	if (read_n != n) {
+	if (read_n != max_n) {
 		printf("error: unexpected vector size\n");
 		exit(-1);
 	}
@@ -840,11 +677,97 @@ static void read_lanczos_state(msieve_obj *obj,
 	status &= (fread(s[1], sizeof(uint32), (size_t)64, dump_fp) == 64);
 	status &= (fread(dim1, sizeof(uint32), (size_t)1, dump_fp) == 1);
 
-	status &= (fread(x, sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fread(v[0], sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fread(v[1], sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fread(v[2], sizeof(uint64), (size_t)n, dump_fp) == n);
-	status &= (fread(v0, sizeof(uint64), (size_t)n, dump_fp) == n);
+	MPI_NODE_0_START
+	status &= (fread(x, sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fread(v[0], sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fread(v[1], sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fread(v[2], sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	status &= (fread(v0, sizeof(uint64), (size_t)max_n, dump_fp)==max_n);
+	MPI_NODE_0_END
+
+#ifdef HAVE_MPI
+	/* push the full-size vectors to the top grid row */
+
+	if (obj->mpi_ncols > 1 && obj->mpi_la_row_rank == 0) {
+		MPI_TRY(MPI_Scatterv(x, packed_matrix->col_counts,
+				packed_matrix->col_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_col_rank == 0) ?  
+					MPI_IN_PLACE : x, 
+				n, MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Scatterv(v[0], packed_matrix->col_counts,
+				packed_matrix->col_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_col_rank == 0) ?  
+					MPI_IN_PLACE : v[0],
+				n, MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Scatterv(v[1], packed_matrix->col_counts,
+				packed_matrix->col_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_col_rank == 0) ?  
+					MPI_IN_PLACE : v[1], 
+				n, MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Scatterv(v[2], packed_matrix->col_counts,
+				packed_matrix->col_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_col_rank == 0) ?  
+					MPI_IN_PLACE : v[2], 
+				n, MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Scatterv(v0, packed_matrix->col_counts,
+				packed_matrix->col_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_col_rank == 0) ?  
+					MPI_IN_PLACE : v0, 
+				n, MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+	}
+
+	/* duplicate the top grid row across all the grid rows */
+
+	if (obj->mpi_nrows > 1) {
+		/* scatter x, v[0], v[1], v[2] and v0 subparts 
+		   within each MPI column */
+
+		MPI_TRY(MPI_Scatterv(x, packed_matrix->subcol_counts,
+	                         packed_matrix->subcol_offsets, 
+	                         MPI_LONG_LONG, 
+	                         (obj->mpi_la_row_rank == 0) ?  
+	                         MPI_IN_PLACE : x, 
+	                         n, MPI_LONG_LONG, 0, 
+				 obj->mpi_la_col_grid))
+	    
+		MPI_TRY(MPI_Scatterv(v[0], packed_matrix->subcol_counts,
+	                         packed_matrix->subcol_offsets, 
+	                         MPI_LONG_LONG, 
+	                         (obj->mpi_la_row_rank == 0) ?  
+	                         MPI_IN_PLACE : v[0], 
+	                         n, MPI_LONG_LONG, 0, 
+				 obj->mpi_la_col_grid))
+	    
+		MPI_TRY(MPI_Scatterv(v[1], packed_matrix->subcol_counts,
+	                         packed_matrix->subcol_offsets, 
+	                         MPI_LONG_LONG, 
+	                         (obj->mpi_la_row_rank == 0) ?  
+	                         MPI_IN_PLACE : v[1], 
+	                         n, MPI_LONG_LONG, 0, 
+				 obj->mpi_la_col_grid))
+	    
+		MPI_TRY(MPI_Scatterv(v[2], packed_matrix->subcol_counts,
+	                         packed_matrix->subcol_offsets, 
+	                         MPI_LONG_LONG, 
+	                         (obj->mpi_la_row_rank == 0) ?  
+	                         MPI_IN_PLACE : v[2], 
+	                         n, MPI_LONG_LONG, 0, 
+				 obj->mpi_la_col_grid))
+	    
+		MPI_TRY(MPI_Scatterv(v0, packed_matrix->subcol_counts,
+	                         packed_matrix->subcol_offsets, 
+	                         MPI_LONG_LONG, 
+	                         (obj->mpi_la_row_rank == 0) ?  
+	                         MPI_IN_PLACE : v0, 
+	                         n, MPI_LONG_LONG, 0, 
+				 obj->mpi_la_col_grid))
+	}
+#endif
 
 	fclose(dump_fp);
 	if (status == 0) {
@@ -855,7 +778,7 @@ static void read_lanczos_state(msieve_obj *obj,
 
 /*-----------------------------------------------------------------------*/
 static void init_lanczos_state(msieve_obj *obj, 
-			packed_matrix_t *packed_matrix,
+			packed_matrix_t *packed_matrix, uint64 *scratch,
 			uint64 *x, uint64 *v0, uint64 **vt_v0, uint64 **v, 
 			uint64 **vt_a_v, uint64 **vt_a2_v, uint64 **winv,
 			uint32 n, uint32 s[2][64], uint32 *dim1) {
@@ -866,14 +789,40 @@ static void init_lanczos_state(msieve_obj *obj,
 	   and v[0] starts off as B*x. This initial copy
 	   of v[0] must be saved off separately */
 
-	for (i = 0; i < n; i++) {
-		x[i] = v[0][i] = 
+#ifdef HAVE_MPI
+	if (obj->mpi_la_row_rank == 0) {       
+#endif
+		for (i = 0; i < n; i++) {
+			x[i] = v[0][i] = 
 			  (uint64)(get_rand(&obj->seed1, &obj->seed2)) << 32 |
 		          (uint64)(get_rand(&obj->seed1, &obj->seed2));
+		}
+#ifdef HAVE_MPI
 	}
 
-	mul_MxN_Nx64(packed_matrix, v[0], v[1]);
-	mul_trans_MxN_Nx64(packed_matrix, v[1], v[0]);
+	/* all nodes work with vectors of size ncols/P */
+	n = packed_matrix->nsubcols;
+	
+	/* scatter x and v[0] subparts within each MPI column */
+	MPI_TRY(MPI_Scatterv(x, packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_row_rank == 0) ?  
+					MPI_IN_PLACE : x, 
+				n, MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Scatterv(v[0], packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets, 
+				MPI_LONG_LONG, 
+				(obj->mpi_la_row_rank == 0) ?  
+					MPI_IN_PLACE : v[0], 
+				n, MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+#endif
+
+	mul_sym_NxN_Nx64(packed_matrix, v[0], v[0], scratch);
+
 	memcpy(v0, v[0], n * sizeof(uint64));
 
 	/* Subscripts larger than zero represent past versions of 
@@ -908,6 +857,8 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	   vectors, is returned */
 
 	uint32 n = packed_matrix->ncols;
+	uint32 max_n = packed_matrix->max_ncols;
+	uint32 alloc_n = MAX(packed_matrix->nrows, packed_matrix->ncols);
 	uint64 *vnext, *v[3], *x, *v0;
 	uint64 *winv[3], *vt_v0_next;
 	uint64 *vt_a_v[2], *vt_a2_v[2], *vt_v0[3];
@@ -915,10 +866,11 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	uint64 *tmp;
 	uint32 s[2][64];
 	uint64 d[64], e[64], f[64], f2[64];
-	uint32 i, iter;
+	uint32 i; 
 	uint32 dim0, dim1;
 	uint64 mask0, mask1;
 
+	uint32 iter = 0;
 	uint32 dim_solved = 0;
 	uint32 first_dim_solved = 0;
 	uint32 report_interval = 0;
@@ -935,7 +887,45 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	else
 		logprintf(obj, "commencing Lanczos iteration\n");
 
-	/* allocate all the 64x64 variables */
+#ifdef HAVE_MPI
+	
+	/* all nodes work with vectors of size ncols/P */
+	n = packed_matrix->nsubcols;
+	   
+	/* nodes of grid row(col) 0 will gather vectors for node 0 */
+	
+	if (packed_matrix->mpi_la_row_rank == 0 || 
+	    packed_matrix->mpi_la_col_rank == 0)
+		alloc_n = MAX(packed_matrix->nrows, packed_matrix->ncols);
+	else
+		alloc_n = MAX(packed_matrix->nsubrows, packed_matrix->nsubcols);
+	
+	/* size-n data; the vectors for node 0 are the maximum size
+	 but we can limit the vector size for all the other ranks */
+	
+	MPI_NODE_0_START
+	alloc_n = max_n;
+	MPI_NODE_0_END
+	
+	/* we'll need 2 scratch vectors for the matrix multiply */
+	scratch = (uint64 *)xmalloc(2 * MAX(packed_matrix->nrows, 
+				packed_matrix->ncols) * sizeof(uint64));
+#else	
+    
+	/* size-n data */
+
+	alloc_n = max_n;
+	scratch = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+#endif    
+
+	v[0] = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+	v[1] = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+	v[2] = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+	vnext = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+	x = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+	v0 = (uint64 *)xmalloc(alloc_n * sizeof(uint64));
+    
+	/* 64x64 data */
 
 	winv[0] = (uint64 *)xmalloc(64 * sizeof(uint64));
 	winv[1] = (uint64 *)xmalloc(64 * sizeof(uint64));
@@ -949,35 +939,27 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	vt_v0[2] = (uint64 *)xmalloc(64 * sizeof(uint64));
 	vt_v0_next = (uint64 *)xmalloc(64 * sizeof(uint64));
 
-	/* allocate all of the size-n variables except v0,
-	   which will be freed if it's not needed */
-
-	v[0] = (uint64 *)xmalloc(n * sizeof(uint64));
-	v[1] = (uint64 *)xmalloc(n * sizeof(uint64));
-	v[2] = (uint64 *)xmalloc(n * sizeof(uint64));
-	vnext = (uint64 *)xmalloc(n * sizeof(uint64));
-	x = (uint64 *)xmalloc(n * sizeof(uint64));
-	scratch = (uint64 *)xmalloc(n * sizeof(uint64));
-	v0 = (uint64 *)xmalloc(n * sizeof(uint64));
-
 	logprintf(obj, "memory use: %.1f MB\n", (double)
-			((7 * n * sizeof(uint64) +
-			 packed_matrix_sizeof(packed_matrix))) / 1048576);
+			(packed_matrix_sizeof(packed_matrix)) / 1048576);
 
 	/* initialize */
 
+	*num_deps_found = 0;
 	iter = 0;
 	dim0 = 0;
 
 	if (obj->flags & MSIEVE_FLAG_NFS_LA_RESTART) {
-		read_lanczos_state(obj, x, vt_v0, v, v0, vt_a_v, vt_a2_v,
-				winv, n, &dim_solved, &iter, s, &dim1);
+		read_lanczos_state(obj, packed_matrix, 
+				x, vt_v0, v, v0, vt_a_v, vt_a2_v,
+				winv, packed_matrix->ncols, max_n, 
+				&dim_solved, &iter, s, &dim1);
 		logprintf(obj, "restarting at iteration %u (dim = %u)\n",
 				iter, dim_solved);
 	}
 	else {
-		init_lanczos_state(obj, packed_matrix, x, v0, vt_v0, v, 
-				vt_a_v, vt_a2_v, winv, n, s, &dim1);
+		init_lanczos_state(obj, packed_matrix, scratch, x, 
+				v0, vt_v0, v, vt_a_v, vt_a2_v, 
+				winv, packed_matrix->ncols, s, &dim1);
 	}
 
 	mask1 = 0;
@@ -988,14 +970,14 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	   it would be worthwhile to report progress */
 
 	first_time = time(NULL);
-	if (n > 60000 &&
+	if (max_n > 60000 &&
 	    obj->flags & (MSIEVE_FLAG_USE_LOGFILE |
 	    		  MSIEVE_FLAG_LOG_TO_STDOUT)) {
-		if (n > 1000000)
+		if (max_n > 1000000)
 			report_interval = 200;
-		else if (n > 500000)
+		else if (max_n > 500000)
 			report_interval = 500;
-		else if (n > 100000)
+		else if (max_n > 100000)
 			report_interval = 2000;
 		else
 			report_interval = 8000;
@@ -1004,10 +986,12 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	}
 
 	if (dump_interval) {
-		next_dump = (dim_solved / dump_interval + 1) * 
+		/* avoid check (at dump) within 4*64 dim + some cushion */
+		next_dump = ((dim_solved + 400) / dump_interval + 1) * 
 					dump_interval;
 		check_interval = 10000;
-		next_check = (dim_solved / check_interval + 1) * 
+		/* avoid next_check within 4*64 dim + some cushion */
+		next_check = ((dim_solved + 400) / check_interval + 1) * 
 					check_interval;
 	}
 
@@ -1016,17 +1000,15 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	while (1) {
 		iter++;
 
-		/* multiply the current v[0] by a symmetrized
-		   version of B, or B'B (apostrophe means 
-		   transpose). Use "A" to refer to B'B  */
-
-		mul_MxN_Nx64(packed_matrix, v[0], scratch);
-		mul_trans_MxN_Nx64(packed_matrix, scratch, vnext);
-
+		/* multiply the current v[0] by the matrix and write
+		   to vnext */
+              
+		mul_sym_NxN_Nx64(packed_matrix, v[0], vnext, scratch);
+                
 		/* compute v0'*A*v0 and (A*v0)'(A*v0) */
 
-		mul_64xN_Nx64(v[0], vnext, vt_a_v[0], n);
-		mul_64xN_Nx64(vnext, vnext, vt_a2_v[0], n);
+		tmul_64xN_Nx64(packed_matrix, v[0], vnext, vt_a_v[0], n);
+		tmul_64xN_Nx64(packed_matrix, vnext, vnext, vt_a2_v[0], n);
 
 		/* if the former is orthogonal to itself, then
 		   the iteration has finished */
@@ -1069,7 +1051,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		   slightly less than the number of rows, not the number
 		   of columns (=n) */
 	
-		if (dim_solved < packed_matrix->nrows - 64) {
+		if (dim_solved < packed_matrix->max_nrows - 64) {
 			if ((mask0 | mask1) != (uint64)(-1)) {
 				logprintf(obj, "lanczos error (dim = %u): "
 						"not all columns used\n",
@@ -1095,7 +1077,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		   and is stored in vt_v0_next. */
 
 		if (iter < 4) {
-			mul_64xN_Nx64(v[0], v0, vt_v0[0], n);
+			tmul_64xN_Nx64(packed_matrix, v[0], v0, vt_v0[0], n);
 		}
 		else if (iter == 4) {
 			/* v0 is not needed from now on; recycle it 
@@ -1112,19 +1094,30 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		   right before a checkpoint file is written */
 
 		if (check_interval && (dim_solved >= next_check ||
-		    dim_solved >= next_dump ||
-		    obj->flags & MSIEVE_FLAG_STOP_SIEVING)) {
+#ifndef HAVE_MPI
+		    obj->flags & MSIEVE_FLAG_STOP_SIEVING ||
+#endif
+		    dim_solved >= next_dump)) {
 
-			mul_64xN_Nx64(v0, vnext, d, n);
+			tmul_64xN_Nx64(packed_matrix, v0, vnext, d, n);
 			for (i = 0; i < 64; i++) {
 				if (d[i] != (uint64)0) {
-					printf("\nerror: corrupt state, please "
-						"restart from checkpoint\n");
+					logprintf(obj, "error: corrupt state, "
+					       "please restart from "
+					       "checkpoint\n");
+					printf("\nerror: corrupt state, "
+					       "please restart from "
+					       "checkpoint\n");
+#ifdef HAVE_MPI
+					MPI_Abort(MPI_COMM_WORLD, 
+							MPI_ERR_ASSERT);
+#else
 					exit(-1);
+#endif
 				}
 			}
 			/* check passed */
-			next_check = (dim_solved / check_interval + 1) * 
+			next_check = ((dim_solved + 400) / check_interval + 1) * 
 							check_interval;
 			memcpy(v0, vnext, n * sizeof(uint64));
 		}
@@ -1139,7 +1132,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		for (i = 0; i < 64; i++)
 			d[i] = d[i] ^ bitmask[i];
 
-		mul_Nx64_64x64_acc(v[0], d, vnext, n);
+		tmul_Nx64_64x64_acc(packed_matrix, v[0], d, vnext, n);
 
 		transpose_64x64(d, d);
 		mul_64x64_64x64(d, vt_v0[0], vt_v0_next);
@@ -1151,7 +1144,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		for (i = 0; i < 64; i++)
 			e[i] = e[i] & mask0;
 
-		mul_Nx64_64x64_acc(v[1], e, vnext, n);
+		tmul_Nx64_64x64_acc(packed_matrix, v[1], e, vnext, n);
 
 		transpose_64x64(e, e);
 		mul_64x64_64x64(e, vt_v0[1], e);
@@ -1176,7 +1169,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 
 			mul_64x64_64x64(f, f2, f);
 
-			mul_Nx64_64x64_acc(v[2], f, vnext, n);
+			tmul_Nx64_64x64_acc(packed_matrix, v[2], f, vnext, n);
 
 			transpose_64x64(f, f);
 			mul_64x64_64x64(f, vt_v0[2], f);
@@ -1187,7 +1180,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		/* update the computed solution 'x' */
 
 		mul_64x64_64x64(winv[0], vt_v0[0], d);
-		mul_Nx64_64x64_acc(v[0], d, x, n);
+		tmul_Nx64_64x64_acc(packed_matrix, v[0], d, x, n);
 
 		/* rotate all the variables */
 
@@ -1216,28 +1209,30 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		mask1 = mask0;
 		dim1 = dim0;
 
+		MPI_NODE_0_START
+
 		/* possibly print a status update */
 
 		if (report_interval) {
 			if (dim_solved >= next_report) {
 				time_t curr_time = time(NULL);
 				double elapsed = curr_time - first_time;
-				uint32 eta = elapsed * (n - dim_solved) /
+				uint32 eta = elapsed * (max_n - dim_solved) /
 						(dim_solved - first_dim_solved);
 
 				fprintf(stderr, "linear algebra completed %u "
 					"of %u dimensions (%1.1f%%, ETA "
 					"%dh%2dm)    \r",
-					dim_solved, n, 100.0 * dim_solved / n,
-					eta / 3600, (eta % 3600) / 60);
+					dim_solved, max_n, 100.0 * dim_solved / 
+					max_n, eta / 3600, (eta % 3600) / 60);
 
 				/* report the ETA to the logfile once 
-				   (wait 3 intervals for a better ETA) */
+				   (wait 6 intervals for a better ETA) */
 
-				if (++log_eta_once == 3) {
+				if (++log_eta_once == 6) {
 					logprintf(obj, "linear algebra at "
 						   "%1.1f%%, ETA %dh%2dm\n",
-						100.0 * dim_solved / n,
+						100.0 * dim_solved / max_n,
 						eta / 3600, 
 						(eta % 3600) / 60);
 				}
@@ -1246,25 +1241,90 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 			}
 		}
 
-		/* possibly dump a checkpoint file, check for interrupt */
+		MPI_NODE_0_END
+
+		/* possibly dump a checkpoint file, check for interrupt.
+
+		   Note that MPI cannot reliably dump a checkpoint when
+		   interrupted, because multiple MPI processes must 
+		   participate in the dump process but there is no real
+		   way to signal them all to enter the following at the
+		   same time, short of a logical-or of all the obj->flags
+		   fields on every iteration. That costs about 3% of the
+		   total runtime, and grows with increasing grid size */
 
 		if (dump_interval) {
-			if (dim_solved >= next_dump ||
-			    obj->flags & MSIEVE_FLAG_STOP_SIEVING) {
+			if (dim_solved >= next_dump &&
+			    dump_interval == DEFAULT_DUMP_INTERVAL) {
 
-				dump_lanczos_state(obj, x, vt_v0, v, v0, 
-						   vt_a_v, vt_a2_v, winv, n, 
-						   dim_solved, iter, s, dim1);
-				next_dump = (dim_solved / dump_interval + 1) * 
+				/* the dump interval is the initial one,
+				   chosen to accumulate some timing information.
+				   Now compute the real dump interval, 
+				   calibrated to happen about once per hour.
+
+				   For MPI, the root node computes the
+				   dump interval used by everyone */
+
+				MPI_NODE_0_START
+				time_t curr_time = time(NULL);
+				double elapsed = curr_time - first_time;
+
+				dump_interval = (3600.0 / elapsed) *
+					       (dim_solved - first_dim_solved); 
+				dump_interval = MAX(dump_interval,
+						   DEFAULT_DUMP_INTERVAL + 1);
+
+				/* make the dump interval a multiple of
+				   the check interval. If this is not done,
+				   eventually we will perform a check and
+				   then less than three iterations later
+				   will get a dump, which performs another
+				   check. The Lanczos recurrence only
+				   guarantees that check vectors more than
+				   three iterations back will be orthogonal
+				   to the current x, so this will cause 
+				   spurious failures */
+
+				dump_interval += check_interval -
+						dump_interval %
+						check_interval;
+
+				logprintf(obj, "checkpointing every %u "
+					   "dimensions\n", dump_interval);
+				MPI_NODE_0_END
+#ifdef HAVE_MPI
+				MPI_TRY(MPI_Bcast(&dump_interval, 1, 
+						MPI_INT, 0, obj->mpi_la_grid))
+#endif
+				next_dump = ((dim_solved + 400) / dump_interval + 1) * 
+							dump_interval;
+				continue;
+			}
+
+			if (
+#ifndef HAVE_MPI
+			    obj->flags & MSIEVE_FLAG_STOP_SIEVING ||
+#endif
+			    dim_solved >= next_dump) {
+
+				dump_lanczos_state(obj, packed_matrix, 
+						   x, vt_v0, v, v0, 
+						   vt_a_v, vt_a2_v, winv, 
+						   n, max_n, dim_solved, 
+						   iter, s, dim1);
+				next_dump = ((dim_solved + 400) / dump_interval + 1) * 
 							dump_interval;
 			}
 			if (obj->flags & MSIEVE_FLAG_STOP_SIEVING)
 				break;
 		}
+
 	}
 
+	MPI_NODE_0_START
 	if (report_interval)
 		fprintf(stderr, "\n");
+	MPI_NODE_0_END
 
 	logprintf(obj, "lanczos halted after %u iterations (dim = %u)\n", 
 					iter, dim_solved);
@@ -1272,7 +1332,6 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	/* free unneeded storage */
 
 	free(vnext);
-	free(scratch);
 	free(v0);
 	free(vt_a_v[0]);
 	free(vt_a_v[1]);
@@ -1289,22 +1348,116 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 	/* if a recoverable failure occurred, start everything
 	   over again */
 
+	MPI_NODE_0_START
+
 	if (dim0 == 0 || (obj->flags & MSIEVE_FLAG_STOP_SIEVING)) {
 		free(x);
+		free(scratch);
 		free(v[0]);
 		free(v[1]);
 		free(v[2]);
 		if (dim0 == 0)
 			logprintf(obj, "linear algebra failed; retrying...\n");
+#ifdef HAVE_MPI
+		/* MPI cannot restart gracefully, or shut down
+		   gracefully from an interrupt */
+		MPI_Abort(MPI_COMM_WORLD, MPI_ERR_ASSERT);
+#endif
 		return NULL;
 	}
+
+	MPI_NODE_0_END
+
 
 	/* convert the output of the iteration to an actual
 	   collection of nullspace vectors. Begin by multiplying
 	   the output from the iteration by B */
 
-	mul_MxN_Nx64(packed_matrix, x, v[1]);
-	mul_MxN_Nx64(packed_matrix, v[0], v[2]);
+	mul_MxN_Nx64(packed_matrix, x, v[1], scratch);
+	mul_MxN_Nx64(packed_matrix, v[0], v[2], scratch);
+
+#ifdef HAVE_MPI
+	/* pull the result vectors into rank 0 */
+    
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : x,
+				packed_matrix->nsubcols, 
+				MPI_LONG_LONG, x,
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+				MPI_IN_PLACE : v[0],
+				packed_matrix->nsubcols,  
+				MPI_LONG_LONG, v[0],
+				packed_matrix->subcol_counts,
+				packed_matrix->subcol_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_col_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+				MPI_IN_PLACE : v[1],
+				packed_matrix->nsubrows, 
+				MPI_LONG_LONG, v[1],
+				packed_matrix->subrow_counts,
+				packed_matrix->subrow_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_row_grid))
+	
+	MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+				MPI_IN_PLACE : v[2],
+				packed_matrix->nsubrows, 
+				MPI_LONG_LONG, v[2],
+				packed_matrix->subrow_counts,
+				packed_matrix->subrow_offsets,
+				MPI_LONG_LONG, 0, 
+				obj->mpi_la_row_grid))
+
+	n = packed_matrix->ncols;
+	
+	if (obj->mpi_la_row_rank == 0) {
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : x,
+				n, MPI_LONG_LONG, x,
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ? 
+						MPI_IN_PLACE : v[0],
+				n, MPI_LONG_LONG, v[0],
+				packed_matrix->col_counts,
+				packed_matrix->col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+	}
+	if (obj->mpi_la_col_rank == 0) {
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+						MPI_IN_PLACE : v[1],
+				packed_matrix->nrows, 
+				MPI_LONG_LONG, v[1],
+				packed_matrix->row_counts,
+				packed_matrix->row_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_col_grid))
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_row_rank == 0) ? 
+						MPI_IN_PLACE : v[2],
+				packed_matrix->nrows, 
+				MPI_LONG_LONG, v[2],
+				packed_matrix->row_counts,
+				packed_matrix->row_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_col_grid))
+	}
+#endif
+
+	MPI_NODE_0_START
+        
+	/* make sure the last few words of the above matrix products
+	   are zero, since the postprocessing will be using them */
+
+	for (i = packed_matrix->max_nrows; 
+			i < packed_matrix->max_ncols; i++) {
+		v[1][i] = v[2][i] = 0;
+	}
 
 	/* if necessary, add in the contribution of the
 	   first few rows that were originally in B. We 
@@ -1318,7 +1471,7 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 			uint64 accum1 = 0;
 			uint32 j;
 			mask0 = bitmask[i];
-			for (j = 0; j < n; j++) {
+			for (j = 0; j < max_n; j++) {
 				if (post_lanczos_matrix[j] & mask0) {
 					accum0 ^= x[j];
 					accum1 ^= v[0][j];
@@ -1329,21 +1482,10 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 		}
 	}
 
-	*num_deps_found = combine_cols(n, x, v[0], v[1], v[2]);
+	*num_deps_found = combine_cols(max_n, x, v[0], v[1], v[2]);
+	MPI_NODE_0_END
 
-	/* verify that these really are linear dependencies of B */
-
-	mul_MxN_Nx64(packed_matrix, x, v[0]);
-
-	for (i = 0; i < n; i++) {
-		if (v[0][i] != 0)
-			break;
-	}
-	if (i < n) {
-		logprintf(obj, "lanczos error: dependencies don't work\n");
-		exit(-1);
-	}
-	
+	free(scratch);
 	free(v[0]);
 	free(v[1]);
 	free(v[2]);
@@ -1358,46 +1500,153 @@ static uint64 * block_lanczos_core(msieve_obj *obj,
 }
 
 /*-----------------------------------------------------------------------*/
-uint64 * block_lanczos(msieve_obj *obj, uint32 nrows, 
-			uint32 num_dense_rows, uint32 ncols, 
+uint64 * block_lanczos(msieve_obj *obj, 
+			uint32 nrows, uint32 max_nrows, uint32 start_row,
+			uint32 num_dense_rows, 
+			uint32 ncols, uint32 max_ncols, uint32 start_col,
 			la_col_t *B, uint32 *num_deps_found) {
 	
 	/* External interface to the linear algebra */
 
-	uint64 *post_lanczos_matrix;
+	uint64 *post_lanczos_matrix = NULL;
 	uint64 *dependencies;
 	packed_matrix_t packed_matrix;
 	uint32 dump_interval;
+	uint32 have_post_lanczos;
+#ifdef HAVE_MPI
+	uint32 start_sub;
+#endif
 
-	if (ncols <= nrows) {
+	if (max_ncols <= max_nrows) {
 		logprintf(obj, "matrix needs more columns than rows; "
-                 "try adding 2-3% more relations\n");
+                 "try adding 2-3%% more relations\n");
 		exit(-1);
 	}
 
 	/* optionally remove the densest rows of the matrix, and
 	   optionally pack a few more rows into dense format */
 
-	post_lanczos_matrix = form_post_lanczos_matrix(obj, &nrows,
-					&num_dense_rows, ncols, B);
+	have_post_lanczos = form_post_lanczos_matrix(obj, &nrows,
+					&num_dense_rows, ncols, B, 
+					&post_lanczos_matrix);
 	if (num_dense_rows) {
 		logprintf(obj, "matrix includes %u packed rows\n", 
 					num_dense_rows);
 	}
 
-	packed_matrix_init(obj, &packed_matrix, B, nrows, 
-			   ncols, num_dense_rows);
+	memset(&packed_matrix, 0, sizeof(packed_matrix_t));
+
+#ifndef HAVE_MPI
+	if (have_post_lanczos)
+		max_nrows -= POST_LANCZOS_ROWS;
+
+#else
+	/* tell all the MPI processes whether a post lanczos matrix
+	   was constructed */
+
+	MPI_TRY(MPI_Bcast(&have_post_lanczos, 1, MPI_INT, 0,
+			obj->mpi_la_col_grid))
+
+	if (have_post_lanczos) {
+		/* adjust the number of rows to reflect the fact
+		   that the matrix is now POST_LANCZOS_ROWS smaller.
+		   Fortunately, MPI processes below the top row of
+		   the grid have their row numbers relative to offset
+		   start_row, so we don't have to adjust all the data */
+		
+		max_nrows -= POST_LANCZOS_ROWS;
+		if (obj->mpi_la_row_rank > 0)
+			start_row -= POST_LANCZOS_ROWS;
+	}
+
+	/* give the bounds for scatter-gather operations 
+	   to the MPI root node */
+
+	if (obj->mpi_la_row_rank == 0) {
+		MPI_TRY(MPI_Gather(&ncols, 1, MPI_INT, 
+				packed_matrix.col_counts, 
+				1, MPI_INT, 0, obj->mpi_la_row_grid))
+		MPI_TRY(MPI_Gather(&start_col, 1, MPI_INT, 
+				packed_matrix.col_offsets, 
+				1, MPI_INT, 0, obj->mpi_la_row_grid))
+	}
+
+	if (obj->mpi_la_col_rank == 0) {
+		MPI_TRY(MPI_Gather(&nrows, 1, MPI_INT, 
+				packed_matrix.row_counts, 
+				1, MPI_INT, 0, obj->mpi_la_col_grid))
+		MPI_TRY(MPI_Gather(&start_row, 1, MPI_INT, 
+				packed_matrix.row_offsets, 
+				1, MPI_INT, 0, obj->mpi_la_col_grid))
+	}
+    
+	/* figure out the bounds of scatter-gather operations
+	   down each MPI column and across each MPI row */
+
+	global_chunk_info(ncols, obj->mpi_nrows, obj->mpi_la_row_rank,
+			 &packed_matrix.nsubcols, &start_sub);   
+	
+	MPI_TRY(MPI_Allgather(&packed_matrix.nsubcols, 1, MPI_INT, 
+			packed_matrix.subcol_counts, 
+			1, MPI_INT, obj->mpi_la_col_grid))
+	MPI_TRY(MPI_Allgather(&start_sub, 1, MPI_INT, 
+			packed_matrix.subcol_offsets, 
+			1, MPI_INT, obj->mpi_la_col_grid))
+	
+	global_chunk_info(nrows, obj->mpi_ncols, obj->mpi_la_col_rank,
+			&packed_matrix.nsubrows, &start_sub);   
+	
+	MPI_TRY(MPI_Allgather(&packed_matrix.nsubrows, 1, MPI_INT, 
+			packed_matrix.subrow_counts, 
+			1, MPI_INT, obj->mpi_la_row_grid))
+	MPI_TRY(MPI_Allgather(&start_sub, 1, MPI_INT, 
+			packed_matrix.subrow_offsets, 
+			1, MPI_INT, obj->mpi_la_row_grid))
+
+	/* if using a post-lanczos matrix, gather the matrix elements
+	   at the root node since all of them will be necessary at once */
+
+	if (post_lanczos_matrix != NULL && obj->mpi_la_row_rank == 0) {
+		if (obj->mpi_la_col_rank == 0) {
+			post_lanczos_matrix = xrealloc(post_lanczos_matrix,
+						max_ncols * sizeof(uint64));
+		}
+
+		MPI_TRY(MPI_Gatherv((obj->mpi_la_col_rank == 0) ?
+					MPI_IN_PLACE : post_lanczos_matrix, 
+				ncols, MPI_LONG_LONG, 
+				post_lanczos_matrix,
+				packed_matrix.col_counts,
+				packed_matrix.col_offsets,
+				MPI_LONG_LONG, 0, obj->mpi_la_row_grid))
+
+		if (obj->mpi_la_col_rank != 0) {
+			free(post_lanczos_matrix);
+			post_lanczos_matrix = NULL;
+		}
+	}
+#endif
+	if (have_post_lanczos)
+		count_matrix_nonzero(obj, nrows, num_dense_rows, ncols, B);
+
+	packed_matrix_init(obj, &packed_matrix, B, 
+			   nrows, max_nrows, start_row,
+			   ncols, max_ncols, start_col, 
+			   num_dense_rows,
+#ifdef HAVE_MPI
+			   NUM_MEDIUM_ROWS / obj->mpi_nrows
+#else
+			   NUM_MEDIUM_ROWS
+#endif
+			   );
 
 	/* set up for writing checkpoint files. This only applies
-	   to the largest matrices */
+	   to the largest matrices. The initial dump interval is
+	   just to establish timing information */
 
 	dump_interval = 0;
-	if (ncols > 1000000) {
-		if (ncols > 2000000) /* ~ once an hour */
-			dump_interval = 10000 * ((12500000 *
-				packed_matrix.num_threads) / ncols + 1);
-		else
-			dump_interval = 500000;
+	if (max_nrows > 1000000) {
+		dump_interval = DEFAULT_DUMP_INTERVAL;
 		obj->flags |= MSIEVE_FLAG_SIEVING_IN_PROGRESS;
 	}
 

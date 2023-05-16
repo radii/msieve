@@ -34,7 +34,7 @@ typedef struct {
 	int32 num_compute_units;
 	int32 constant_mem_size;
 	int32 shared_mem_size;
-	uint32 global_mem_size;
+	size_t global_mem_size;
 	int32 registers_per_block;
 	int32 max_threads_per_block;
 	int32 can_overlap;
@@ -66,6 +66,45 @@ void gpu_init(gpu_config_t *config);
 
 #define CUDA_ALIGN_PARAM(offset, alignment) \
 	(offset) = ((offset) + (alignment) - 1) & ~((alignment) - 1)
+
+/* defines for streamlining the handling of arguments to GPU kernels */
+
+typedef enum {
+	GPU_ARG_NONE = 0,
+	GPU_ARG_PTR,
+	GPU_ARG_INT32,
+	GPU_ARG_UINT32,
+	GPU_ARG_INT64,
+	GPU_ARG_UINT64
+} gpu_arg_type_t;
+
+#define GPU_MAX_KERNEL_ARGS 15
+
+typedef struct {
+	uint32 num_args;
+	gpu_arg_type_t arg_type[GPU_MAX_KERNEL_ARGS];
+} gpu_arg_type_list_t;
+
+typedef union {
+	void * ptr_arg;
+	int32 int32_arg;
+	uint32 uint32_arg;
+	int64 int64_arg;
+	uint64 uint64_arg;
+} gpu_arg_t;
+
+typedef struct {
+	CUfunction kernel_func;
+	int32 threads_per_block;
+	int32 arg_offsets[GPU_MAX_KERNEL_ARGS];
+	gpu_arg_type_list_t arg_desc;
+} gpu_launch_t;
+
+void gpu_launch_init(CUmodule gpu_module, const char *func_name,
+			const gpu_arg_type_list_t *arg_desc,
+			gpu_launch_t *launch);
+
+void gpu_launch_set(gpu_launch_t *launch, gpu_arg_t *args);
 
 #ifdef __cplusplus
 }

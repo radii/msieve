@@ -1,0 +1,22 @@
+
+ggnfs.log        the ggnfs sieving log
+
+*.last_spq<n>    temporary files written by ggnfs siever
+.params          temporary file written by factmsieve
+                 to detect parameter changes on resume
+
+<name>.log       the msieve (diagnostic) log file 
+<name>.n         the file that initiates an msieve run
+
+<name>.ini       input to msieve polynomial selection
+<name>.fb        output from polynomial selection
+<name>.dat.p     output from polynomial selection
+<name>.poly      extracted from <name>.fb 
+
+<name>.dat       output from sieving stage
+<name>.save.gz   output from sieving stage
+
+<name>.dat.cyc   produced by the nc1 stage
+<name>.dat.dep   produced by the nc2 stage
+<name>.dat.mat   produced by the nc2 stage
+<name><fac>.txt  produced after the nc3 square root stage
