@@ -1,6 +1,12 @@
-MSIEVE: A Library for Factoring Large Integers
-Jason Papadopoulos
+#MSIEVE: A Library for Factoring Large Integers by Jason Papadopoulos
 
+This is a fork of the [original libary](https://github.com/radii/msieve) 
+which is no longer maintained and and has gone state due to Visual Studio 2008
+dependencies, old GMP dependencies and out of support Cuda requirements.
+
+The intent of this repo is to update to the latest version of Visual Studio,
+GMP, and Cuda and potentially build a CI/CD pipeline to allow developers to
+pull and build the code without the headaches of the original project.
 
 Introduction
 ------------
